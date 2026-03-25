@@ -2,11 +2,19 @@
 of whom swim for the College Area Swim Team using the following
 URL: https://data.usaswimming.org/datahub/usas/individualsearch
 
-2.  Create a table including the date and location of the swim.
+1a. Do not use swimcloud.  It has errors. (https://www.swimcloud.com/)
 
-3. Add the B, BB, and A times to the tables using the pdf file in this directory
+1b.  The output of this should be a LaTeX file with tables including the date and location of the swim,
+and the current time standard of the individual's swim. 
+
+3. Add the B, BB, and A times to the tables using the pdf file in this directory.  (file motivational-time-standards.pdf).  Do not look for motivational times online.
 
 4. Also add the qualifying time for the age group championships per event per swimmer to the tables using the pdf file in this directory.
+
+5.  The LaTeX file should be setup to generate landscape.
+
+
+
 
 
 
