@@ -1,0 +1,6 @@
+1.  Create a bash script with a curl command to access all of Stella Julianna Evans best short course time from
+https://data.usaswimming.org/datahub/usas/individualsearch/times.
+
+2.  Do the same for Kalea Benavente.
+
+3.  Kalea is thirteen, and Stella is ten.  Both swim for the College Area Swim Team.

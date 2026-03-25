@@ -1,0 +1,12 @@
+1.  Look up the best short course swim times for Kalea Benavente and Stella Julianna Evans, both
+of whom swim for the College Area Swim Team using the following
+URL: https://data.usaswimming.org/datahub/usas/individualsearch
+
+2.  Create a table including the date and location of the swim.
+
+3. Add the B, BB, and A times to the tables using the pdf file in this directory
+
+4. Also add the qualifying time for the age group championships per event per swimmer to the tables using the pdf file in this directory.
+
+
+
