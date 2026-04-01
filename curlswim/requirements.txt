@@ -25,9 +25,17 @@ in this directory, that programmatically accesses the USA Swim Database and gets
 the glossary. Include a description of the parameters used in the POSIX system calls.  Also describe the API calls
 and their parameters for all JAQL and Sisense calls.
 
+13.  Add an "-o" parameter to the ".w" file, with the following options following "-o":
 
+     -o kalea,  Just output Kalea times
+     -o stella, Just output Stella times.
+     -o fastest, Just output the fastest time for the event
+     -o csv,  Output a ".csv" file suitable for reading into a spreadsheet.
 
+Allow multiple options after the "-o", such as:
 
+      -o stella,fastest which outputs Stella's fastest times
+      -o kalea,csv	which outputs Kalea's times in ".csv" format
+      -o csv		which outputs everytime for both girls in ".csv" format
 
-
-
+14.  The ".csv" file should have swimmer's name on every line.

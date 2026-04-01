@@ -41,6 +41,7 @@ output is:
 @c
 @<Includes@>
 @<Global constants@>
+@<Option flags@>
 @<Type definitions@>
 @<HTTP utilities@>
 @<JSON scanner@>
@@ -54,6 +55,7 @@ output is:
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <curl/curl.h>
 
 @ The Sisense bearer token authenticates us against the analytics
@@ -89,6 +91,26 @@ static const char *EVENTS[NUM_EVENTS] = {
     "100 IM SCY",
     "200 IM SCY"
 };
+
+@ The program accepts an optional \.{-o} flag on the command line.
+Its argument is a comma-separated list of one or more keywords.
+Four keywords are recognised:
+\medskip
+\item{$\bullet$} \.{stella} --- output only Stella's events.
+\item{$\bullet$} \.{kalea} --- output only Kalea's events.
+\item{$\bullet$} \.{fastest} --- print only the single fastest time per event.
+\item{$\bullet$} \.{csv} --- emit CSV lines (swimmer name on every line) instead of a table.
+\medskip\noindent
+Keywords may be combined, e.g.\ \.{-o stella,fastest} or \.{-o kalea,csv}.
+When neither \.{stella} nor \.{kalea} is specified both swimmers are shown.
+
+@<Option flags@>=
+#define OPT_STELLA  (1<<0)  /* restrict output to Stella's events  */
+#define OPT_KALEA   (1<<1)  /* restrict output to Kalea's events   */
+#define OPT_FASTEST (1<<2)  /* print only the single fastest time  */
+#define OPT_CSV     (1<<3)  /* emit CSV lines instead of a table   */
+
+static int g_opts = 0; /* output-selection flags; 0 = show everything */
 
 @* Data structures.
 
@@ -353,10 +375,15 @@ result row delivers five cells in order: time, sort key, meet name,
 swim date (as \.{YYYYMMDD}), and motivational standard type.
 The sort key (a decimal float string such as \.{"1010007029.00"}) is
 converted to |double| with |strtod|.  The date is reformatted from
-\.{YYYYMMDD} to \.{YYYY-MM-DD} by |format_date|.
+\.{YYYYMMDD} to \.{YYYY-MM-DD} by |format_date|.  |swimmer_name| is
+the resolved full name of the swimmer (used in CSV output).
+When |opts| has |OPT_CSV| set the output is a comma-separated line per
+time record with the swimmer name on every line; when |OPT_FASTEST| is
+set only the single fastest time is printed.
 
 @<Times fetch@>+=
-static void fetch_times(const char *person_key, const char *event_code)
+static void fetch_times(const char *person_key, const char *event_code,
+                        const char *swimmer_name, int opts)
 {
     char url[512];
     snprintf(url, sizeof url,
@@ -443,25 +470,42 @@ static void fetch_times(const char *person_key, const char *event_code)
     free(resp);
     insertion_sort(rows, nrows);
 
-    printf("%s --- all times (fastest first):\n", event_code);
-    printf("%-12s  %-10s  %-13s  %s\n", "Time", "Date", "Standard", "Meet");
-    printf("%-12s  %-10s  %-13s  %s\n",
-           "------------", "----------", "-------------", "----");
-    for (int i = 0; i < nrows; i++)
+    int lim = (opts & OPT_FASTEST) ? (nrows > 0 ? 1 : 0) : nrows;
+
+    if (opts & OPT_CSV) {
+        /* CSV: swimmer,event,time,date,standard,meet  (no header here;
+           caller emits the header once before the first swimmer loop). */
+        for (int i = 0; i < lim; i++)
+            printf("\"%s\",\"%s\",\"%s\",%s,\"%s\",\"%s\"\n",
+                   swimmer_name ? swimmer_name : "",
+                   event_code,
+                   rows[i].time, rows[i].date,
+                   rows[i].standard, rows[i].meet);
+    } else {
+        printf("%s --- %s:\n", event_code,
+               (opts & OPT_FASTEST) ? "fastest time"
+                                    : "all times (fastest first)");
+        printf("%-12s  %-10s  %-13s  %s\n", "Time", "Date", "Standard", "Meet");
         printf("%-12s  %-10s  %-13s  %s\n",
-               rows[i].time, rows[i].date,
-               rows[i].standard, rows[i].meet);
-    if (nrows == 0)
-        printf("(no times found)\n");
-    putchar('\n');
+               "------------", "----------", "-------------", "----");
+        for (int i = 0; i < lim; i++)
+            printf("%-12s  %-10s  %-13s  %s\n",
+                   rows[i].time, rows[i].date,
+                   rows[i].standard, rows[i].meet);
+        if (nrows == 0)
+            printf("(no times found)\n");
+        putchar('\n');
+    }
 }
 
 @* Main program.
 
 @ We define a small |Swimmer| record to hold the person-search
 parameters for each swimmer.  Each entry supplies a |search_query| string
-sent to the database (ideally distinctive enough to return a small set)
-and a |match_substr| (lower-cased) used to identify the correct row.
+sent to the database (ideally distinctive enough to return a small set),
+a |match_substr| (lower-cased) used to identify the correct row, and
+a |flag| bit (|OPT_STELLA| or |OPT_KALEA|) used to filter output when
+the user passes \.{-o stella} or \.{-o kalea}.
 Kalea's entry searches ``Benavente'' because her registered name is
 ``Kalea Rose Benavente''; the simple two-word query ``Kalea Benavente''
 returns no results since the API requires an exact substring match.
@@ -470,24 +514,73 @@ returns no results since the API requires an exact substring match.
 typedef struct {
     const char *search_query;  /* Name string to search for */
     const char *match_substr;  /* Lower-case substring to match */
+    int         flag;          /* OPT_STELLA or OPT_KALEA      */
 } Swimmer;
 
 static const Swimmer SWIMMERS[] = {
-    { "Julianna Evans", "stella" },   /* finds Stella Julianna Evans */
-    { "Benavente", "kalea" }           /* finds Kalea Rose Benavente */
+    { "Julianna Evans", "stella", OPT_STELLA }, /* Stella Julianna Evans */
+    { "Benavente",       "kalea", OPT_KALEA  }  /* Kalea Rose Benavente  */
 };
 #define NUM_SWIMMERS ((int)(sizeof SWIMMERS / sizeof SWIMMERS[0]))
 
-@ We initialise the global \.{libcurl} state, then for each swimmer
-resolve her |PersonKey|, print a header, and iterate over all twelve
-events, then release all resources before exit.
+@ |parse_opts_str| tokenises a comma-separated option string (the
+argument to \.{-o}) and sets bits in |g_opts|.  Unknown tokens are
+silently ignored so that future options can be added without breaking
+existing invocations.
 
 @<Main function@>+=
-int main(void)
+static void parse_opts_str(const char *s)
 {
+    /* Work on a writable copy so strtok can insert NUL bytes. */
+    char *buf = strdup(s);
+    if (!buf) return;
+    char *tok = strtok(buf, ",");
+    while (tok) {
+        if      (strcmp(tok, "stella")  == 0) g_opts |= OPT_STELLA;
+        else if (strcmp(tok, "kalea")   == 0) g_opts |= OPT_KALEA;
+        else if (strcmp(tok, "fastest") == 0) g_opts |= OPT_FASTEST;
+        else if (strcmp(tok, "csv")     == 0) g_opts |= OPT_CSV;
+        tok = strtok(NULL, ",");
+    }
+    free(buf);
+}
+
+@ We initialise the global \.{libcurl} state, parse the optional
+\.{-o} flag, then for each swimmer (subject to swimmer-selection bits)
+resolve her |PersonKey| and iterate over all twelve events.
+In CSV mode a single header line is printed before the first data row.
+
+@<Main function@>+=
+int main(int argc, char *argv[])
+{
+    int ch;
+    while ((ch = getopt(argc, argv, "o:")) != -1) {
+        switch (ch) {
+        case 'o':
+            parse_opts_str(optarg);
+            break;
+        default:
+            fprintf(stderr,
+                    "Usage: %s [-o option[,option...]]\n"
+                    "  options: stella, kalea, fastest, csv\n",
+                    argv[0]);
+            return 2;
+        }
+    }
+
     curl_global_init(CURL_GLOBAL_DEFAULT);
 
+    /* Print CSV header once, before any swimmer loop. */
+    if (g_opts & OPT_CSV)
+        printf("\"Swimmer\",\"Event\",\"Time\",\"Date\",\"Standard\",\"Meet\"\n");
+
+    int swimmer_mask = OPT_STELLA | OPT_KALEA;
+
     for (int s = 0; s < NUM_SWIMMERS; s++) {
+        /* Skip this swimmer if the -o flag restricts to the other one. */
+        if ((g_opts & swimmer_mask) && !(g_opts & SWIMMERS[s].flag))
+            continue;
+
         const char *name = NULL;
         char *key = lookup_person_key(SWIMMERS[s].search_query,
                                       SWIMMERS[s].match_substr,
@@ -497,15 +590,17 @@ int main(void)
             return 1;
         }
 
-        printf("Swimmer: %s  (PersonKey: %s)\n\n",
-               name ? name : "(unknown)", key);
+        if (!(g_opts & OPT_CSV))
+            printf("Swimmer: %s  (PersonKey: %s)\n\n",
+                   name ? name : "(unknown)", key);
 
         for (int i = 0; i < NUM_EVENTS; i++)
-            fetch_times(key, EVENTS[i]);
+            fetch_times(key, EVENTS[i], name, g_opts);
 
         free(key);
         free((void *)name);
-        printf("\n");
+        if (!(g_opts & OPT_CSV))
+            putchar('\n');
     }
 
     curl_global_cleanup();
