@@ -1,12 +1,16 @@
 @* Swim Times.
 
-This program fetches best short-course yard (SCY) times for two College
+This program fetches best short-course yard (SCY) times for four College
 Area Swim Team (CAST) swimmers:
 \medskip
 $${\vbox{
 {\bf Stella Julianna Evans} --- 10~\&~Under Girls
 
-{\bf Kalea Benavente} --- 13--14 Girls
+{\bf Kalea Rose Benavente} --- 13--14 Girls
+
+{\bf Kenneth Ray Evans} --- 11--12 Boys
+
+{\bf Keith Santiago Evans} --- 11--12 Boys
 }}$$
 
 \medskip\noindent
@@ -39,14 +43,14 @@ $$\.{gcc -O2 -o swim-times swim-times.c \$(curl-config --libs)}$$
 output is:
 
 @c
-@<Includes@>
-@<Global constants@>
-@<Option flags@>
-@<Type definitions@>
-@<HTTP utilities@>
-@<JSON scanner@>
-@<Person lookup@>
-@<Times fetch@>
+@<Includes@> @/
+@<Global constants@> @/
+@<Option flags@> @/
+@<Type definitions@> @/
+@<HTTP utilities@> @/
+@<JSON scanner@> @/
+@<Person lookup@> @/
+@<Times fetch@> @/
 @<Main function@>
 
 @* Includes and constants.
@@ -92,25 +96,39 @@ static const char *EVENTS[NUM_EVENTS] = {
     "200 IM SCY"
 };
 
-@ The program accepts an optional \.{-o} flag on the command line.
-Its argument is a comma-separated list of one or more keywords.
-Four keywords are recognised:
+@ The program accepts two optional flags on the command line.
+
+The \.{-o} flag takes a comma-separated list of one or more keywords.
+Six keywords are recognised:
 \medskip
-\item{$\bullet$} \.{stella} --- output only Stella's events.
-\item{$\bullet$} \.{kalea} --- output only Kalea's events.
+\item{$\bullet$} \.{stella} --- output only Stella Julianna Evans' events.
+\item{$\bullet$} \.{kalea} --- output only Kalea Rose Benavente's events.
+\item{$\bullet$} \.{kenny} --- output only Kenneth Ray Evans' events.
+\item{$\bullet$} \.{keith} --- output only Keith Santiago Evans' events.
 \item{$\bullet$} \.{fastest} --- print only the single fastest time per event.
 \item{$\bullet$} \.{csv} --- emit CSV lines (swimmer name on every line) instead of a table.
 \medskip\noindent
 Keywords may be combined, e.g.\ \.{-o stella,fastest} or \.{-o kalea,csv}.
-When neither \.{stella} nor \.{kalea} is specified both swimmers are shown.
+When no swimmer keyword is specified all four swimmers are shown.
+
+The \.{-e} flag takes one or more comma-separated SCY event codes
+(e.g.\ \.{-e "100 FR SCY,50 FL SCY"}) and restricts output to those events
+only.  The flag may also be repeated (e.g.\ \.{-e "100 FR SCY" -e "50 FL SCY"}).
+When \.{-e} is omitted all twelve events are reported.
+
+If no options are given at all the program prints a usage message and exits.
 
 @<Option flags@>=
-#define OPT_STELLA  (1<<0)  /* restrict output to Stella's events  */
-#define OPT_KALEA   (1<<1)  /* restrict output to Kalea's events   */
-#define OPT_FASTEST (1<<2)  /* print only the single fastest time  */
-#define OPT_CSV     (1<<3)  /* emit CSV lines instead of a table   */
+#define OPT_STELLA  (1<<0)  /* restrict output to Stella's events         */
+#define OPT_KALEA   (1<<1)  /* restrict output to Kalea's events          */
+#define OPT_FASTEST (1<<2)  /* print only the single fastest time         */
+#define OPT_CSV     (1<<3)  /* emit CSV lines instead of a table          */
+#define OPT_KENNY   (1<<4)  /* restrict output to Kenneth Ray Evans       */
+#define OPT_KEITH   (1<<5)  /* restrict output to Keith Santiago Evans    */
 
-static int g_opts = 0; /* output-selection flags; 0 = show everything */
+static int  g_opts    = 0;  /* output-selection flags; 0 = show everything */
+static char g_events[NUM_EVENTS][32]; /* event codes requested via \.{-e}  */
+static int  g_nevents = 0;  /* number of entries in |g_events|             */
 
 @* Data structures.
 
@@ -251,14 +269,13 @@ static int scan_long(const char *key, const char **pos, long *out)
     return 1;
 }
 
-@* Person lookup.
-
-@ |lookup_person_key| posts a search for |search_query| and scans
+@* Person lookup. |lookup_person_key| posts a search for |search_query| and scans
 the result rows for one whose full name contains |match_substr| (after
 lower-casing).  It returns a heap-allocated decimal |PersonKey| string
 and, optionally, the swimmer's full name in |*out_name|.  Returns |NULL|
 on failure.
 
+@
 @<Person lookup@>=
 static char *lookup_person_key(const char *search_query,
                                 const char *match_substr,
@@ -504,22 +521,26 @@ static void fetch_times(const char *person_key, const char *event_code,
 parameters for each swimmer.  Each entry supplies a |search_query| string
 sent to the database (ideally distinctive enough to return a small set),
 a |match_substr| (lower-cased) used to identify the correct row, and
-a |flag| bit (|OPT_STELLA| or |OPT_KALEA|) used to filter output when
-the user passes \.{-o stella} or \.{-o kalea}.
-Kalea's entry searches ``Benavente'' because her registered name is
-``Kalea Rose Benavente''; the simple two-word query ``Kalea Benavente''
-returns no results since the API requires an exact substring match.
+a |flag| bit used to filter output when the user passes a swimmer keyword
+to \.{-o}.
+Kalea's entry searches ``Benavente'' because the simple two-word query
+``Kalea Benavente'' returns no results; the API requires an exact substring
+match against the registered name ``Kalea Rose Benavente''.
+Kenneth's entry uses ``kenneth ray'' and Keith's uses ``keith santiago''
+to avoid false matches on the common surname ``Evans''.
 
 @<Main function@>=
 typedef struct {
-    const char *search_query;  /* Name string to search for */
+    const char *search_query;  /* Name string to search for  */
     const char *match_substr;  /* Lower-case substring to match */
-    int         flag;          /* OPT_STELLA or OPT_KALEA      */
+    int         flag;          /* |OPT_STELLA|, |OPT_KALEA|, etc. */
 } Swimmer;
 
 static const Swimmer SWIMMERS[] = {
-    { "Julianna Evans", "stella", OPT_STELLA }, /* Stella Julianna Evans */
-    { "Benavente",       "kalea", OPT_KALEA  }  /* Kalea Rose Benavente  */
+    { "Julianna Evans",  "stella",         OPT_STELLA }, /* Stella Julianna Evans  */
+    { "Benavente",       "kalea",          OPT_KALEA  }, /* Kalea Rose Benavente   */
+    { "Ray Evans",       "kenneth ray",    OPT_KENNY  }, /* Kenneth Ray Evans      */
+    { "Santiago Evans",  "keith santiago", OPT_KEITH  }  /* Keith Santiago Evans   */
 };
 #define NUM_SWIMMERS ((int)(sizeof SWIMMERS / sizeof SWIMMERS[0]))
 
@@ -538,6 +559,8 @@ static void parse_opts_str(const char *s)
     while (tok) {
         if      (strcmp(tok, "stella")  == 0) g_opts |= OPT_STELLA;
         else if (strcmp(tok, "kalea")   == 0) g_opts |= OPT_KALEA;
+        else if (strcmp(tok, "kenny")   == 0) g_opts |= OPT_KENNY;
+        else if (strcmp(tok, "keith")   == 0) g_opts |= OPT_KEITH;
         else if (strcmp(tok, "fastest") == 0) g_opts |= OPT_FASTEST;
         else if (strcmp(tok, "csv")     == 0) g_opts |= OPT_CSV;
         tok = strtok(NULL, ",");
@@ -545,27 +568,89 @@ static void parse_opts_str(const char *s)
     free(buf);
 }
 
+@ |parse_events_str| tokenises a comma-separated event-code string (the
+argument to \.{-e}) and appends each code to |g_events|.  Codes that would
+overflow the |NUM_EVENTS|-entry array are silently dropped.  The flag may
+be supplied multiple times; each invocation extends the list.
+
+@<Main function@>+=
+static void parse_events_str(const char *s)
+{
+    char *buf = strdup(s);
+    if (!buf) return;
+    char *tok = strtok(buf, ",");
+    while (tok && g_nevents < NUM_EVENTS) {
+        /* Trim leading spaces left by comma-split with spaces around commas. */
+        while (*tok == ' ') tok++;
+        strncpy(g_events[g_nevents], tok, sizeof g_events[0] - 1);
+        g_events[g_nevents][sizeof g_events[0] - 1] = '\0';
+        g_nevents++;
+        tok = strtok(NULL, ",");
+    }
+    free(buf);
+}
+
+@ |print_usage| writes the full usage message to standard error.
+
+@<Main function@>+=
+static void print_usage(const char *prog)
+{
+    fprintf(stderr,
+        "Usage: %s -o option[,option...] [-e event[,event...]]\n"
+        "\n"
+        "  -o option,...   comma-separated output options:\n"
+        "       stella      restrict output to Stella Julianna Evans\n"
+        "       kalea       restrict output to Kalea Rose Benavente\n"
+        "       kenny       restrict output to Kenneth Ray Evans\n"
+        "       keith       restrict output to Keith Santiago Evans\n"
+        "       fastest     print only the single fastest time per event\n"
+        "       csv         emit CSV output (header + one line per time)\n"
+        "\n"
+        "  -e event,...    restrict output to one or more SCY event codes;\n"
+        "                  comma-separated, or repeat -e for each event.\n"
+        "       Valid codes: 50 FR SCY, 100 FR SCY, 200 FR SCY, 500 FR SCY,\n"
+        "                    50 FL SCY, 100 FL SCY, 50 BK SCY, 100 BK SCY,\n"
+        "                    50 BR SCY, 100 BR SCY, 100 IM SCY, 200 IM SCY\n"
+        "\n"
+        "Examples:\n"
+        "  %s -o stella,fastest\n"
+        "  %s -o kalea,csv\n"
+        "  %s -o kenny -e \"100 FR SCY\"\n"
+        "  %s -o keith -e \"100 FR SCY,50 FL SCY\"\n"
+        "  %s -o stella -e \"100 FR SCY\" -e \"50 FL SCY\"\n",
+        prog, prog, prog, prog, prog, prog);
+}
+
 @ We initialise the global \.{libcurl} state, parse the optional
-\.{-o} flag, then for each swimmer (subject to swimmer-selection bits)
-resolve her |PersonKey| and iterate over all twelve events.
-In CSV mode a single header line is printed before the first data row.
+\.{-o} and \.{-e} flags, then for each swimmer (subject to swimmer-selection
+bits) resolve her |PersonKey| and iterate over events.  If one or more
+\.{-e} codes were given only those events are fetched; otherwise all twelve
+are processed.  In CSV mode a single header line is printed before the first
+data row.  If no options at all are supplied, the usage message is printed
+and the program exits with status~1.
 
 @<Main function@>+=
 int main(int argc, char *argv[])
 {
     int ch;
-    while ((ch = getopt(argc, argv, "o:")) != -1) {
+    while ((ch = getopt(argc, argv, "o:e:")) != -1) {
         switch (ch) {
         case 'o':
             parse_opts_str(optarg);
             break;
+        case 'e':
+            parse_events_str(optarg);
+            break;
         default:
-            fprintf(stderr,
-                    "Usage: %s [-o option[,option...]]\n"
-                    "  options: stella, kalea, fastest, csv\n",
-                    argv[0]);
+            print_usage(argv[0]);
             return 2;
         }
+    }
+
+    /* Require at least one option; print usage and exit otherwise. */
+    if (g_opts == 0 && g_nevents == 0) {
+        print_usage(argv[0]);
+        return 1;
     }
 
     curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -574,7 +659,7 @@ int main(int argc, char *argv[])
     if (g_opts & OPT_CSV)
         printf("\"Swimmer\",\"Event\",\"Time\",\"Date\",\"Standard\",\"Meet\"\n");
 
-    int swimmer_mask = OPT_STELLA | OPT_KALEA;
+    int swimmer_mask = OPT_STELLA | OPT_KALEA | OPT_KENNY | OPT_KEITH;
 
     for (int s = 0; s < NUM_SWIMMERS; s++) {
         /* Skip this swimmer if the -o flag restricts to the other one. */
@@ -594,8 +679,14 @@ int main(int argc, char *argv[])
             printf("Swimmer: %s  (PersonKey: %s)\n\n",
                    name ? name : "(unknown)", key);
 
-        for (int i = 0; i < NUM_EVENTS; i++)
-            fetch_times(key, EVENTS[i], name, g_opts);
+        if (g_nevents > 0) {
+            /* Fetch only the events requested via -e. */
+            for (int i = 0; i < g_nevents; i++)
+                fetch_times(key, g_events[i], name, g_opts);
+        } else {
+            for (int i = 0; i < NUM_EVENTS; i++)
+                fetch_times(key, EVENTS[i], name, g_opts);
+        }
 
         free(key);
         free((void *)name);

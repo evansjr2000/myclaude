@@ -15,7 +15,7 @@ in this directory, that programmatically accesses the USA Swim Database and gets
 
 8. Add the the 50 butterfly, 100 butterfly, 50 back, 100 back, 50 breaststroke, 100 breaststroke, 100 IM and 200 IM to the events fetched for Stella Julianna Evans.
 
-9.  Add Kalea Benavente to the list of swimmers to fetch times for.  Also include the 500 yard freestyle time.
+9.  Add Kalea Rose Benavente, Kenneth Ray Evans, and Keith Santiago Evans to the list of swimmers to fetch times for.  Also include the 500 yard freestyle time.
 
 10.  Add the date of the swim meet to the output.
 
@@ -31,7 +31,9 @@ and their parameters for all JAQL and Sisense calls.
      -o stella, Just output Stella times.
      -o fastest, Just output the fastest time for the event
      -o csv,  Output a ".csv" file suitable for reading into a spreadsheet.
-
+     -o kenny, Just output Kenneth Ray Evans times
+     -o keith,   Just output Keith Santiago Evans times.
+     
 Allow multiple options after the "-o", such as:
 
       -o stella,fastest which outputs Stella's fastest times
@@ -39,3 +41,9 @@ Allow multiple options after the "-o", such as:
       -o csv		which outputs everytime for both girls in ".csv" format
 
 14.  The ".csv" file should have swimmer's name on every line.
+
+15.  Add an "-e" parameter where an individual event can be specified for lookup and print out. Allow
+multiple events to be specified on the same line.
+
+16.  If no options are given, then print out how to invoke the command, and what options are available.
+
