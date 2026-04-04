@@ -2,5 +2,6 @@ stella-times
 stella-times.idx
 stella-times.c
 stella-times.o
-stella-times.pdf
-stella-times.w
+stella-times.scn
+stella-times.toc
+stella-times.tex
