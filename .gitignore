@@ -3,3 +3,10 @@
 *.*~
 *.o
 uigen/
+stella-times
+stella-times.idx
+stella-times.c
+stella-times.o
+stella-times.scn
+stella-times.toc
+stella-times.tex
