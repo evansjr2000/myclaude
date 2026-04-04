@@ -1,13 +1,13 @@
 \catcode `\@=11\relax 
 \ZZ {Swim Times}{1}{1}{1}{Swim Times}
 \ZZ {Includes and constants}{1}{5}{2}{Includes and constants}
-\ZZ {Data structures}{1}{8}{3}{Data structures}
-\ZZ {HTTP utilities}{1}{11}{4}{HTTP utilities}
-\ZZ {JSON scanner}{1}{14}{5}{JSON scanner}
-\ZZ {Person lookup}{1}{18}{7}{Person lookup}
-\ZZ {Times fetch}{1}{20}{10}{Times fetch}
-\ZZ {Main program}{1}{24}{13}{Main program}
-\ZZ {Glossary}{1}{27}{14}{Glossary}
-\ZZ {Index}{1}{32}{19}{Index}
+\ZZ {Data structures}{1}{9}{3}{Data structures}
+\ZZ {HTTP utilities}{1}{12}{4}{HTTP utilities}
+\ZZ {JSON scanner}{1}{15}{5}{JSON scanner}
+\ZZ {Person lookup}{1}{19}{7}{Person lookup}
+\ZZ {Times fetch}{1}{21}{10}{Times fetch}
+\ZZ {Main program}{1}{25}{13}{Main program}
+\ZZ {Glossary}{1}{31}{16}{Glossary}
+\ZZ {Index}{1}{36}{21}{Index}
 
 \catcode `\@=12\relax 

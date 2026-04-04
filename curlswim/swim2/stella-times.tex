@@ -2,13 +2,17 @@
 
 \N{1}{1}Swim Times.
 
-This program fetches best short-course yard (SCY) times for two College
+This program fetches best short-course yard (SCY) times for four College
 Area Swim Team (CAST) swimmers:
 \medskip
 $${\vbox{
 {\bf Stella Julianna Evans} --- 10~\&~Under Girls
 
-{\bf Kalea Benavente} --- 13--14 Girls
+{\bf Kalea Rose Benavente} --- 13--14 Girls
+
+{\bf Kenneth Ray Evans} --- 11--12 Boys
+
+{\bf Keith Santiago Evans} --- 11--12 Boys
 }}$$
 
 \medskip\noindent
@@ -47,9 +51,15 @@ $$\.{gcc -O2 -o swim-times swim-times.c \$(curl-config --libs)}$$
 \M{4}{\bf Program structure.}  The top-level arrangement of the tangled
 output is:
 
-\Y\B\X6:Includes\X\X7:Global constants\X\X9:Type definitions\X\X12:HTTP
-utilities\X\X16:JSON scanner\X\X19:Person lookup\X\X21:Times fetch\X\X25:Main
-function\X\par
+\Y\B\X6:Includes\X\6
+\X7:Global constants\X\6
+\X8:Option flags\X\6
+\X10:Type definitions\X\6
+\X13:HTTP utilities\X\6
+\X17:JSON scanner\X\6
+\X20:Person lookup\X\6
+\X22:Times fetch\X\6
+\X26:Main function\X\par
 \fi
 
 \N{1}{5}Includes and constants.
@@ -60,6 +70,7 @@ function\X\par
 \8\#\&{include} \.{<stdio.h>}\6
 \8\#\&{include} \.{<stdlib.h>}\6
 \8\#\&{include} \.{<string.h>}\6
+\8\#\&{include} \.{<unistd.h>}\6
 \8\#\&{include} \.{<curl/curl.h>}\par
 \U4.\fi
 
@@ -87,22 +98,67 @@ SCY"},\39\.{"50\ BR\ SCY"},\39\.{"100\ BR\ SCY"},\39\.{"100\ IM\ SCY"},\39%
 \.{"200\ IM\ SCY"}\}{}$;\par
 \U4.\fi
 
-\N{1}{8}Data structures.
+\M{8}The program accepts two optional flags on the command line.
+
+The \.{-o} flag takes a comma-separated list of one or more keywords.
+Six keywords are recognised:
+\medskip
+\item{$\bullet$} \.{stella} --- output only Stella Julianna Evans' events.
+\item{$\bullet$} \.{kalea} --- output only Kalea Rose Benavente's events.
+\item{$\bullet$} \.{kenny} --- output only Kenneth Ray Evans' events.
+\item{$\bullet$} \.{keith} --- output only Keith Santiago Evans' events.
+\item{$\bullet$} \.{fastest} --- print only the single fastest time per event.
+\item{$\bullet$} \.{csv} --- emit CSV lines (swimmer name on every line)
+instead of a table.
+\medskip\noindent
+Keywords may be combined, e.g.\ \.{-o stella,fastest} or \.{-o kalea,csv}.
+When no swimmer keyword is specified all four swimmers are shown.
+
+The \.{-e} flag takes one or more comma-separated SCY event codes
+(e.g.\ \.{-e "100 FR SCY,50 FL SCY"}) and restricts output to those events
+only.  The flag may also be repeated (e.g.\ \.{-e "100 FR SCY" -e "50 FL
+SCY"}).
+When \.{-e} is omitted all twelve events are reported.
+
+If no options are given at all the program prints a usage message and exits.
+
+\Y\B\4\X8:Option flags\X${}\E{}$\6
+\8\#\&{define} \.{OPT\_STELLA}\5${}(\T{1}\LL\T{0}{}$)\C{ restrict output to
+Stella's events         }\6
+\8\#\&{define} \.{OPT\_KALEA}\5${}(\T{1}\LL\T{1}{}$)\C{ restrict output to
+Kalea's events          }\6
+\8\#\&{define} \.{OPT\_FASTEST}\5${}(\T{1}\LL\T{2}{}$)\C{ print only the single
+fastest time         }\6
+\8\#\&{define} \.{OPT\_CSV}\5${}(\T{1}\LL\T{3}{}$)\C{ emit CSV lines instead of
+a table          }\6
+\8\#\&{define} \.{OPT\_KENNY}\5${}(\T{1}\LL\T{4}{}$)\C{ restrict output to
+Kenneth Ray Evans       }\6
+\8\#\&{define} \.{OPT\_KEITH}\5${}(\T{1}\LL\T{5}{}$)\C{ restrict output to
+Keith Santiago Evans    }\6
+\&{static} \&{int} \\{g\_opts}${}\K\T{0}{}$;\C{ output-selection flags; 0 =
+show everything }\6
+\&{static} \&{char} \\{g\_events}[\.{NUM\_EVENTS}][\T{32}];\C{ event codes
+requested via \.{-e}  }\6
+\&{static} \&{int} \\{g\_nevents}${}\K\T{0}{}$;\C{ number of entries in \PB{%
+\\{g\_events}}             }\par
+\U4.\fi
+
+\N{1}{9}Data structures.
 
 \fi
 
-\M{9}A \PB{\\{Buffer}} holds a dynamically-grown heap string.  \.{libcurl}
+\M{10}A \PB{\\{Buffer}} holds a dynamically-grown heap string.  \.{libcurl}
 appends each response chunk to it via the write callback.
 
-\Y\B\4\X9:Type definitions\X${}\E{}$\6
+\Y\B\4\X10:Type definitions\X${}\E{}$\6
 \&{typedef} \&{struct} ${}\{{}$\1\6
 \&{char} ${}{*}\\{data};{}$\6
 \&{size\_t} \\{size};\2\6
 ${}\}{}$ \&{Buffer};\par
-\A10.
+\A11.
 \U4.\fi
 
-\M{10}A \PB{\\{TimeRow}} records one swim result.  \PB{\\{sort\_key}} is a
+\M{11}A \PB{\\{TimeRow}} records one swim result.  \PB{\\{sort\_key}} is a
 numeric proxy
 for the swim time (smaller is faster); \PB{\\{time}} is the formatted string
 (e.g.\ \.{1:02.45}); \PB{\\{date}} is the swim date formatted as
@@ -111,7 +167,7 @@ for the swim time (smaller is faster); \PB{\\{time}} is the formatted string
 meet name.  The Sisense API returns the sort key as a quoted decimal
 string such as \.{"1010007029.00"}, so we store it as a \PB{\&{double}}.
 
-\Y\B\4\X9:Type definitions\X${}\mathrel+\E{}$\6
+\Y\B\4\X10:Type definitions\X${}\mathrel+\E{}$\6
 \&{typedef} \&{struct} ${}\{{}$\1\6
 \&{double} \\{sort\_key};\6
 \&{char} \\{time}[\T{32}];\6
@@ -121,15 +177,15 @@ string such as \.{"1010007029.00"}, so we store it as a \PB{\&{double}}.
 ${}\}{}$ \&{TimeRow};\par
 \fi
 
-\N{1}{11}HTTP utilities.
+\N{1}{12}HTTP utilities.
 
 \fi
 
-\M{12}The \.{libcurl} write callback appends each incoming chunk to a
+\M{13}The \.{libcurl} write callback appends each incoming chunk to a
 \PB{\&{Buffer}}, growing the allocation as needed.  It maintains a null
 terminator so the buffer can always be treated as a C string.
 
-\Y\B\4\X12:HTTP utilities\X${}\E{}$\6
+\Y\B\4\X13:HTTP utilities\X${}\E{}$\6
 \1\1\&{static} \&{size\_t} \\{write\_cb}(\&{void} ${}{*}\\{ptr},\39{}$\&{size%
 \_t} \\{size}${},\39{}$\&{size\_t} \\{nmemb}${},\39{}$\&{void} ${}{*}\\{ud})\2%
 \2{}$\6
@@ -146,15 +202,15 @@ ${}\|b\MG\\{size}\MRL{+{\K}}\|n;{}$\6
 ${}\|b\MG\\{data}[\|b\MG\\{size}]\K\.{'\\0'};{}$\6
 \&{return} \|n;\6
 \4${}\}{}$\2\par
-\A13.
+\A14.
 \U4.\fi
 
-\M{13}\PB{\\{post\_json}} performs a single HTTP~POST with a JSON body and
+\M{14}\PB{\\{post\_json}} performs a single HTTP~POST with a JSON body and
 returns
 the response as a null-terminated heap string, or \PB{$\NULL$} on failure.
 The caller is responsible for freeing the returned string.
 
-\Y\B\4\X12:HTTP utilities\X${}\mathrel+\E{}$\6
+\Y\B\4\X13:HTTP utilities\X${}\mathrel+\E{}$\6
 \1\1\&{static} \&{char} ${}{*}{}$\\{post\_json}(\&{const} \&{char} ${}{*}%
 \\{url},\39{}$\&{const} \&{char} ${}{*}\\{body})\2\2{}$\6
 ${}\{{}$\1\6
@@ -188,11 +244,11 @@ ${}\\{free}(\\{buf}.\\{data});{}$\6
 \4${}\}{}$\2\par
 \fi
 
-\N{1}{14}JSON scanner.
+\N{1}{15}JSON scanner.
 
 \fi
 
-\M{15}Sisense JAQL responses contain a top-level \PB{\.{"values"}} array.  Each
+\M{16}Sisense JAQL responses contain a top-level \PB{\.{"values"}} array.  Each
 element is itself an array of objects, each holding either a \PB{\.{"text"}}
 key (string value) or a \PB{\.{"data"}} key (numeric value).  A typical
 person-search row looks like:
@@ -204,14 +260,14 @@ extract the immediately following value, advancing a position pointer.
 
 \fi
 
-\M{16}\PB{\\{scan\_string}} finds the first \PB{\.{"key"}} at or after \PB{${*}%
+\M{17}\PB{\\{scan\_string}} finds the first \PB{\.{"key"}} at or after \PB{${*}%
 \\{pos}$}, copies the
 string value that follows into \PB{\\{out}} (at most \PB{$\\{max\_len}-\T{1}$}
 bytes), and
 advances \PB{${*}\\{pos}$} past it.  Returns 1 on success, 0 if the key is
 absent.
 
-\Y\B\4\X16:JSON scanner\X${}\E{}$\6
+\Y\B\4\X17:JSON scanner\X${}\E{}$\6
 \1\1\&{static} \&{int} \\{scan\_string}(\&{const} \&{char} ${}{*}\\{key},\39{}$%
 \&{const} \&{char} ${}{*}{*}\\{pos},\39{}$\&{char} ${}{*}\\{out},\39{}$\&{size%
 \_t} \\{max\_len})\2\2\6
@@ -239,16 +295,16 @@ ${}\\{out}[\\{len}]\K\.{'\\0'};{}$\6
 ${}{*}\\{pos}\K\|e+\T{1};{}$\6
 \&{return} \T{1};\6
 \4${}\}{}$\2\par
-\A17.
+\A18.
 \U4.\fi
 
-\M{17}\PB{\\{scan\_long}} is the numeric counterpart: it finds \PB{\.{"key"}},
+\M{18}\PB{\\{scan\_long}} is the numeric counterpart: it finds \PB{\.{"key"}},
 converts
 the digits that follow to a \PB{\&{long}}, stores the result in \PB{${*}%
 \\{out}$}, and
 advances \PB{${*}\\{pos}$}.
 
-\Y\B\4\X16:JSON scanner\X${}\mathrel+\E{}$\6
+\Y\B\4\X17:JSON scanner\X${}\mathrel+\E{}$\6
 \1\1\&{static} \&{int} \\{scan\_long}(\&{const} \&{char} ${}{*}\\{key},\39{}$%
 \&{const} \&{char} ${}{*}{*}\\{pos},\39{}$\&{long} ${}{*}\\{out})\2\2{}$\6
 ${}\{{}$\1\6
@@ -270,19 +326,18 @@ ${}{*}\\{pos}\K\\{end};{}$\6
 \4${}\}{}$\2\par
 \fi
 
-\N{1}{18}Person lookup.
-
-\fi
-
-\M{19}\PB{\\{lookup\_person\_key}} posts a search for \PB{\\{search\_query}}
-and scans
+\N{1}{19}Person lookup. \PB{\\{lookup\_person\_key}} posts a search for \PB{%
+\\{search\_query}} and scans
 the result rows for one whose full name contains \PB{\\{match\_substr}} (after
 lower-casing).  It returns a heap-allocated decimal \PB{\\{PersonKey}} string
 and, optionally, the swimmer's full name in \PB{${*}\\{out\_name}$}.  Returns %
 \PB{$\NULL$}
 on failure.
 
-\Y\B\4\X19:Person lookup\X${}\E{}$\6
+\fi
+
+\M{20}
+\Y\B\4\X20:Person lookup\X${}\E{}$\6
 \1\1\&{static} \&{char} ${}{*}{}$\\{lookup\_person\_key}(\&{const} \&{char}
 ${}{*}\\{search\_query},\39{}$\&{const} \&{char} ${}{*}\\{match\_substr},\39{}$%
 \&{const} \&{char} ${}{*}{*}\\{out\_name})\2\2{}$\6
@@ -352,16 +407,16 @@ ${}{*}\\{out\_name}\K\\{name};{}$\2\6
 \4${}\}{}$\2\par
 \U4.\fi
 
-\N{1}{20}Times fetch.
+\N{1}{21}Times fetch.
 
 \fi
 
-\M{21}\PB{\\{insertion\_sort}} sorts \PB{\|n} \PB{\&{TimeRow}} records in-place
+\M{22}\PB{\\{insertion\_sort}} sorts \PB{\|n} \PB{\&{TimeRow}} records in-place
 by \PB{\\{sort\_key}}
 ascending (smallest = fastest time).  A swimmer's career rarely exceeds
 a few dozen entries per event, so $O(n^2)$ is entirely adequate.
 
-\Y\B\4\X21:Times fetch\X${}\E{}$\6
+\Y\B\4\X22:Times fetch\X${}\E{}$\6
 \1\1\&{static} \&{void} \\{insertion\_sort}(\&{TimeRow} ${}{*}\\{rows},\39{}$%
 \&{int} \|n)\2\2\6
 ${}\{{}$\1\6
@@ -378,14 +433,14 @@ ${}\|j\MM;{}$\6
 ${}\\{rows}[\|j+\T{1}]\K\\{tmp};{}$\6
 \4${}\}{}$\2\6
 \4${}\}{}$\2\par
-\As22\ET23.
+\As23\ET24.
 \U4.\fi
 
-\M{22}\PB{\\{format\_date}} converts an 8-digit \.{YYYYMMDD} string (such as
+\M{23}\PB{\\{format\_date}} converts an 8-digit \.{YYYYMMDD} string (such as
 \.{20230305}) to \.{YYYY-MM-DD} format in \PB{\\{out}} (which must be at
 least 11 bytes).
 
-\Y\B\4\X21:Times fetch\X${}\mathrel+\E{}$\6
+\Y\B\4\X22:Times fetch\X${}\mathrel+\E{}$\6
 \1\1\&{static} \&{void} \\{format\_date}(\&{const} \&{char} ${}{*}\\{ymd8},%
 \39{}$\&{char} ${}{*}\\{out})\2\2{}$\6
 ${}\{{}$\1\6
@@ -411,18 +466,25 @@ ${}\\{out}[\T{10}]\K\.{'\\0'};{}$\6
 \4${}\}{}$\2\par
 \fi
 
-\M{23}\PB{\\{fetch\_times}} retrieves all SCY times for \PB{\\{person\_key}} in
+\M{24}\PB{\\{fetch\_times}} retrieves all SCY times for \PB{\\{person\_key}} in
 \PB{\\{event\_code}}, sorts them fastest-first, and prints them.  Each JAQL
 result row delivers five cells in order: time, sort key, meet name,
 swim date (as \.{YYYYMMDD}), and motivational standard type.
 The sort key (a decimal float string such as \.{"1010007029.00"}) is
 converted to \PB{\&{double}} with \PB{\\{strtod}}.  The date is reformatted
 from
-\.{YYYYMMDD} to \.{YYYY-MM-DD} by \PB{\\{format\_date}}.
+\.{YYYYMMDD} to \.{YYYY-MM-DD} by \PB{\\{format\_date}}.  \PB{\\{swimmer%
+\_name}} is
+the resolved full name of the swimmer (used in CSV output).
+When \PB{\\{opts}} has \PB{\.{OPT\_CSV}} set the output is a comma-separated
+line per
+time record with the swimmer name on every line; when \PB{\.{OPT\_FASTEST}} is
+set only the single fastest time is printed.
 
-\Y\B\4\X21:Times fetch\X${}\mathrel+\E{}$\6
+\Y\B\4\X22:Times fetch\X${}\mathrel+\E{}$\6
 \1\1\&{static} \&{void} \\{fetch\_times}(\&{const} \&{char} ${}{*}\\{person%
-\_key},\39{}$\&{const} \&{char} ${}{*}\\{event\_code})\2\2{}$\6
+\_key},\39{}$\&{const} \&{char} ${}{*}\\{event\_code},\39{}$\&{const} \&{char}
+${}{*}\\{swimmer\_name},\39{}$\&{int} \\{opts})\2\2\6
 ${}\{{}$\1\6
 \&{char} \\{url}[\T{512}];\7
 ${}\\{snprintf}(\\{url},\39{}$\&{sizeof} \\{url}${},\39\.{"%
@@ -512,62 +574,221 @@ ${}\\{rows}[\\{nrows}].\\{meet}{}$[\&{sizeof} \\{rows}[\\{nrows}]${}.\\{meet}-%
 ${}\\{nrows}\PP;{}$\6
 \4${}\}{}$\2\6
 \\{free}(\\{resp});\6
-${}\\{insertion\_sort}(\\{rows},\39\\{nrows});{}$\6
-${}\\{printf}(\.{"\%s\ ---\ all\ times\ (f}\)\.{astest\ first):\\n"},\39%
-\\{event\_code});{}$\6
+${}\\{insertion\_sort}(\\{rows},\39\\{nrows});{}$\7
+\&{int} \\{lim}${}\K(\\{opts}\AND\.{OPT\_FASTEST})\?(\\{nrows}>\T{0}\?\T{1}:%
+\T{0}):\\{nrows};{}$\7
+\&{if} ${}(\\{opts}\AND\.{OPT\_CSV}){}$\5
+${}\{{}$\C{ CSV: swimmer,event,time,date,standard,meet  (no header here;
+    caller emits the header once before the first swimmer loop). }\1\6
+\&{for} (\&{int} \|i${}\K\T{0};{}$ ${}\|i<\\{lim};{}$ ${}\|i\PP){}$\1\5
+${}\\{printf}(\.{"\\"\%s\\",\\"\%s\\",\\"\%s\\}\)\.{",\%s,\\"\%s\\",\\"\%s\\"%
+\\n}\)\.{"},\39\\{swimmer\_name}\?\\{swimmer\_name}:\.{""},\39\\{event\_code},%
+\39\\{rows}[\|i].\\{time},\39\\{rows}[\|i].\\{date},\39\\{rows}[\|i].%
+\\{standard},\39\\{rows}[\|i].\\{meet});{}$\2\6
+\4${}\}{}$\2\6
+\&{else}\5
+${}\{{}$\1\6
+${}\\{printf}(\.{"\%s\ ---\ \%s:\\n"},\39\\{event\_code},\39(\\{opts}\AND\.{OPT%
+\_FASTEST})\?\.{"fastest\ time"}:\.{"all\ times\ (fastest\ }\)\.{first)"});{}$\6
 ${}\\{printf}(\.{"\%-12s\ \ \%-10s\ \ \%-13s}\)\.{\ \ \%s\\n"},\39\.{"Time"},%
 \39\.{"Date"},\39\.{"Standard"},\39\.{"Meet"});{}$\6
 ${}\\{printf}(\.{"\%-12s\ \ \%-10s\ \ \%-13s}\)\.{\ \ \%s\\n"},\39%
 \.{"------------"},\39\.{"----------"},\39\.{"-------------"},\39%
 \.{"----"});{}$\6
-\&{for} (\&{int} \|i${}\K\T{0};{}$ ${}\|i<\\{nrows};{}$ ${}\|i\PP){}$\1\5
+\&{for} (\&{int} \|i${}\K\T{0};{}$ ${}\|i<\\{lim};{}$ ${}\|i\PP){}$\1\5
 ${}\\{printf}(\.{"\%-12s\ \ \%-10s\ \ \%-13s}\)\.{\ \ \%s\\n"},\39\\{rows}[%
 \|i].\\{time},\39\\{rows}[\|i].\\{date},\39\\{rows}[\|i].\\{standard},\39%
 \\{rows}[\|i].\\{meet});{}$\2\6
 \&{if} ${}(\\{nrows}\E\T{0}){}$\1\5
 \\{printf}(\.{"(no\ times\ found)\\n"});\2\6
 \\{putchar}(\.{'\\n'});\6
+\4${}\}{}$\2\6
 \4${}\}{}$\2\par
 \fi
 
-\N{1}{24}Main program.
+\N{1}{25}Main program.
 
 \fi
 
-\M{25}We define a small \PB{\\{Swimmer}} record to hold the person-search
+\M{26}We define a small \PB{\\{Swimmer}} record to hold the person-search
 parameters for each swimmer.  Each entry supplies a \PB{\\{search\_query}}
 string
-sent to the database (ideally distinctive enough to return a small set)
-and a \PB{\\{match\_substr}} (lower-cased) used to identify the correct row.
-Kalea's entry searches ``Benavente'' because her registered name is
-``Kalea Rose Benavente''; the simple two-word query ``Kalea Benavente''
-returns no results since the API requires an exact substring match.
+sent to the database (ideally distinctive enough to return a small set),
+a \PB{\\{match\_substr}} (lower-cased) used to identify the correct row, and
+a \PB{\\{flag}} bit used to filter output when the user passes a swimmer
+keyword
+to \.{-o}.
+Kalea's entry searches ``Benavente'' because the simple two-word query
+``Kalea Benavente'' returns no results; the API requires an exact substring
+match against the registered name ``Kalea Rose Benavente''.
+Kenneth's entry uses ``kenneth ray'' and Keith's uses ``keith santiago''
+to avoid false matches on the common surname ``Evans''.
 
-\Y\B\4\X25:Main function\X${}\E{}$\6
+\Y\B\4\X26:Main function\X${}\E{}$\6
 \&{typedef} \&{struct} ${}\{{}$\1\6
-\&{const} \&{char} ${}{*}\\{search\_query}{}$;\C{ Name string to search for }\6
+\&{const} \&{char} ${}{*}\\{search\_query}{}$;\C{ Name string to search for  }\6
 \&{const} \&{char} ${}{*}\\{match\_substr}{}$;\C{ Lower-case substring to match
-}\2\6
+}\6
+\&{int} \\{flag};\C{ \PB{\.{OPT\_STELLA}}, \PB{\.{OPT\_KALEA}}, etc. }\2\6
 ${}\}{}$ \&{Swimmer};\6
 \&{static} \&{const} \&{Swimmer} \.{SWIMMERS}[\,]${}\K\{\{\.{"Julianna\
-Evans"},\39\.{"stella"}\},{}$\C{ finds Stella Julianna Evans }\6
-${}\{\.{"Benavente"},\39\.{"kalea"}\}{}$\C{ finds Kalea Rose Benavente }\6
+Evans"},\39\.{"stella"},\39\.{OPT\_STELLA}\},{}$\C{ Stella Julianna Evans  }\6
+${}\{\.{"Benavente"},\39\.{"kalea"},\39\.{OPT\_KALEA}\},{}$\C{ Kalea Rose
+Benavente   }\6
+${}\{\.{"Ray\ Evans"},\39\.{"kenneth\ ray"},\39\.{OPT\_KENNY}\},{}$\C{ Kenneth
+Ray Evans      }\6
+${}\{\.{"Santiago\ Evans"},\39\.{"keith\ santiago"},\39\.{OPT\_KEITH}\}{}$\C{
+Keith Santiago Evans   }\6
 ${}\};{}$\6
 \8\#\&{define} \.{NUM\_SWIMMERS}\5((\&{int})(\&{sizeof} \.{SWIMMERS}${}/{}$%
 \&{sizeof} \.{SWIMMERS}[\T{0}]))\par
-\A26.
+\As27, 28, 29\ETs30.
 \U4.\fi
 
-\M{26}We initialise the global \.{libcurl} state, then for each swimmer
-resolve her \PB{\\{PersonKey}}, print a header, and iterate over all twelve
-events, then release all resources before exit.
+\M{27}\PB{\\{parse\_opts\_str}} tokenises a comma-separated option string (the
+argument to \.{-o}) and sets bits in \PB{\\{g\_opts}}.  Unknown tokens are
+silently ignored so that future options can be added without breaking
+existing invocations.
 
-\Y\B\4\X25:Main function\X${}\mathrel+\E{}$\6
-\1\1\&{int} \\{main}(\&{void})\2\2\6
+\Y\B\4\X26:Main function\X${}\mathrel+\E{}$\6
+\1\1\&{static} \&{void} \\{parse\_opts\_str}(\&{const} \&{char} ${}{*}\|s)\2%
+\2{}$\6
+${}\{{}$\C{ Work on a writable copy so strtok can insert NUL bytes. }\1\6
+\&{char} ${}{*}\\{buf}\K\\{strdup}(\|s);{}$\7
+\&{if} ${}(\R\\{buf}){}$\1\5
+\&{return};\2\7
+\&{char} ${}{*}\\{tok}\K\\{strtok}(\\{buf},\39\.{","});{}$\7
+\&{while} (\\{tok})\5
 ${}\{{}$\1\6
-\\{curl\_global\_init}(\.{CURL\_GLOBAL\_DEFAULT});\6
+\&{if} ${}(\\{strcmp}(\\{tok},\39\.{"stella"})\E\T{0}){}$\1\5
+${}\\{g\_opts}\MRL{{\OR}{\K}}\.{OPT\_STELLA};{}$\2\6
+\&{else} \&{if} ${}(\\{strcmp}(\\{tok},\39\.{"kalea"})\E\T{0}){}$\1\5
+${}\\{g\_opts}\MRL{{\OR}{\K}}\.{OPT\_KALEA};{}$\2\6
+\&{else} \&{if} ${}(\\{strcmp}(\\{tok},\39\.{"kenny"})\E\T{0}){}$\1\5
+${}\\{g\_opts}\MRL{{\OR}{\K}}\.{OPT\_KENNY};{}$\2\6
+\&{else} \&{if} ${}(\\{strcmp}(\\{tok},\39\.{"keith"})\E\T{0}){}$\1\5
+${}\\{g\_opts}\MRL{{\OR}{\K}}\.{OPT\_KEITH};{}$\2\6
+\&{else} \&{if} ${}(\\{strcmp}(\\{tok},\39\.{"fastest"})\E\T{0}){}$\1\5
+${}\\{g\_opts}\MRL{{\OR}{\K}}\.{OPT\_FASTEST};{}$\2\6
+\&{else} \&{if} ${}(\\{strcmp}(\\{tok},\39\.{"csv"})\E\T{0}){}$\1\5
+${}\\{g\_opts}\MRL{{\OR}{\K}}\.{OPT\_CSV};{}$\2\6
+${}\\{tok}\K\\{strtok}(\NULL,\39\.{","});{}$\6
+\4${}\}{}$\2\6
+\\{free}(\\{buf});\6
+\4${}\}{}$\2\par
+\fi
+
+\M{28}\PB{\\{parse\_events\_str}} tokenises a comma-separated event-code string
+(the
+argument to \.{-e}) and appends each code to \PB{\\{g\_events}}.  Codes that
+would
+overflow the \PB{\.{NUM\_EVENTS}}-entry array are silently dropped.  The flag
+may
+be supplied multiple times; each invocation extends the list.
+
+\Y\B\4\X26:Main function\X${}\mathrel+\E{}$\6
+\1\1\&{static} \&{void} \\{parse\_events\_str}(\&{const} \&{char} ${}{*}\|s)\2%
+\2{}$\6
+${}\{{}$\1\6
+\&{char} ${}{*}\\{buf}\K\\{strdup}(\|s);{}$\7
+\&{if} ${}(\R\\{buf}){}$\1\5
+\&{return};\2\7
+\&{char} ${}{*}\\{tok}\K\\{strtok}(\\{buf},\39\.{","});{}$\7
+\&{while} ${}(\\{tok}\W\\{g\_nevents}<\.{NUM\_EVENTS}){}$\5
+${}\{{}$\C{ Trim leading spaces left by comma-split with spaces around commas.
+}\1\6
+\&{while} ${}({*}\\{tok}\E\.{'\ '}){}$\1\5
+${}\\{tok}\PP;{}$\2\6
+${}\\{strncpy}(\\{g\_events}[\\{g\_nevents}],\39\\{tok},\39{}$\&{sizeof} \\{g%
+\_events}[\T{0}]${}-\T{1});{}$\6
+\\{g\_events}[\\{g\_nevents}][\&{sizeof} \\{g\_events}[\T{0}]${}-\T{1}]\K\.{'%
+\\0'};{}$\6
+${}\\{g\_nevents}\PP;{}$\6
+${}\\{tok}\K\\{strtok}(\NULL,\39\.{","});{}$\6
+\4${}\}{}$\2\6
+\\{free}(\\{buf});\6
+\4${}\}{}$\2\par
+\fi
+
+\M{29}\PB{\\{print\_usage}} writes the full usage message to standard error.
+
+\Y\B\4\X26:Main function\X${}\mathrel+\E{}$\6
+\1\1\&{static} \&{void} \\{print\_usage}(\&{const} \&{char} ${}{*}\\{prog})\2%
+\2{}$\6
+${}\{{}$\1\6
+${}\\{fprintf}(\\{stderr},\39\.{"Usage:\ \%s\ -o\ option}\)\.{[,option...]\ [-e%
+\ eve}\)\.{nt[,event...]]\\n"}\.{"\\n"}\.{"\ \ -o\ option,...\ \ \ c}\)%
+\.{omma-separated\ outpu}\)\.{t\ options:\\n"}\.{"\ \ \ \ \ \ \ stella\ \ \ \ \
+\ }\)\.{restrict\ output\ to\ S}\)\.{tella\ Julianna\ Evans}\)\.{\\n"}\.{"\ \ \
+\ \ \ \ kalea\ \ \ \ \ \ \ }\)\.{restrict\ output\ to\ K}\)\.{alea\ Rose\
+Benavente\\}\)\.{n"}\.{"\ \ \ \ \ \ \ kenny\ \ \ \ \ \ \ }\)\.{restrict\ output%
+\ to\ K}\)\.{enneth\ Ray\ Evans\\n"}\.{"\ \ \ \ \ \ \ keith\ \ \ \ \ \ \ }\)%
+\.{restrict\ output\ to\ K}\)\.{eith\ Santiago\ Evans\\}\)\.{n"}\.{"\ \ \ \ \ \
+\ fastest\ \ \ \ \ }\)\.{print\ only\ the\ singl}\)\.{e\ fastest\ time\ per\ e}%
+\)\.{vent\\n"}\.{"\ \ \ \ \ \ \ csv\ \ \ \ \ \ \ \ \ }\)\.{emit\ CSV\ output\
+(hea}\)\.{der\ +\ one\ line\ per\ t}\)\.{ime)\\n"}\.{"\\n"}\.{"\ \ -e\
+event,...\ \ \ \ r}\)\.{estrict\ output\ to\ on}\)\.{e\ or\ more\ SCY\ event\ }%
+\)\.{codes;\\n"}\.{"\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ c}\)\.{omma-separated,\
+or\ r}\)\.{epeat\ -e\ for\ each\ ev}\)\.{ent.\\n"}\.{"\ \ \ \ \ \ \ Valid\
+codes:}\)\.{\ 50\ FR\ SCY,\ 100\ FR\ S}\)\.{CY,\ 200\ FR\ SCY,\ 500\ }\)\.{FR\
+SCY,\\n"}\.{"\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ }\)\.{\ 50\ FL\ SCY,\ 100\
+FL\ S}\)\.{CY,\ 50\ BK\ SCY,\ 100\ B}\)\.{K\ SCY,\\n"}\.{"\ \ \ \ \ \ \ \ \ \ \
+\ \ \ \ \ \ \ \ }\)\.{\ 50\ BR\ SCY,\ 100\ BR\ S}\)\.{CY,\ 100\ IM\ SCY,\ 200\
+}\)\.{IM\ SCY\\n"}\.{"\\n"}\.{"Examples:\\n"}\.{"\ \ \%s\ -o\ stella,fast}\)%
+\.{est\\n"}\.{"\ \ \%s\ -o\ kalea,csv\\n}\)\.{"}\.{"\ \ \%s\ -o\ kenny\ -e\ %
+\\"}\)\.{100\ FR\ SCY\\"\\n"}\.{"\ \ \%s\ -o\ keith\ -e\ \\"}\)\.{100\ FR\
+SCY,50\ FL\ SCY}\)\.{\\"\\n"}\.{"\ \ \%s\ -o\ stella\ -e\ \\}\)\.{"100\ FR\ SCY%
+\\"\ -e\ \\"5}\)\.{0\ FL\ SCY\\"\\n"},\39\\{prog},\39\\{prog},\39\\{prog},\39%
+\\{prog},\39\\{prog},\39\\{prog});{}$\6
+\4${}\}{}$\2\par
+\fi
+
+\M{30}We initialise the global \.{libcurl} state, parse the optional
+\.{-o} and \.{-e} flags, then for each swimmer (subject to swimmer-selection
+bits) resolve her \PB{\\{PersonKey}} and iterate over events.  If one or more
+\.{-e} codes were given only those events are fetched; otherwise all twelve
+are processed.  In CSV mode a single header line is printed before the first
+data row.  If no options at all are supplied, the usage message is printed
+and the program exits with status~1.
+
+\Y\B\4\X26:Main function\X${}\mathrel+\E{}$\6
+\1\1\&{int} \\{main}(\&{int} \\{argc}${},\39{}$\&{char} ${}{*}\\{argv}[\,])\2%
+\2{}$\6
+${}\{{}$\1\6
+\&{int} \\{ch};\7
+\&{while} ${}((\\{ch}\K\\{getopt}(\\{argc},\39\\{argv},\39\.{"o:e:"}))\I{-}%
+\T{1}){}$\5
+${}\{{}$\1\6
+\&{switch} (\\{ch})\5
+${}\{{}$\1\6
+\4\&{case} \.{'o'}:\5
+\\{parse\_opts\_str}(\\{optarg});\6
+\&{break};\6
+\4\&{case} \.{'e'}:\5
+\\{parse\_events\_str}(\\{optarg});\6
+\&{break};\6
+\4\&{default}:\5
+\\{print\_usage}(\\{argv}[\T{0}]);\6
+\&{return} \T{2};\6
+\4${}\}{}$\2\6
+\4${}\}{}$\C{ Require at least one option; print usage and exit otherwise. }\2\6
+\&{if} ${}(\\{g\_opts}\E\T{0}\W\\{g\_nevents}\E\T{0}){}$\5
+${}\{{}$\1\6
+\\{print\_usage}(\\{argv}[\T{0}]);\6
+\&{return} \T{1};\6
+\4${}\}{}$\2\6
+\\{curl\_global\_init}(\.{CURL\_GLOBAL\_DEFAULT});\C{ Print CSV header once,
+before any swimmer loop. }\6
+\&{if} ${}(\\{g\_opts}\AND\.{OPT\_CSV}){}$\1\5
+\\{printf}(\.{"\\"Swimmer\\",\\"Event}\)\.{\\",\\"Time\\",\\"Date\\"}\)\.{,%
+\\"Standard\\",\\"Meet}\)\.{\\"\\n"});\2\7
+\&{int} \\{swimmer\_mask}${}\K\.{OPT\_STELLA}\OR\.{OPT\_KALEA}\OR\.{OPT\_KENNY}%
+\OR\.{OPT\_KEITH};{}$\7
 \&{for} (\&{int} \|s${}\K\T{0};{}$ ${}\|s<\.{NUM\_SWIMMERS};{}$ ${}\|s\PP){}$\5
-${}\{{}$\1\6
+${}\{{}$\C{ Skip this swimmer if the -o flag restricts to the other one. }\1\6
+\&{if} ${}((\\{g\_opts}\AND\\{swimmer\_mask})\W\R(\\{g\_opts}\AND\.{SWIMMERS}[%
+\|s].\\{flag})){}$\1\5
+\&{continue};\2\7
 \&{const} \&{char} ${}{*}\\{name}\K\NULL;{}$\6
 \&{char} ${}{*}\\{key}\K\\{lookup\_person\_key}(\.{SWIMMERS}[\|s].\\{search%
 \_query},\39\.{SWIMMERS}[\|s].\\{match\_substr},\39{\AND}\\{name});{}$\7
@@ -576,26 +797,38 @@ ${}\{{}$\1\6
 \\{curl\_global\_cleanup}(\,);\6
 \&{return} \T{1};\6
 \4${}\}{}$\2\6
+\&{if} ${}(\R(\\{g\_opts}\AND\.{OPT\_CSV})){}$\1\5
 ${}\\{printf}(\.{"Swimmer:\ \%s\ \ (Perso}\)\.{nKey:\ \%s)\\n\\n"},\39\\{name}%
-\?\\{name}:\.{"(unknown)"},\39\\{key});{}$\6
+\?\\{name}:\.{"(unknown)"},\39\\{key});{}$\2\6
+\&{if} ${}(\\{g\_nevents}>\T{0}){}$\5
+${}\{{}$\C{ Fetch only the events requested via -e. }\1\6
+\&{for} (\&{int} \|i${}\K\T{0};{}$ ${}\|i<\\{g\_nevents};{}$ ${}\|i\PP){}$\1\5
+${}\\{fetch\_times}(\\{key},\39\\{g\_events}[\|i],\39\\{name},\39\\{g%
+\_opts});{}$\2\6
+\4${}\}{}$\2\6
+\&{else}\5
+${}\{{}$\1\6
 \&{for} (\&{int} \|i${}\K\T{0};{}$ ${}\|i<\.{NUM\_EVENTS};{}$ ${}\|i\PP){}$\1\5
-${}\\{fetch\_times}(\\{key},\39\.{EVENTS}[\|i]);{}$\2\6
+${}\\{fetch\_times}(\\{key},\39\.{EVENTS}[\|i],\39\\{name},\39\\{g\_opts});{}$%
+\2\6
+\4${}\}{}$\2\6
 \\{free}(\\{key});\6
 \\{free}((\&{void} ${}{*}){}$ \\{name});\6
-\\{printf}(\.{"\\n"});\6
+\&{if} ${}(\R(\\{g\_opts}\AND\.{OPT\_CSV})){}$\1\5
+\\{putchar}(\.{'\\n'});\2\6
 \4${}\}{}$\2\6
 \\{curl\_global\_cleanup}(\,);\6
 \&{return} \T{0};\6
 \4${}\}{}$\2\par
 \fi
 
-\N{1}{27}Glossary.
+\N{1}{31}Glossary.
 
 The following terms and interfaces appear throughout this program.
 
 \fi
 
-\M{28}
+\M{32}
 \def\gitem#1{\medskip\noindent{\bf #1.}\enspace\ignorespaces}
 \def\sig#1{\par\noindent\quad{\tt #1}\par\noindent}
 
@@ -622,7 +855,7 @@ endpoints, authenticating with a bearer token in the
 
 \fi
 
-\M{29}{\bf Sisense JAQL API Calls.}
+\M{33}{\bf Sisense JAQL API Calls.}
 All requests are HTTP POST to %
 \.{https://usaswimming.sisense.com/api/datasources/\{ds\}/jaql}
 with headers \.{Content-Type: application/json} and
@@ -705,7 +938,7 @@ and retrieves five output columns in order:
 
 \fi
 
-\M{30}{\bf libcurl API Calls.}
+\M{34}{\bf libcurl API Calls.}
 This program uses the libcurl ``easy'' interface for synchronous HTTP.
 All functions return a \PB{\\{CURLcode}} (zero = \.{CURLE\_OK}) except where
 noted.
@@ -779,7 +1012,7 @@ released before the handle.
 
 \fi
 
-\M{31}{\bf POSIX System Calls and Library Functions.}
+\M{35}{\bf POSIX System Calls and Library Functions.}
 The following identifiers from the POSIX.1-2008 standard are used
 directly in this program.  Each entry gives the C~signature, a
 description of each parameter, and a note on how the program uses it.
@@ -931,7 +1164,7 @@ the JSON person-search response.
 
 \fi
 
-\N{1}{32}Index.
+\N{1}{36}Index.
 
 \fi
 
