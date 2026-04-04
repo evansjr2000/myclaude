@@ -2,8 +2,9 @@
 
 \N{1}{1}Swim Times.
 
-This program fetches best short-course yard (SCY) times for four College
-Area Swim Team (CAST) swimmers:
+This program fetches best short-course yard (SCY) times for four particular
+swimmers:
+
 \medskip
 $${\vbox{
 {\bf Stella Julianna Evans} --- 10~\&~Under Girls
@@ -43,42 +44,84 @@ scanned with simple string operations rather than a full parse tree.
 
 \fi
 
-\M{3}{\bf Compilation.}  After tangling with \.{ctangle}:
+\M{3}{\bf Literate programming.}
+Donald Knuth introduced {\it literate programming\/} in 1984 as a way of
+writing software that is meant to be read by human beings first and executed
+by computers second.  Rather than annotating code with comments, a literate
+program interweaves prose and code in a single source document.  The prose
+explains the {\it why\/}---the motivation, the design decisions, the
+mathematical reasoning---while the code expresses the {\it how}.  The two
+live together in one file (conventionally given the extension \.{.w}) and
+are separated only at build time by two companion tools: \.{ctangle} and
+\.{cweave}.
+
+\fi
+
+\M{4}{\bf ctangle.}
+\.{ctangle} is the {\it tangling\/} tool.  It reads a \.{.w} source file
+and extracts the C~code sections, assembling them in the order dictated
+by named chunk references rather than the order in which they appear in
+the document.  The result is a plain
+\.{.c} file that a standard C~compiler can process without any knowledge
+of literate programming.  In this project, running
+$$\.{ctangle stella-times.w}$$
+produces \.{stella-times.c}, which is then compiled with \.{cc} and
+linked against \.{libcurl} to create the \.{stella-times} executable.
+The generated \.{.c} file should be treated as a build artefact: the
+\.{.w} file is the true source of record.
+
+\fi
+
+\M{5}{\bf cweave.}
+\.{cweave} is the {\it weaving\/} tool.  It reads the same \.{.w} source
+and produces a \.{.tex} file formatted for \.{pdftex} using the
+\.{cwebmac} macro package.  \.{cweave} pretty-prints all C~code with
+bold keywords, italic identifiers, and cross-references, and numbers every
+named chunk so the reader can follow the program's logical structure
+independently of its physical layout.  An index of identifiers and a table
+of contents are generated automatically.  Running
+$$\.{cweave stella-times.w}$$
+produces \.{stella-times.tex}; running \.{pdftex} on that file yields the
+typeset documentation you are reading now.
+
+\fi
+
+\M{6}{\bf Compilation.}  After tangling with \.{ctangle}:
 $$\.{gcc -O2 -o swim-times swim-times.c \$(curl-config --libs)}$$
 
 \fi
 
-\M{4}{\bf Program structure.}  The top-level arrangement of the tangled
+\M{7}{\bf Program structure.}  The top-level arrangement of the tangled
 output is:
 
-\Y\B\X6:Includes\X\6
-\X7:Global constants\X\6
-\X8:Option flags\X\6
-\X10:Type definitions\X\6
-\X13:HTTP utilities\X\6
-\X17:JSON scanner\X\6
-\X20:Person lookup\X\6
-\X22:Times fetch\X\6
-\X26:Main function\X\par
+\Y\B\X9:Includes\X\6
+\X10:Global constants\X\6
+\X11:Option flags\X\6
+\X13:Type definitions\X\6
+\X16:HTTP utilities\X\6
+\X20:JSON scanner\X\6
+\X23:Person lookup\X\6
+\X25:Times fetch\X\6
+\X29:Main function\X\par
 \fi
 
-\N{1}{5}Includes and constants.
+\N{1}{8}Includes and constants.
 
 \fi
 
-\M{6}\B\X6:Includes\X${}\E{}$\6
+\M{9}\B\X9:Includes\X${}\E{}$\6
 \8\#\&{include} \.{<stdio.h>}\6
 \8\#\&{include} \.{<stdlib.h>}\6
 \8\#\&{include} \.{<string.h>}\6
 \8\#\&{include} \.{<unistd.h>}\6
 \8\#\&{include} \.{<curl/curl.h>}\par
-\U4.\fi
+\U7.\fi
 
-\M{7}The Sisense bearer token authenticates us against the analytics
+\M{10}The Sisense bearer token authenticates us against the analytics
 instance that backs \.{data.usaswimming.org}.  \PB{\.{EVENTS}} lists the
 twelve SCY event codes we query.
 
-\Y\B\4\X7:Global constants\X${}\E{}$\6
+\Y\B\4\X10:Global constants\X${}\E{}$\6
 \8\#\&{define} \.{NUM\_EVENTS}\5\T{12}\6
 \8\#\&{define} \.{MAX\_TIMES}\5\T{200}\6
 \&{static} \&{const} \&{char} \.{SISENSE\_TOKEN}[\,]${}\K%
@@ -96,9 +139,9 @@ SCY"},\39\.{"100\ FR\ SCY"},\39\.{"200\ FR\ SCY"},\39\.{"500\ FR\ SCY"},\39%
 \.{"50\ FL\ SCY"},\39\.{"100\ FL\ SCY"},\39\.{"50\ BK\ SCY"},\39\.{"100\ BK\
 SCY"},\39\.{"50\ BR\ SCY"},\39\.{"100\ BR\ SCY"},\39\.{"100\ IM\ SCY"},\39%
 \.{"200\ IM\ SCY"}\}{}$;\par
-\U4.\fi
+\U7.\fi
 
-\M{8}The program accepts two optional flags on the command line.
+\M{11}The program accepts two optional flags on the command line.
 
 The \.{-o} flag takes a comma-separated list of one or more keywords.
 Six keywords are recognised:
@@ -122,7 +165,7 @@ When \.{-e} is omitted all twelve events are reported.
 
 If no options are given at all the program prints a usage message and exits.
 
-\Y\B\4\X8:Option flags\X${}\E{}$\6
+\Y\B\4\X11:Option flags\X${}\E{}$\6
 \8\#\&{define} \.{OPT\_STELLA}\5${}(\T{1}\LL\T{0}{}$)\C{ restrict output to
 Stella's events         }\6
 \8\#\&{define} \.{OPT\_KALEA}\5${}(\T{1}\LL\T{1}{}$)\C{ restrict output to
@@ -141,24 +184,24 @@ show everything }\6
 requested via \.{-e}  }\6
 \&{static} \&{int} \\{g\_nevents}${}\K\T{0}{}$;\C{ number of entries in \PB{%
 \\{g\_events}}             }\par
-\U4.\fi
+\U7.\fi
 
-\N{1}{9}Data structures.
+\N{1}{12}Data structures.
 
 \fi
 
-\M{10}A \PB{\\{Buffer}} holds a dynamically-grown heap string.  \.{libcurl}
+\M{13}A \PB{\\{Buffer}} holds a dynamically-grown heap string.  \.{libcurl}
 appends each response chunk to it via the write callback.
 
-\Y\B\4\X10:Type definitions\X${}\E{}$\6
+\Y\B\4\X13:Type definitions\X${}\E{}$\6
 \&{typedef} \&{struct} ${}\{{}$\1\6
 \&{char} ${}{*}\\{data};{}$\6
 \&{size\_t} \\{size};\2\6
 ${}\}{}$ \&{Buffer};\par
-\A11.
-\U4.\fi
+\A14.
+\U7.\fi
 
-\M{11}A \PB{\\{TimeRow}} records one swim result.  \PB{\\{sort\_key}} is a
+\M{14}A \PB{\\{TimeRow}} records one swim result.  \PB{\\{sort\_key}} is a
 numeric proxy
 for the swim time (smaller is faster); \PB{\\{time}} is the formatted string
 (e.g.\ \.{1:02.45}); \PB{\\{date}} is the swim date formatted as
@@ -167,7 +210,7 @@ for the swim time (smaller is faster); \PB{\\{time}} is the formatted string
 meet name.  The Sisense API returns the sort key as a quoted decimal
 string such as \.{"1010007029.00"}, so we store it as a \PB{\&{double}}.
 
-\Y\B\4\X10:Type definitions\X${}\mathrel+\E{}$\6
+\Y\B\4\X13:Type definitions\X${}\mathrel+\E{}$\6
 \&{typedef} \&{struct} ${}\{{}$\1\6
 \&{double} \\{sort\_key};\6
 \&{char} \\{time}[\T{32}];\6
@@ -177,15 +220,15 @@ string such as \.{"1010007029.00"}, so we store it as a \PB{\&{double}}.
 ${}\}{}$ \&{TimeRow};\par
 \fi
 
-\N{1}{12}HTTP utilities.
+\N{1}{15}HTTP utilities.
 
 \fi
 
-\M{13}The \.{libcurl} write callback appends each incoming chunk to a
+\M{16}The \.{libcurl} write callback appends each incoming chunk to a
 \PB{\&{Buffer}}, growing the allocation as needed.  It maintains a null
 terminator so the buffer can always be treated as a C string.
 
-\Y\B\4\X13:HTTP utilities\X${}\E{}$\6
+\Y\B\4\X16:HTTP utilities\X${}\E{}$\6
 \1\1\&{static} \&{size\_t} \\{write\_cb}(\&{void} ${}{*}\\{ptr},\39{}$\&{size%
 \_t} \\{size}${},\39{}$\&{size\_t} \\{nmemb}${},\39{}$\&{void} ${}{*}\\{ud})\2%
 \2{}$\6
@@ -202,15 +245,15 @@ ${}\|b\MG\\{size}\MRL{+{\K}}\|n;{}$\6
 ${}\|b\MG\\{data}[\|b\MG\\{size}]\K\.{'\\0'};{}$\6
 \&{return} \|n;\6
 \4${}\}{}$\2\par
-\A14.
-\U4.\fi
+\A17.
+\U7.\fi
 
-\M{14}\PB{\\{post\_json}} performs a single HTTP~POST with a JSON body and
+\M{17}\PB{\\{post\_json}} performs a single HTTP~POST with a JSON body and
 returns
 the response as a null-terminated heap string, or \PB{$\NULL$} on failure.
 The caller is responsible for freeing the returned string.
 
-\Y\B\4\X13:HTTP utilities\X${}\mathrel+\E{}$\6
+\Y\B\4\X16:HTTP utilities\X${}\mathrel+\E{}$\6
 \1\1\&{static} \&{char} ${}{*}{}$\\{post\_json}(\&{const} \&{char} ${}{*}%
 \\{url},\39{}$\&{const} \&{char} ${}{*}\\{body})\2\2{}$\6
 ${}\{{}$\1\6
@@ -244,11 +287,11 @@ ${}\\{free}(\\{buf}.\\{data});{}$\6
 \4${}\}{}$\2\par
 \fi
 
-\N{1}{15}JSON scanner.
+\N{1}{18}JSON scanner.
 
 \fi
 
-\M{16}Sisense JAQL responses contain a top-level \PB{\.{"values"}} array.  Each
+\M{19}Sisense JAQL responses contain a top-level \PB{\.{"values"}} array.  Each
 element is itself an array of objects, each holding either a \PB{\.{"text"}}
 key (string value) or a \PB{\.{"data"}} key (numeric value).  A typical
 person-search row looks like:
@@ -260,14 +303,14 @@ extract the immediately following value, advancing a position pointer.
 
 \fi
 
-\M{17}\PB{\\{scan\_string}} finds the first \PB{\.{"key"}} at or after \PB{${*}%
+\M{20}\PB{\\{scan\_string}} finds the first \PB{\.{"key"}} at or after \PB{${*}%
 \\{pos}$}, copies the
 string value that follows into \PB{\\{out}} (at most \PB{$\\{max\_len}-\T{1}$}
 bytes), and
 advances \PB{${*}\\{pos}$} past it.  Returns 1 on success, 0 if the key is
 absent.
 
-\Y\B\4\X17:JSON scanner\X${}\E{}$\6
+\Y\B\4\X20:JSON scanner\X${}\E{}$\6
 \1\1\&{static} \&{int} \\{scan\_string}(\&{const} \&{char} ${}{*}\\{key},\39{}$%
 \&{const} \&{char} ${}{*}{*}\\{pos},\39{}$\&{char} ${}{*}\\{out},\39{}$\&{size%
 \_t} \\{max\_len})\2\2\6
@@ -295,16 +338,16 @@ ${}\\{out}[\\{len}]\K\.{'\\0'};{}$\6
 ${}{*}\\{pos}\K\|e+\T{1};{}$\6
 \&{return} \T{1};\6
 \4${}\}{}$\2\par
-\A18.
-\U4.\fi
+\A21.
+\U7.\fi
 
-\M{18}\PB{\\{scan\_long}} is the numeric counterpart: it finds \PB{\.{"key"}},
+\M{21}\PB{\\{scan\_long}} is the numeric counterpart: it finds \PB{\.{"key"}},
 converts
 the digits that follow to a \PB{\&{long}}, stores the result in \PB{${*}%
 \\{out}$}, and
 advances \PB{${*}\\{pos}$}.
 
-\Y\B\4\X17:JSON scanner\X${}\mathrel+\E{}$\6
+\Y\B\4\X20:JSON scanner\X${}\mathrel+\E{}$\6
 \1\1\&{static} \&{int} \\{scan\_long}(\&{const} \&{char} ${}{*}\\{key},\39{}$%
 \&{const} \&{char} ${}{*}{*}\\{pos},\39{}$\&{long} ${}{*}\\{out})\2\2{}$\6
 ${}\{{}$\1\6
@@ -326,7 +369,7 @@ ${}{*}\\{pos}\K\\{end};{}$\6
 \4${}\}{}$\2\par
 \fi
 
-\N{1}{19}Person lookup. \PB{\\{lookup\_person\_key}} posts a search for \PB{%
+\N{1}{22}Person lookup. \PB{\\{lookup\_person\_key}} posts a search for \PB{%
 \\{search\_query}} and scans
 the result rows for one whose full name contains \PB{\\{match\_substr}} (after
 lower-casing).  It returns a heap-allocated decimal \PB{\\{PersonKey}} string
@@ -336,8 +379,8 @@ on failure.
 
 \fi
 
-\M{20}
-\Y\B\4\X20:Person lookup\X${}\E{}$\6
+\M{23}
+\Y\B\4\X23:Person lookup\X${}\E{}$\6
 \1\1\&{static} \&{char} ${}{*}{}$\\{lookup\_person\_key}(\&{const} \&{char}
 ${}{*}\\{search\_query},\39{}$\&{const} \&{char} ${}{*}\\{match\_substr},\39{}$%
 \&{const} \&{char} ${}{*}{*}\\{out\_name})\2\2{}$\6
@@ -405,18 +448,18 @@ ${}{*}\\{out\_name}\K\\{name};{}$\2\6
 \\{free}(\\{name});\2\6
 \&{return} \\{key};\6
 \4${}\}{}$\2\par
-\U4.\fi
+\U7.\fi
 
-\N{1}{21}Times fetch.
+\N{1}{24}Times fetch.
 
 \fi
 
-\M{22}\PB{\\{insertion\_sort}} sorts \PB{\|n} \PB{\&{TimeRow}} records in-place
+\M{25}\PB{\\{insertion\_sort}} sorts \PB{\|n} \PB{\&{TimeRow}} records in-place
 by \PB{\\{sort\_key}}
 ascending (smallest = fastest time).  A swimmer's career rarely exceeds
 a few dozen entries per event, so $O(n^2)$ is entirely adequate.
 
-\Y\B\4\X22:Times fetch\X${}\E{}$\6
+\Y\B\4\X25:Times fetch\X${}\E{}$\6
 \1\1\&{static} \&{void} \\{insertion\_sort}(\&{TimeRow} ${}{*}\\{rows},\39{}$%
 \&{int} \|n)\2\2\6
 ${}\{{}$\1\6
@@ -433,14 +476,14 @@ ${}\|j\MM;{}$\6
 ${}\\{rows}[\|j+\T{1}]\K\\{tmp};{}$\6
 \4${}\}{}$\2\6
 \4${}\}{}$\2\par
-\As23\ET24.
-\U4.\fi
+\As26\ET27.
+\U7.\fi
 
-\M{23}\PB{\\{format\_date}} converts an 8-digit \.{YYYYMMDD} string (such as
+\M{26}\PB{\\{format\_date}} converts an 8-digit \.{YYYYMMDD} string (such as
 \.{20230305}) to \.{YYYY-MM-DD} format in \PB{\\{out}} (which must be at
 least 11 bytes).
 
-\Y\B\4\X22:Times fetch\X${}\mathrel+\E{}$\6
+\Y\B\4\X25:Times fetch\X${}\mathrel+\E{}$\6
 \1\1\&{static} \&{void} \\{format\_date}(\&{const} \&{char} ${}{*}\\{ymd8},%
 \39{}$\&{char} ${}{*}\\{out})\2\2{}$\6
 ${}\{{}$\1\6
@@ -466,7 +509,7 @@ ${}\\{out}[\T{10}]\K\.{'\\0'};{}$\6
 \4${}\}{}$\2\par
 \fi
 
-\M{24}\PB{\\{fetch\_times}} retrieves all SCY times for \PB{\\{person\_key}} in
+\M{27}\PB{\\{fetch\_times}} retrieves all SCY times for \PB{\\{person\_key}} in
 \PB{\\{event\_code}}, sorts them fastest-first, and prints them.  Each JAQL
 result row delivers five cells in order: time, sort key, meet name,
 swim date (as \.{YYYYMMDD}), and motivational standard type.
@@ -481,7 +524,7 @@ line per
 time record with the swimmer name on every line; when \PB{\.{OPT\_FASTEST}} is
 set only the single fastest time is printed.
 
-\Y\B\4\X22:Times fetch\X${}\mathrel+\E{}$\6
+\Y\B\4\X25:Times fetch\X${}\mathrel+\E{}$\6
 \1\1\&{static} \&{void} \\{fetch\_times}(\&{const} \&{char} ${}{*}\\{person%
 \_key},\39{}$\&{const} \&{char} ${}{*}\\{event\_code},\39{}$\&{const} \&{char}
 ${}{*}\\{swimmer\_name},\39{}$\&{int} \\{opts})\2\2\6
@@ -606,11 +649,11 @@ ${}\\{printf}(\.{"\%-12s\ \ \%-10s\ \ \%-13s}\)\.{\ \ \%s\\n"},\39\\{rows}[%
 \4${}\}{}$\2\par
 \fi
 
-\N{1}{25}Main program.
+\N{1}{28}Main program.
 
 \fi
 
-\M{26}We define a small \PB{\\{Swimmer}} record to hold the person-search
+\M{29}We define a small \PB{\\{Swimmer}} record to hold the person-search
 parameters for each swimmer.  Each entry supplies a \PB{\\{search\_query}}
 string
 sent to the database (ideally distinctive enough to return a small set),
@@ -624,7 +667,7 @@ match against the registered name ``Kalea Rose Benavente''.
 Kenneth's entry uses ``kenneth ray'' and Keith's uses ``keith santiago''
 to avoid false matches on the common surname ``Evans''.
 
-\Y\B\4\X26:Main function\X${}\E{}$\6
+\Y\B\4\X29:Main function\X${}\E{}$\6
 \&{typedef} \&{struct} ${}\{{}$\1\6
 \&{const} \&{char} ${}{*}\\{search\_query}{}$;\C{ Name string to search for  }\6
 \&{const} \&{char} ${}{*}\\{match\_substr}{}$;\C{ Lower-case substring to match
@@ -642,15 +685,15 @@ Keith Santiago Evans   }\6
 ${}\};{}$\6
 \8\#\&{define} \.{NUM\_SWIMMERS}\5((\&{int})(\&{sizeof} \.{SWIMMERS}${}/{}$%
 \&{sizeof} \.{SWIMMERS}[\T{0}]))\par
-\As27, 28, 29\ETs30.
-\U4.\fi
+\As30, 31, 32\ETs33.
+\U7.\fi
 
-\M{27}\PB{\\{parse\_opts\_str}} tokenises a comma-separated option string (the
+\M{30}\PB{\\{parse\_opts\_str}} tokenises a comma-separated option string (the
 argument to \.{-o}) and sets bits in \PB{\\{g\_opts}}.  Unknown tokens are
 silently ignored so that future options can be added without breaking
 existing invocations.
 
-\Y\B\4\X26:Main function\X${}\mathrel+\E{}$\6
+\Y\B\4\X29:Main function\X${}\mathrel+\E{}$\6
 \1\1\&{static} \&{void} \\{parse\_opts\_str}(\&{const} \&{char} ${}{*}\|s)\2%
 \2{}$\6
 ${}\{{}$\C{ Work on a writable copy so strtok can insert NUL bytes. }\1\6
@@ -678,7 +721,7 @@ ${}\\{tok}\K\\{strtok}(\NULL,\39\.{","});{}$\6
 \4${}\}{}$\2\par
 \fi
 
-\M{28}\PB{\\{parse\_events\_str}} tokenises a comma-separated event-code string
+\M{31}\PB{\\{parse\_events\_str}} tokenises a comma-separated event-code string
 (the
 argument to \.{-e}) and appends each code to \PB{\\{g\_events}}.  Codes that
 would
@@ -686,7 +729,7 @@ overflow the \PB{\.{NUM\_EVENTS}}-entry array are silently dropped.  The flag
 may
 be supplied multiple times; each invocation extends the list.
 
-\Y\B\4\X26:Main function\X${}\mathrel+\E{}$\6
+\Y\B\4\X29:Main function\X${}\mathrel+\E{}$\6
 \1\1\&{static} \&{void} \\{parse\_events\_str}(\&{const} \&{char} ${}{*}\|s)\2%
 \2{}$\6
 ${}\{{}$\1\6
@@ -710,9 +753,9 @@ ${}\\{tok}\K\\{strtok}(\NULL,\39\.{","});{}$\6
 \4${}\}{}$\2\par
 \fi
 
-\M{29}\PB{\\{print\_usage}} writes the full usage message to standard error.
+\M{32}\PB{\\{print\_usage}} writes the full usage message to standard error.
 
-\Y\B\4\X26:Main function\X${}\mathrel+\E{}$\6
+\Y\B\4\X29:Main function\X${}\mathrel+\E{}$\6
 \1\1\&{static} \&{void} \\{print\_usage}(\&{const} \&{char} ${}{*}\\{prog})\2%
 \2{}$\6
 ${}\{{}$\1\6
@@ -743,7 +786,7 @@ SCY,50\ FL\ SCY}\)\.{\\"\\n"}\.{"\ \ \%s\ -o\ stella\ -e\ \\}\)\.{"100\ FR\ SCY%
 \4${}\}{}$\2\par
 \fi
 
-\M{30}We initialise the global \.{libcurl} state, parse the optional
+\M{33}We initialise the global \.{libcurl} state, parse the optional
 \.{-o} and \.{-e} flags, then for each swimmer (subject to swimmer-selection
 bits) resolve her \PB{\\{PersonKey}} and iterate over events.  If one or more
 \.{-e} codes were given only those events are fetched; otherwise all twelve
@@ -751,7 +794,7 @@ are processed.  In CSV mode a single header line is printed before the first
 data row.  If no options at all are supplied, the usage message is printed
 and the program exits with status~1.
 
-\Y\B\4\X26:Main function\X${}\mathrel+\E{}$\6
+\Y\B\4\X29:Main function\X${}\mathrel+\E{}$\6
 \1\1\&{int} \\{main}(\&{int} \\{argc}${},\39{}$\&{char} ${}{*}\\{argv}[\,])\2%
 \2{}$\6
 ${}\{{}$\1\6
@@ -822,13 +865,13 @@ ${}\\{fetch\_times}(\\{key},\39\.{EVENTS}[\|i],\39\\{name},\39\\{g\_opts});{}$%
 \4${}\}{}$\2\par
 \fi
 
-\N{1}{31}Glossary.
+\N{1}{34}Glossary.
 
 The following terms and interfaces appear throughout this program.
 
 \fi
 
-\M{32}
+\M{35}
 \def\gitem#1{\medskip\noindent{\bf #1.}\enspace\ignorespaces}
 \def\sig#1{\par\noindent\quad{\tt #1}\par\noindent}
 
@@ -855,7 +898,7 @@ endpoints, authenticating with a bearer token in the
 
 \fi
 
-\M{33}{\bf Sisense JAQL API Calls.}
+\M{36}{\bf Sisense JAQL API Calls.}
 All requests are HTTP POST to %
 \.{https://usaswimming.sisense.com/api/datasources/\{ds\}/jaql}
 with headers \.{Content-Type: application/json} and
@@ -938,7 +981,7 @@ and retrieves five output columns in order:
 
 \fi
 
-\M{34}{\bf libcurl API Calls.}
+\M{37}{\bf libcurl API Calls.}
 This program uses the libcurl ``easy'' interface for synchronous HTTP.
 All functions return a \PB{\\{CURLcode}} (zero = \.{CURLE\_OK}) except where
 noted.
@@ -1012,7 +1055,7 @@ released before the handle.
 
 \fi
 
-\M{35}{\bf POSIX System Calls and Library Functions.}
+\M{38}{\bf POSIX System Calls and Library Functions.}
 The following identifiers from the POSIX.1-2008 standard are used
 directly in this program.  Each entry gives the C~signature, a
 description of each parameter, and a note on how the program uses it.
@@ -1164,7 +1207,7 @@ the JSON person-search response.
 
 \fi
 
-\N{1}{36}Index.
+\N{1}{39}Index.
 
 \fi
 
