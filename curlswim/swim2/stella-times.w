@@ -36,6 +36,42 @@ JAQL~API.  We make two kinds of requests:
 All HTTP communication is handled by \.{libcurl}.  JSON responses are
 scanned with simple string operations rather than a full parse tree.
 
+@ {\bf Literate programming.}
+Donald Knuth introduced {\it literate programming\/} in 1984 as a way of
+writing software that is meant to be read by human beings first and executed
+by computers second.  Rather than annotating code with comments, a literate
+program interweaves prose and code in a single source document.  The prose
+explains the {\it why\/}---the motivation, the design decisions, the
+mathematical reasoning---while the code expresses the {\it how}.  The two
+live together in one file (conventionally given the extension \.{.w}) and
+are separated only at build time by two companion tools: \.{ctangle} and
+\.{cweave}.
+
+@ {\bf ctangle.}
+\.{ctangle} is the {\it tangling\/} tool.  It reads a \.{.w} source file
+and extracts the C~code sections, assembling them in the order dictated
+by named chunk references rather than the order in which they appear in
+the document.  The result is a plain
+\.{.c} file that a standard C~compiler can process without any knowledge
+of literate programming.  In this project, running
+$$\.{ctangle stella-times.w}$$
+produces \.{stella-times.c}, which is then compiled with \.{cc} and
+linked against \.{libcurl} to create the \.{stella-times} executable.
+The generated \.{.c} file should be treated as a build artefact: the
+\.{.w} file is the true source of record.
+
+@ {\bf cweave.}
+\.{cweave} is the {\it weaving\/} tool.  It reads the same \.{.w} source
+and produces a \.{.tex} file formatted for \.{pdftex} using the
+\.{cwebmac} macro package.  \.{cweave} pretty-prints all C~code with
+bold keywords, italic identifiers, and cross-references, and numbers every
+named chunk so the reader can follow the program's logical structure
+independently of its physical layout.  An index of identifiers and a table
+of contents are generated automatically.  Running
+$$\.{cweave stella-times.w}$$
+produces \.{stella-times.tex}; running \.{pdftex} on that file yields the
+typeset documentation you are reading now.
+
 @ {\bf Compilation.}  After tangling with \.{ctangle}:
 $$\.{gcc -O2 -o swim-times swim-times.c \$(curl-config --libs)}$$
 
