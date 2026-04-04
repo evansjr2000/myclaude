@@ -1,7 +1,7 @@
 @* Swim Times.
 
-This program fetches best short-course yard (SCY) times for four College
-Area Swim Team (CAST) swimmers:
+This program fetches best short-course yard (SCY) times for four particular swimmers:
+
 \medskip
 $${\vbox{
 {\bf Stella Julianna Evans} --- 10~\&~Under Girls

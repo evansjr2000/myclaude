@@ -5,7 +5,7 @@
 3. Create a bash script to fetch Stella Julianna Evans' latest 200 free time from the usa swim database.  Stella is ten years old and swims for the College Area Swim team.
 
 4.  Create a "C" literate program, using Donald Knuth's literate programming paradigm, and the cweb.sh script
-in this directory, that programmatically accesses the USA Swim Database and gets Stell Julianna Evans' latest 50, 100, and 200 swim times.
+in this directory, that programmatically accesses the USA Swim Database and gets Stella Julianna Evans' latest 50, 100, and 200 swim times.
 
 5. Create a Makefile to build the documentation, extract the "C" code, and compile and build the  program.
 
@@ -24,6 +24,9 @@ in this directory, that programmatically accesses the USA Swim Database and gets
 12.  Add a glossary to the documentation.  Define JAQL and Sisense Analytic Engine and all POSIX system calls in
 the glossary. Include a description of the parameters used in the POSIX system calls.  Also describe the API calls
 and their parameters for all JAQL and Sisense calls.
+
+12a. Add a description near the top of the documentation on what literate programming is.  Also add descriptions
+of the ctangle and cweave programs, and describe how they work.
 
 13.  Add an "-o" parameter to the ".w" file, with the following options following "-o":
 
