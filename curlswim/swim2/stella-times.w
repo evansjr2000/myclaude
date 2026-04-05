@@ -1,16 +1,17 @@
 @* Swim Times.
 
-This program fetches best short-course yard (SCY) times for four particular swimmers:
+This is a program written using Donald Knuth's literate programming paradigm (see more below).
+It fetches best short-course yard (SCY) times for four particular swimmers:
 
 \medskip
 $${\vbox{
-{\bf Stella Julianna Evans} --- 10~\&~Under Girls
+\item{} {\bf Stella Julianna Evans} --- 10~\&~Under Girls
 
-{\bf Kalea Rose Benavente} --- 13--14 Girls
+\item{} {\bf Kalea Rose Benavente} --- 13--14 Girls
 
-{\bf Kenneth Ray Evans} --- 11--12 Boys
+\item {} {\bf Kenneth Ray Evans} --- 11--12 Boys
 
-{\bf Keith Santiago Evans} --- 11--12 Boys
+\item{} {\bf Keith Santiago Evans} --- 11--12 Boys
 }}$$
 
 \medskip\noindent
