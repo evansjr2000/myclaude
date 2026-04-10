@@ -1,0 +1,21 @@
+--::::::::::
+--README
+--::::::::::
+--Die Reihenfolge fuer das Uebersetzen ist:
+--	       _________________
+--	      | data_str.a      |
+--	      | hash.a          |
+--	      | in_out.a        |
+--	      | in_phase.a      |
+--	      | out_phase.a     |
+--	      | tangle.a        |
+--	      | data_str_b.a    |
+--	      | hash_b.a        |
+--	      | in_out_b.a      |
+--	      | in_phase_b.a    |
+--	      | out_phase_b.a   |
+--	       -----------------
+--::::::::::
+--data_str.a
+--::::::::::
+WITH TEXT_IO;PACKAGE INT_NUMBER_IO IS NEW TEXT_IO.INTEGER_IO(INTEGER);

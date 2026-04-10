@@ -1,0 +1,17 @@
+This directory contains two subdirectories: atangle and aweave,
+which contains the ada code for same.
+
+It also contains the files:
+
+awebmac.tex:	The TeX macro
+		file needed for processing the output of the aweave processor
+		into beautiful documentation.
+
+awebman.tex:    The aweb documentation in TeX format.
+
+awebman.ps:	The aweb documentation in PostScript format.
+
+
+To build the aweb programs with GNAT, cd to the respective directory
+and type "gnatmake aweave" or "gnatmake atangle".  
+

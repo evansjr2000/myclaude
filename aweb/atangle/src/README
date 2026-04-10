@@ -1,0 +1,5 @@
+Running atangle on atangle.aweb produces lots of files
+with ".a" suffixes.  So to translate them to gnat naming
+convention, I ran the following command.
+
+$ gnatchop -v *.a src/

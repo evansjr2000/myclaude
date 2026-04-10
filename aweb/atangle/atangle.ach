@@ -1,0 +1,137 @@
+This is the change file for atangle.aweb.  Here I change the
+default output from ".a" files to ".adb" and ".ads" files.
+This is necessary for GNAT.
+
+@x
+The ``banner line'' defined here should be changed whenever \.{ATANGLE} is
+modified.
+ 
+@d banner=="This is ATANGLE, Version 1.0"
+@y
+The ``banner line'' defined here should be changed whenever \.{ATANGLE} is
+modified.
+ 
+@d banner=="This is ATANGLE, Version 1.1 (NRaD Version)"
+@z
+
+
+@x
+@a@~data_str.a@>
+@.data_str.a@>
+@y
+@a@~data_structures.ads@>
+@.data_structures.ads@>
+@z
+
+@x
+with TEXT_IO;
+package @!int_number_io is new TEXT_IO.INTEGER_IO(INTEGER);
+with TEXT_IO;
+package data_structures is
+@y
+with TEXT_IO;
+with TEXT_IO; with int_number_io;
+package data_structures is
+@z
+
+@x
+@~data_str_b.a@>
+@.data_str_b.a@>
+@y
+@~data_structures.adb@>
+@.data_structures.adb@>
+@z
+
+
+@x
+@~in_out.a@>
+@.in_out.a@>
+@y
+@~input_output.ads@>
+@.input_output.ads@>
+@z
+
+@x
+@~in_out_b.a@>
+@.in_out_b.a@>
+@y
+@~input_output.adb@>
+@.input_output.adb@>
+@z
+
+@x
+@~hash.a@>
+@.hash.a@>
+@y
+@~hashing.ads@>
+@.hashing.ads@>
+@z
+
+@x
+@~hash_b.a@>
+@.hash_b.a@>
+@y
+@~hashing.adb@>
+@.hashing.adb@>
+@z
+
+@x
+@~out_phase.a@>
+@.out_phase.a@>
+@y
+@~output_phase.ads@>
+@.output_phase.ads@>
+@z
+
+
+@x
+@~out_phase_b.a@>
+@.out_phase_b.a@>
+@y
+@~output_phase.adb@>
+@.output_phase.adb@>
+@z
+
+@x
+@~in_phase.a@>
+@.in_phase.a@>
+@y
+@~input_phase.ads@>
+@.input_phase.ads@>
+@z
+
+
+
+@x
+@~in_phase_b.a@>
+@.in_phase_b.a@>
+@y
+@~input_phase.adb@>
+@.input_phase.adb@>
+@z
+
+
+
+@x
+@a@~tangle.a@>
+@y
+@a@~atangle.adb@>
+@z
+
+@x
+@* Index.
+@y
+@a@~int_number_io.ads@>
+@.int_number_io.ads@>
+
+with TEXT_IO;
+package @!int_number_io is new TEXT_IO.INTEGER_IO(INTEGER);
+
+@* Index.
+@z
+
+
+
+
+
+

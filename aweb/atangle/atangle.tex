@@ -1,0 +1,4632 @@
+\input awebmac
+%::::::::::
+%atangle.aweb
+%::::::::::
+% This is ATANGLE.AWEB in text format, as of May 04, 1988.
+% This program by D. E. Knuth is not copyrighted and can be used freely.
+% Adaption to ADA by U. Schweigert based on TANGLE Version 2.8.
+% Version 1.0 was released May 31, 1988.
+
+
+% Here is TeX material that gets inserted after \input webmaca
+\def\hang{\hangindent 3em\indent\ignorespaces}
+\font\ninerm=cmr9
+\let\mc=\ninerm % medium caps for names like ADA
+\def\ADA{{\mc ADA}}
+\def\ab{$\.|\ldots\.|$} % ADA brackets (|...|)
+\def\v{\.{\char'174}} % vertical (|) in typewriter font
+\mathchardef\BA="3224 % double arrow
+\def\({} % kludge for alphabetizing certain module names
+
+\def\title{ATANGLE}
+\def\contentspagenumber{137} % should be odd
+\def\topofcontents{\null\vfill
+  \titlefalse % include headline on the contents page
+  \def\rheader{\mainfont Appendix E\hfil \contentspagenumber}
+  \centerline{\titlefont The {\ttitlefont ATANGLE} processor}
+  \vskip 15pt
+  \centerline{(based on {\tt TANGLE} Version 2.8)}
+  \centerline{{\ninerm[ADA-Version 1.0]}}
+  \vfill}
+\pageno=\contentspagenumber \advance\pageno by 1
+
+
+\N1\*.  Introduction.
+This program converts an \.{AWEB} file to an \ADA\ file. It was written%
+---originally for conversion to {\mc PASCAL}---by D. E. Knuth in September,
+1981; a somewhat similar {\mc SAIL} program had been developed in March,
+1979. Since this program describes itself, a bootstrapping process involving
+hand-translation had to be used to get started. The conversion to \ADA\
+has been done by U. Schweigert in May 1988.
+
+For large \.{AWEB} files one should have a large memory, since \.{ATANGLE}
+keeps all the \ADA\ text in memory (in an abbreviated form). This program
+uses only \ADA-features as described in ``The Programming Language \ADA\
+Reference Manual'' and is thus conform with ANSI/MIL-STD-1815A-1983.
+
+The system-dependent portions of \.{ATANGLE} can be identified by looking at
+the entries for `system dependencies' in the index below.
+
+The ``banner line'' defined here should be changed whenever \.{ATANGLE} is
+modified.
+
+\Y\P\4\D\\{banner}\?\S\?\.{"This\ is\ ATANGLE,\ Version\ 1.1\ (NRaD\ Version)"}%
+\?\6
+\?\par
+\fi
+
+\M2. The program consists of several packages that are declared right now;
+each of these packages and either the specification and the body of
+the packages are send to a seperate file. The main program itself
+is declared later.
+
+\fi
+
+\M3\*. The first package we declare is called \\{int\_number\_io} and enables
+us
+to output integer numbers. Further we declare a package \\{data\_structures},
+which will contain all the global constants, types, variables, and some
+procedures used throughout the program; it will (nearly) contain code of
+the sections ``The character set,'' ``Data structures,'' and ``Tokens.''
+
+\Y\P\O{data\_structures.ads}\?\6
+\?\&{with}\8\p{TEXT\_IO};\6
+\&{with}\8\p{TEXT\_IO};\6
+\&{with}\8\\{int\_number\_io};\6
+\&{package}\8\1\\{data\_structures}\2\8\&{is}\8\1\6
+\X10:Types and objects visible from \\{data\_structures}\X\6
+\X47:Specification of procedures visible from \\{data\_structures}\X\2\6
+\&{end}\8\\{data\_structures};\7
+\O{data\_structures.adb}\?\6
+\?\&{with}\8\\{input\_output};\6
+\&{use}\8\\{input\_output};\6
+\&{package}\8\1\&{body}\8\\{data\_structures}\2\8\&{is}\8\1\6
+\X48:Procedures in \\{data\_structures}\X\6
+\4\&{begin}\6
+\X15:Set initial values\X\2\6
+\&{end}\8\\{data\_structures};\par
+\fi
+
+\M4\*. The following package, called \\{input\_output}, is responsible for the
+input/output features neaded by \.{ATANGLE}, and for the error handling.
+It will contain code of sections ``Input and output'' and ``Reporting
+errors to the user.''
+
+\Y\P\O{input\_output.ads}\?\6
+\?\&{with}\8\p{TEXT\_IO};\6
+\&{with}\8\\{data\_structures};\6
+\&{use}\8\\{data\_structures};\6
+\&{package}\8\1\\{input\_output}\2\8\&{is}\8\1\6
+\X23:Specification of procedures visible from \\{input\_output}\X\2\6
+\&{end}\8\\{input\_output};\7
+\O{input\_output.adb}\?\6
+\?\&{with}\8\p{TEXT\_IO}\?,\39\?\\{int\_number\_io};\6
+\&{package}\8\1\&{body}\8\\{input\_output}\2\8\&{is}\8\1\6
+\X24:Procedures in \\{input\_output}\X\2\6
+\&{end}\8\\{input\_output};\par
+\fi
+
+\M5\*. Additionally we have a package \\{hashing}, which contains the code of
+sections ``Searching for identifiers''
+and ``Searching for module names.''
+
+\Y\P\O{hashing.ads}\?\6
+\?\&{with}\8\\{data\_structures};\6
+\&{use}\8\\{data\_structures};\6
+\&{package}\8\1\\{hashing}\2\8\&{is}\8\1\6
+\X50:Specification of procedures visible from \\{hashing}\X\2\6
+\&{end}\8\\{hashing};\7
+\O{hashing.adb}\?\6
+\?\&{with}\8\p{TEXT\_IO};\6
+\&{with}\8\\{input\_output};\6
+\&{use}\8\\{input\_output};\6
+\&{package}\8\1\&{body}\8\\{hashing}\2\8\&{is}\8\1\6
+\X51:Procedures in \\{hashing}\X\2\6
+\&{end}\8\\{hashing};\par
+\fi
+
+\M6\*. The first of the two major packages will manage the output process of
+\.{ATANGLE} and contains code of sections ``Stacks for output,''
+``Producing the output,'' and ``The big output switch.''
+
+\Y\P\O{output\_phase.ads}\?\6
+\?\&{with}\8\\{data\_structures};\6
+\&{use}\8\\{data\_structures};\6
+\&{package}\8\1\\{output\_phase}\2\8\&{is}\8\1\6
+\&{procedure}\8\1\\{phase\_ii}\2;\2\6
+\&{end}\8\\{output\_phase};\7
+\O{output\_phase.adb}\?\6
+\?\&{with}\8\p{TEXT\_IO}\?,\39\?\\{int\_number\_io};\6
+\&{with}\8\\{input\_output};\6
+\&{use}\8\\{input\_output};\6
+\&{package}\8\1\&{body}\8\\{output\_phase}\2\8\&{is}\8\1\6
+\X81:Procedures in \\{output\_phase}\X\2\6
+\&{end}\8\\{output\_phase};\par
+\fi
+
+\M7\*. The last package will handle \.{ATANGLE}'s input process and contains
+code
+of sections ``Introduction to the input phase,'' ``Inputting the next
+token,'' ``Scanning a macro definition,'' and ``Scanning a module.''
+
+\Y\P\O{input\_phase.ads}\?\6
+\?\&{with}\8\\{data\_structures};\6
+\&{use}\8\\{data\_structures};\6
+\&{with}\8\\{hashing};\6
+\&{use}\8\\{hashing};\6
+\&{package}\8\1\\{input\_phase}\2\8\&{is}\8\1\6
+\&{procedure}\8\1\\{phase\_i}\2;\2\6
+\&{end}\8\\{input\_phase};\7
+\O{input\_phase.adb}\?\6
+\?\&{with}\8\p{TEXT\_IO}\?,\39\?\\{int\_number\_io};\6
+\&{with}\8\\{input\_output};\6
+\&{use}\8\\{input\_output};\6
+\&{package}\8\1\&{body}\8\\{input\_phase}\2\8\&{is}\8\1\6
+\X119:Procedures in \\{input\_phase}\X\2\6
+\&{end}\8\\{input\_phase};\par
+\fi
+
+\M8. Some of this code, delimited by  \&{stat} and \&{tats}, is optionally
+included if statistics about \.{ATANGLE}'s memory usage are desired.
+Other material is optionally included when a somewhat optimal code is
+wanted; such is delimited by  \&{optim} and \&{mitpo}.
+
+\Y\P\4\D\\{stat}\?\S\B\C{change this to `$\\{stat}\equiv\null$'   when
+gathering usage statistics}\6
+\?\par
+\P\4\D\\{tats}\?\S\?\hbox{}\?\T\C{change this to `$\\{tats}\equiv\null$'   when
+gathering usage statistics}\6
+\?\par
+\P\4\F\\{stat}\?\S\?\\{declare}\par
+\P\4\F\\{tats}\?\S\?\\{end}\par
+\P\4\D\\{optim}\?\S\B\C{change this to `$\\{optim}\equiv\null$' when optimal
+ code is desired}\6
+\?\par
+\P\4\D\\{mitpo}\?\S\?\hbox{}\?\T\C{change this to `$\\{mitpo}\equiv\null$' when
+optimal     code is desired}\6
+\?\par
+\P\4\F\\{optim}\?\S\?\\{declare}\par
+\P\4\F\\{mitpo}\?\S\?\\{end}\par
+\fi
+
+\M9. Here are some macros for common programming idioms.
+
+\Y\P\4\D\\{incr}\?\1(\?\#\?\2)\S\?\#\?\K\?\#\?+\?1\C{increase a variable by
+unity}\par
+\P\4\D\\{decr}\?\1(\?\#\?\2)\S\?\#\?\K\?\#\?-\?1\C{decrease a variable by
+unity}\par
+\P\4\D\\{repeat}\?\S\?\8\&{loop}\par
+\P\4\D\\{until}\?\1(\?\#\?\2)\S\&{exit}\8\&{when}\?\8\#;\2\6
+\&{end}\8\&{loop}\par
+\P\4\F\\{repeat}\?\S\?\\{loop}\par
+\P\4\F\\{until}\?\S\?\\{end}\par
+\fi
+
+\M10. The following parameters are set big enough to handle \TeX, so they
+should be sufficient for most applications of \.{ATANGLE}.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\S\?\6
+\\{buf\_size}\?:\?\&{constant}\?\8\K\?100;\C{maximum length of input line}\6
+\\{max\_bytes}\?:\?\&{constant}\?\8\K\?45\_000;\C{1\?/\?\\{ww} times the number
+of bytes in    identifiers, strings, and module names; must be less than 65%
+\_536}\6
+\\{max\_toks}\?:\?\&{constant}\?\8\K\?50\_000;\C{1\?/\?\\{zz} times the number
+of bytes in       compressed \ADA\ code; must be less than 65\_536}\6
+\\{max\_names}\?:\?\&{constant}\?\8\K\?4\_000;\C{number of identifiers,
+strings, module names;     must be less than 10\_240}\6
+\\{max\_texts}\?:\?\&{constant}\?\8\K\?2\_000;\C{number of replacement texts,
+must be less     than 10\_240}\6
+\\{hash\_size}\?:\?\&{constant}\?\8\K\?353;\C{should be prime}\6
+\\{longest\_name}\?:\?\&{constant}\?\8\K\?400;\C{module names shouldn't be
+longer than this}\6
+\\{line\_length}\?:\?\&{constant}\?\8\K\?72;\C{lines of \ADA\ output have at
+most this many                                characters}\6
+\\{out\_buf\_size}\?:\?\&{constant}\?\8\K\?144;\C{length of output buffer,
+should be twice                                  \\{line\_length}}\6
+\\{stack\_size}\?:\?\&{constant}\?\8\K\?50;\C{number of simultaneous levels of
+macro                               expansion}\6
+\\{max\_id\_length}\?:\?\&{constant}\?\8\K\?\\{line\_length};\C{long
+identifiers are chopped to                             this length, which must
+not exceed \\{line\_length}}\6
+\\{unambig\_length}\?:\?\&{constant}\?\8\K\?\\{max\_id\_length};\C{identifiers
+must be unique if                                              chopped to this
+length}\par
+\A sections~11, 12, 13, 14, 16, 22, 25, 27, 30, 35, 38, 39, 40, 42, 44, 45, 49,
+62, 63, 70, 72, 76, 77, 79, 83, 91, 92, 97, 107, 109, 116, 118, 131, 136, 148,
+156, and~165.
+\U section~3\*.\fi
+
+\M11. A global variable called \\{history} will contain one of four values
+at the end of every run: \\{spotless} means that no unusual messages were
+printed; \\{harmless\_message} means that a message of possible interest
+was printed but no serious errors were detected; \\{error\_message} means that
+at least one error was found; \\{fatal\_message} means that the program
+terminated abnormally. The value of \\{history} does not influence the
+behavior of the program; it is simply computed for the convenience
+of systems that might want to use such information.
+
+\Y\P\4\D\\{mark\_harmless}\?\S\?\6
+\&{if}\1\1\8\\{history}\?=\?\\{spotless}\2\8\&{then}\6
+\\{history}\?\K\?\\{harmless\_message};\2\6
+\&{end}\8\2\&{if}\1\par
+\P\4\D\\{mark\_error}\?\S\?\\{history}\?\K\?\\{error\_message}\par
+\P\4\D\\{mark\_fatal}\?\S\?\\{history}\?\K\?\\{fatal\_message}\par
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\&{type}\8\\{history\_type}\8\&{is}\?\8\1(\?\\{spotless}\?,\39\?\\{harmless%
+\_message}\?,\39\?\\{error\_message}\?,\39\?\\{fatal\_message}\?\2)\?;\6
+\\{history}\?:\?\\{history\_type}\?\K\?\\{spotless};\C{how bad was this run?}%
+\par
+\fi
+
+\N12.  The character set.
+One of the main goals in the design of \.{AWEB} has been to make it readily
+portable between a wide variety of computers. Yet \.{AWEB} by its very
+nature must use a greater variety of characters than most computer
+programs deal with, and character encoding is one of the areas in which
+existing machines differ most widely from each other.
+
+To resolve this problem, all input to \.{AWEAVE} and \.{ATANGLE} is converted
+to an internal seven-bit code that is essentially standard ASCII, the
+``American Standard Code for Information Interchange.''  The conversion is
+done immediately when each character is read in. Conversely, characters are
+converted from ASCII to the user's external representation just before
+they are output.
+
+Such an internal code is relevant to users of \.{AWEB} only because it is
+the code used for preprocessed constants like \.{@'A'}. If you are
+writing a program in \.{AWEB} that makes use of such one-character constants,
+you should convert your input to ASCII form, like \.{AWEAVE} and \.{ATANGLE}
+do. Otherwise \.{AWEB}'s internal coding scheme does not affect you.
+
+Here is a table of the standard visible ASCII codes:
+$$\def\:{\char\count255\global\advance\count255 by 1}
+\count255='40
+\vbox{
+\hbox{\hbox to 40pt{\it\hfill0\/\hfill}%
+\hbox to 40pt{\it\hfill1\/\hfill}%
+\hbox to 40pt{\it\hfill2\/\hfill}%
+\hbox to 40pt{\it\hfill3\/\hfill}%
+\hbox to 40pt{\it\hfill4\/\hfill}%
+\hbox to 40pt{\it\hfill5\/\hfill}%
+\hbox to 40pt{\it\hfill6\/\hfill}%
+\hbox to 40pt{\it\hfill7\/\hfill}}
+\vskip 4pt
+\hrule
+\def\^{\vrule height 10.5pt depth 4.5pt}
+\halign{\hbox to 0pt{\hskip -24pt\bn{8}{#0}\hfill}&\^
+\hbox to 40pt{\tt\hfill#\hfill\^}&
+&\hbox to 40pt{\tt\hfill#\hfill\^}\cr
+04&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+05&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+06&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+07&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+10&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+11&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+12&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+13&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+14&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+15&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+16&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+17&\:&\:&\:&\:&\:&\:&\:\cr}
+\hrule width 280pt}$$
+(Actually, of course, code \bn{8}{40} is an invisible blank space.)  Code
+\bn{8}{136} was once an upward arrow (\.{\char'13}), and code \bn{8}{137} was
+once a left arrow (\.^^X), in olden times when the first draft
+of ASCII code was prepared; but \.{AWEB} works with today's standard
+ASCII in which those codes represent circumflex and underline as shown.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\&{subtype}\8\\{ASCII\_code}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?127;%
+\C{seven-bit numbers, a subrange
+of the integers}\par
+\fi
+
+\M13. We shall use the name \\{text\_char} to stand for the data type of the
+characters in the input and output files.  We shall also assume that
+\\{text\_char} consists of the elements \\{text\_char}\?'\?\p{FIRST}
+through  \\{text\_char}\?'\?\p{LAST}, inclusive. The following
+definition should be adjusted if necessary.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\&{subtype}\8\\{text\_char}\8\&{is}\8\p{CHARACTER};\C{the data type of
+characters in text files}\6
+\&{subtype}\8\\{text\_file}\8\&{is}\8\p{TEXT\_IO}\?.\?\p{FILE\_TYPE};\C{file
+type consisting of \\{text\_char}}\par
+\fi
+
+\M14. The \.{AWEAVE} and \.{ATANGLE} processors convert between ASCII code and
+the user's external character set by means of arrays \\{xord} and \\{xchr}
+that are analogous to \ADA's \p{POS} and \p{VAL} attributes.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{xord}\?:\1\&{array}\8\1(\?\\{text\_char}\?\2)\2\8\&{of}\?\8\\{ASCII\_code};%
+\C{specifies conversion of input characters}\6
+\\{xchr}\?:\1\&{array}\8\1(\?\\{ASCII\_code}\?\2)\2\8\&{of}\?\8\\{text\_char};%
+\C{specifies conversion of output characters}\par
+\fi
+
+\M15. If we assume that every system using \.{AWEB} is able to read and write
+the
+visible characters of standard ASCII (although not necessarily using the
+ASCII codes to represent them), the following assignment statements
+initialize most of the \\{xchr} array properly, without needing any
+system-dependent changes. For example, the statement
+\.{xchr(8\#101\#):='A';} that appears in the present \.{AWEB} file might be
+encoded in, say, {\mc EBCDIC} code on the external medium on which it
+resides, but \.{ATANGLE} will convert from this external code to ASCII and
+back again. Therefore the assignment statement \.{XCHR(8\#101\#):='A';}
+will appear in the corresponding \ADA\ file, and \ADA\ will compile this
+statement so that \\{xchr}\?(\bn{8}{101})\? receives  the character \.A in the
+external
+(\\{text\_char}) code. Note that it would be quite incorrect to say
+\.{xchr(8\#101\#):=@'A';}, because \H{A} is a constant of type
+\p{INTEGER}, not \p{CHARACTER}, and because we have \H{A}\?=\?65 regardless of
+the
+external character set.
+
+\Y\P\?\4\X15:Set initial values\X\S\?\6
+\\{xchr}\?\1(\bn{8}{40}\2)\K\?\.{\'\ \'};\5
+\\{xchr}\?\1(\bn{8}{41}\2)\K\?\.{\'!\'};\5
+\\{xchr}\?\1(\bn{8}{42}\2)\K\?\.{\'"\'};\5
+\\{xchr}\?\1(\bn{8}{43}\2)\K\?\.{\'\#\'};\5
+\\{xchr}\?\1(\bn{8}{44}\2)\K\?\.{\'\$\'};\5
+\\{xchr}\?\1(\bn{8}{45}\2)\K\?\.{\'\%\'};\5
+\\{xchr}\?\1(\bn{8}{46}\2)\K\?\.{\'\&\'};\5
+\\{xchr}\?\1(\bn{8}{47}\2)\K\?\.{\'\'\'};\6
+\\{xchr}\?\1(\bn{8}{50}\2)\K\?\.{\'(\'};\5
+\\{xchr}\?\1(\bn{8}{51}\2)\K\?\.{\')\'};\5
+\\{xchr}\?\1(\bn{8}{52}\2)\K\?\.{\'*\'};\5
+\\{xchr}\?\1(\bn{8}{53}\2)\K\?\.{\'+\'};\5
+\\{xchr}\?\1(\bn{8}{54}\2)\K\?\.{\',\'};\5
+\\{xchr}\?\1(\bn{8}{55}\2)\K\?\.{\'-\'};\5
+\\{xchr}\?\1(\bn{8}{56}\2)\K\?\.{\'.\'};\5
+\\{xchr}\?\1(\bn{8}{57}\2)\K\?\.{\'/\'};\6
+\\{xchr}\?\1(\bn{8}{60}\2)\K\?\.{\'0\'};\5
+\\{xchr}\?\1(\bn{8}{61}\2)\K\?\.{\'1\'};\5
+\\{xchr}\?\1(\bn{8}{62}\2)\K\?\.{\'2\'};\5
+\\{xchr}\?\1(\bn{8}{63}\2)\K\?\.{\'3\'};\5
+\\{xchr}\?\1(\bn{8}{64}\2)\K\?\.{\'4\'};\5
+\\{xchr}\?\1(\bn{8}{65}\2)\K\?\.{\'5\'};\5
+\\{xchr}\?\1(\bn{8}{66}\2)\K\?\.{\'6\'};\5
+\\{xchr}\?\1(\bn{8}{67}\2)\K\?\.{\'7\'};\6
+\\{xchr}\?\1(\bn{8}{70}\2)\K\?\.{\'8\'};\5
+\\{xchr}\?\1(\bn{8}{71}\2)\K\?\.{\'9\'};\5
+\\{xchr}\?\1(\bn{8}{72}\2)\K\?\.{\':\'};\5
+\\{xchr}\?\1(\bn{8}{73}\2)\K\?\.{\';\'};\5
+\\{xchr}\?\1(\bn{8}{74}\2)\K\?\.{\'<\'};\5
+\\{xchr}\?\1(\bn{8}{75}\2)\K\?\.{\'=\'};\5
+\\{xchr}\?\1(\bn{8}{76}\2)\K\?\.{\'>\'};\5
+\\{xchr}\?\1(\bn{8}{77}\2)\K\?\.{\'?\'};\6
+\\{xchr}\?\1(\bn{8}{100}\2)\K\?\.{\'@\'};\5
+\\{xchr}\?\1(\bn{8}{101}\2)\K\?\.{\'A\'};\5
+\\{xchr}\?\1(\bn{8}{102}\2)\K\?\.{\'B\'};\5
+\\{xchr}\?\1(\bn{8}{103}\2)\K\?\.{\'C\'};\5
+\\{xchr}\?\1(\bn{8}{104}\2)\K\?\.{\'D\'};\5
+\\{xchr}\?\1(\bn{8}{105}\2)\K\?\.{\'E\'};\5
+\\{xchr}\?\1(\bn{8}{106}\2)\K\?\.{\'F\'};\5
+\\{xchr}\?\1(\bn{8}{107}\2)\K\?\.{\'G\'};\6
+\\{xchr}\?\1(\bn{8}{110}\2)\K\?\.{\'H\'};\5
+\\{xchr}\?\1(\bn{8}{111}\2)\K\?\.{\'I\'};\5
+\\{xchr}\?\1(\bn{8}{112}\2)\K\?\.{\'J\'};\5
+\\{xchr}\?\1(\bn{8}{113}\2)\K\?\.{\'K\'};\5
+\\{xchr}\?\1(\bn{8}{114}\2)\K\?\.{\'L\'};\5
+\\{xchr}\?\1(\bn{8}{115}\2)\K\?\.{\'M\'};\5
+\\{xchr}\?\1(\bn{8}{116}\2)\K\?\.{\'N\'};\5
+\\{xchr}\?\1(\bn{8}{117}\2)\K\?\.{\'O\'};\6
+\\{xchr}\?\1(\bn{8}{120}\2)\K\?\.{\'P\'};\5
+\\{xchr}\?\1(\bn{8}{121}\2)\K\?\.{\'Q\'};\5
+\\{xchr}\?\1(\bn{8}{122}\2)\K\?\.{\'R\'};\5
+\\{xchr}\?\1(\bn{8}{123}\2)\K\?\.{\'S\'};\5
+\\{xchr}\?\1(\bn{8}{124}\2)\K\?\.{\'T\'};\5
+\\{xchr}\?\1(\bn{8}{125}\2)\K\?\.{\'U\'};\5
+\\{xchr}\?\1(\bn{8}{126}\2)\K\?\.{\'V\'};\5
+\\{xchr}\?\1(\bn{8}{127}\2)\K\?\.{\'W\'};\6
+\\{xchr}\?\1(\bn{8}{130}\2)\K\?\.{\'X\'};\5
+\\{xchr}\?\1(\bn{8}{131}\2)\K\?\.{\'Y\'};\5
+\\{xchr}\?\1(\bn{8}{132}\2)\K\?\.{\'Z\'};\5
+\\{xchr}\?\1(\bn{8}{133}\2)\K\?\.{\'[\'};\5
+\\{xchr}\?\1(\bn{8}{134}\2)\K\?\.{\'\\\'};\5
+\\{xchr}\?\1(\bn{8}{135}\2)\K\?\.{\']\'};\5
+\\{xchr}\?\1(\bn{8}{136}\2)\K\?\.{\'\^\'};\5
+\\{xchr}\?\1(\bn{8}{137}\2)\K\?\.{\'\_\'};\6
+\\{xchr}\?\1(\bn{8}{140}\2)\K\?\.{\'\`\'};\5
+\\{xchr}\?\1(\bn{8}{141}\2)\K\?\.{\'a\'};\5
+\\{xchr}\?\1(\bn{8}{142}\2)\K\?\.{\'b\'};\5
+\\{xchr}\?\1(\bn{8}{143}\2)\K\?\.{\'c\'};\5
+\\{xchr}\?\1(\bn{8}{144}\2)\K\?\.{\'d\'};\5
+\\{xchr}\?\1(\bn{8}{145}\2)\K\?\.{\'e\'};\5
+\\{xchr}\?\1(\bn{8}{146}\2)\K\?\.{\'f\'};\5
+\\{xchr}\?\1(\bn{8}{147}\2)\K\?\.{\'g\'};\6
+\\{xchr}\?\1(\bn{8}{150}\2)\K\?\.{\'h\'};\5
+\\{xchr}\?\1(\bn{8}{151}\2)\K\?\.{\'i\'};\5
+\\{xchr}\?\1(\bn{8}{152}\2)\K\?\.{\'j\'};\5
+\\{xchr}\?\1(\bn{8}{153}\2)\K\?\.{\'k\'};\5
+\\{xchr}\?\1(\bn{8}{154}\2)\K\?\.{\'l\'};\5
+\\{xchr}\?\1(\bn{8}{155}\2)\K\?\.{\'m\'};\5
+\\{xchr}\?\1(\bn{8}{156}\2)\K\?\.{\'n\'};\5
+\\{xchr}\?\1(\bn{8}{157}\2)\K\?\.{\'o\'};\6
+\\{xchr}\?\1(\bn{8}{160}\2)\K\?\.{\'p\'};\5
+\\{xchr}\?\1(\bn{8}{161}\2)\K\?\.{\'q\'};\5
+\\{xchr}\?\1(\bn{8}{162}\2)\K\?\.{\'r\'};\5
+\\{xchr}\?\1(\bn{8}{163}\2)\K\?\.{\'s\'};\5
+\\{xchr}\?\1(\bn{8}{164}\2)\K\?\.{\'t\'};\5
+\\{xchr}\?\1(\bn{8}{165}\2)\K\?\.{\'u\'};\5
+\\{xchr}\?\1(\bn{8}{166}\2)\K\?\.{\'v\'};\5
+\\{xchr}\?\1(\bn{8}{167}\2)\K\?\.{\'w\'};\6
+\\{xchr}\?\1(\bn{8}{170}\2)\K\?\.{\'x\'};\5
+\\{xchr}\?\1(\bn{8}{171}\2)\K\?\.{\'y\'};\5
+\\{xchr}\?\1(\bn{8}{172}\2)\K\?\.{\'z\'};\5
+\\{xchr}\?\1(\bn{8}{173}\2)\K\?\.{\'\{\'};\5
+\\{xchr}\?\1(\bn{8}{174}\2)\K\?\.{\'|\'};\5
+\\{xchr}\?\1(\bn{8}{175}\2)\K\?\.{\'\}\'};\5
+\\{xchr}\?\1(\bn{8}{176}\2)\K\?\.{\'\~\'};\6
+\\{xchr}\?\1(\?0\?\2)\K\?\.{\'\ \'};\5
+\\{xchr}\?\1(\bn{8}{177}\2)\K\?\.{\'\ \'};\C{these ASCII codes are not used}\par
+\A sections~17, 18, 41, 43, 46, 71, and~142.
+\U section~3\*.\fi
+
+\M16. Some of the ASCII codes below \bn{8}{40} have been given symbolic names
+in
+\.{AWEAVE} and \.{ATANGLE} because they are used with a special meaning.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{and\_sign}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{4}\?;\C{equivalent to
+`\.{and}'}\6
+\\{not\_sign}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{5}\?;\C{equivalent to
+`\.{not}'}\6
+\\{set\_element\_sign}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{6}\?;%
+\C{equivalent to `\.{in}'}\6
+\\{tab\_mark}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{11}\?;\C{ASCII code
+used as tab-skip}\6
+\\{line\_feed}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{12}\?;\C{ASCII code
+thrown away at end of line}\6
+\\{form\_feed}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{14}\?;\C{ASCII code
+used at end of page}\6
+\\{carriage\_return}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{15}\?;\C{ASCII
+code used at end of line}\6
+\\{right\_arrow}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{21}\?;%
+\C{equivalent to `\.{=>}'}\6
+\\{box\_sign}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{22}\?;\C{equivalent
+to `\.{<>}'}\6
+\\{double\_star}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{23}\?;%
+\C{equivalent to `\.{**}'}\6
+\\{left\_label\_bracket}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{24}\?;%
+\C{equivalent to `\.{<<}'}\6
+\\{right\_label\_bracket}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{25}\?;%
+\C{equivalent to `\.{>>}'}\6
+\\{left\_arrow}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{30}\?;\C{equivalent
+to `\.{:=}'}\6
+\\{not\_equal}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{32}\?;\C{equivalent
+to `\.{/=}'}\6
+\\{less\_or\_equal}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{34}\?;%
+\C{equivalent to `\.{<=}'}\6
+\\{greater\_or\_equal}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{35}\?;%
+\C{equivalent to `\.{>=}'}\6
+\\{equivalence\_sign}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{36}\?;%
+\C{equivalent to `\.{==}'}\6
+\\{or\_sign}\?:\?\&{constant}\8\\{ASCII\_code}\?\K\bn{8}{37}\?;\C{equivalent to
+`\.{or}'}\par
+\fi
+
+\M17. Here now is the system-dependent part of the character set.
+If \.{AWEB} is being implemented on a garden-variety \ADA\ for which
+only standard ASCII codes will appear in the input and output files, you
+don't need to make any changes here.
+
+Changes to the present module will make \.{AWEB} more friendly on computers
+that have an extended character set, so that one can type things like
+\.^^Z\ instead of \.{/=}. If you have an extended set of characters that
+are easily incorporated into text files, you can assign codes arbitrarily
+here, giving an \\{xchr} equivalent to whatever characters the users of
+\.{AWEB} are allowed to have in their input files, provided that unsuitable
+characters do not correspond to special codes like \\{carriage\_return}
+that are listed above.
+
+(The present file \.{ATANGLE.AWEB} does not contain any of the non-ASCII
+characters, because it is intended to be used with all implementations of
+\.{AWEB}.)
+
+\Y\P\?\4\X15:Set initial values\X\mathrel{+}\S\?\6
+\\{xchr}\?\1(\?1\?\to\bn{8}{37}\2)\K\1(\?\&{others}\?\8\KR\?\.{\'\ \'}\?\2)\?;%
+\par
+\fi
+
+\M18. The following system-independent code makes the \\{xord} array contain a
+suitable inverse to the information in \\{xchr}.
+
+\Y\P\?\4\X15:Set initial values\X\mathrel{+}\S\?\6
+\\{xord}\?\1(\?\\{text\_char}\?\2)\K\1(\?\&{others}\?\8\KR\bn{8}{40}\2)\?;\6
+\1\&{for}\8\|i\?\in\?1\?\to\bn{8}{176}\?\8\&{loop}\6
+\\{xord}\?\1(\?\\{xchr}\?\1(\?\|i\?\2)\2)\K\?\|i;\2\6
+\&{end}\8\&{loop};\par
+\fi
+
+\N19.  Input and output.
+The input conventions of this program are identical to those of \.{AWEAVE}.
+Therefore people who need to make modifications to both systems
+should be able to do so without too many headaches.
+
+\fi
+
+\M20. Terminal output is done by writing on file \p{STANDARD\_OUTPUT}, which is
+assumed to consist of characters of type \\{text\_char}:
+
+\Y\P\4\D\\{new\_ln}\?\S\?\p{TEXT\_IO}\?.\?\p{NEW\_LINE}\?\6
+\?\par
+\P\4\D\\{print}\?\1(\?\#\?\2)\S\?\p{TEXT\_IO}\?.\?\p{PUT}\?\1(\?\#\?\2)\C{`%
+\\{print}' means write on the terminal}\6
+\?\par
+\P\4\D\\{print\_ln}\?\1(\?\#\?\2)\S\?\\{print}\?\1(\?\#\?\2)\?; \\{new\_ln}\?%
+\C{`\\{print}' and then start new line}\6
+\?\par
+\P\4\D\\{print\_nl}\?\1(\?\#\?\2)\S\?\\{new\_ln}; \\{print}\?\1(\?\#\?\2)%
+\C{print information starting on a
+new line}\6
+\?\par
+\P\4\D\\{print\_int}\?\1(\?\#\?\2)\S\?\\{int\_number\_io}\?.\?\p{PUT}\?\1(\?\#%
+\?\2)\C{print out an integer value}\6
+\?\par
+\fi
+
+\M21. The \\{update\_terminal} procedure is called when we want
+to make sure that everything we have output to the terminal so far has
+actually left the computer's internal buffers and been sent.
+(In the \ADA-system used to develop the initial program this is not
+required.)
+
+\Y\P\4\D\\{update\_terminal}\?\S\?\&{null}\?\C{empty the terminal output
+buffer}\6
+\?\par
+\fi
+
+\M22. The main input comes from \\{web\_file}; this input may be overridden
+by changes in \\{change\_file}.
+(If \\{change\_file} is empty, there are no changes.)
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{web\_file}\?:\?\\{text\_file};\C{primary input}\6
+\\{change\_file}\?:\?\\{text\_file};\C{updates}\par
+\fi
+
+\M23. \P\?\X23:Specification of procedures visible from \\{input\_output}\X\S\?%
+\6
+\&{procedure}\8\1\\{open\_a\_file}\?(\?\|f\?:\&{in}\?\8\&{out}\8\\{text\_file};%
+\?\,\35\?\\{mode\_of\_file}\?:\?\p{TEXT\_IO}\?.\?\p{FILE\_MODE};\?\,\35\?%
+\\{default\_name}\?:\?\p{STRING};\?\,\35\1\?\\{success}\?:\?\&{out}\8%
+\p{BOOLEAN}\?\2)\?\2;\6
+\&{function}\8\1\\{create\_ada\_file}\?(\1\?\\{ada\_file\_name}\?:\?\p{STRING}%
+\?\2)\&{return}\?\8\p{BOOLEAN}\2;\par
+\A sections~28 and~31.
+\U section~4\*.\fi
+
+\M24. The following code opens a file and returns \p{TRUE} if succesfully.
+If the file is already open the procedure has no effect; this gives
+the ability to open the files by means of the change file, without
+changing the \.{AWEB}-file of \.{ATANGLE}.
+
+
+\Y\P\?\4\X24:Procedures in \\{input\_output}\X\S\?\6
+\&{procedure}\8\1\\{open\_a\_file}\?(\?\|f\?:\&{in}\?\8\&{out}\8\\{text\_file};%
+\?\,\35\?\\{mode\_of\_file}\?:\?\p{TEXT\_IO}\?.\?\p{FILE\_MODE};\?\,\35\?%
+\\{default\_name}\?:\?\p{STRING};\?\,\35\1\?\\{success}\?:\?\&{out}\8%
+\p{BOOLEAN}\?\2)\?\2\8\&{is}\8\1\6
+\4\&{begin}\6
+\&{if}\1\1\8\p{TEXT\_IO}\?.\?\p{IS\_OPEN}\?\1(\?\|f\?\2)\?\2\8\&{then}\6
+\\{success}\?\K\?\p{TRUE};\6
+\4\&{else}\6
+\p{TEXT\_IO}\?.\?\p{OPEN}\?\1(\?\p{FILE}\?\KR\?\|f\?,\39\?\p{MODE}\?\KR\?%
+\\{mode\_of\_file}\?,\39\?\p{NAME}\?\KR\?\\{default\_name}\?\2)\?;\5
+\\{success}\?\K\?\p{TRUE};\2\6
+\&{end}\8\2\&{if}\1;\6
+\1\4\&{exception}\6
+\4\&{when}\8\p{TEXT\_IO}\?.\?\p{STATUS\_ERROR}\?\mathrel{\.|}\?\p{TEXT\_IO}\?.%
+\?\p{NAME\_ERROR}\?\mathrel{\.|}\?\p{TEXT\_IO}\?.\?\p{USE\_ERROR}\KR\6
+\\{success}\?\K\?\p{FALSE};\5
+\&{return};\2\6
+\&{end}\8\\{open\_a\_file};\par
+\A sections~26, 29, and~32.
+\U section~4\*.\fi
+
+\M25. The main output goes to \\{ada\_file}.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{ada\_file}\?:\?\\{text\_file};\par
+\fi
+
+\M26. The following code creates \\{ada\_file}.
+
+\Y\P\?\4\X24:Procedures in \\{input\_output}\X\mathrel{+}\S\?\6
+\&{function}\8\1\\{create\_ada\_file}\?(\1\?\\{ada\_file\_name}\?:\?\p{STRING}%
+\?\2)\&{return}\?\8\p{BOOLEAN}\2\8\&{is}\8\1\6
+\4\&{begin}\6
+\&{if}\1\1\8\p{TEXT\_IO}\?.\?\p{IS\_OPEN}\?\1(\?\\{ada\_file}\?\2)\?\2\8%
+\&{then}\6
+\&{if}\1\1\8\p{TEXT\_IO}\?.\?\p{NAME}\?\1(\?\\{ada\_file}\?\2)=\?\\{ada\_file%
+\_name}\2\8\&{then}\6
+\?\&{return}\?\8\p{TRUE};\6
+\4\&{else}\6
+\?\&{return}\?\8\p{FALSE};\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{else}\6
+\p{TEXT\_IO}\?.\?\p{CREATE}\?\1(\?\p{FILE}\?\KR\?\\{ada\_file}\?,\39\?\p{MODE}%
+\?\KR\?\p{TEXT\_IO}\?.\?\p{OUT\_FILE}\?,\39\?\p{NAME}\?\KR\?\\{ada\_file\_name}%
+\?\2)\?;\5
+\?\&{return}\?\8\p{TRUE};\2\6
+\&{end}\8\2\&{if}\1;\6
+\1\4\&{exception}\6
+\4\&{when}\8\p{TEXT\_IO}\?.\?\p{STATUS\_ERROR}\?\mathrel{\.|}\?\p{TEXT\_IO}\?.%
+\?\p{NAME\_ERROR}\?\mathrel{\.|}\?\p{TEXT\_IO}\?.\?\p{USE\_ERROR}\KR\6
+\?\&{return}\?\8\p{FALSE};\2\6
+\&{end}\8\\{create\_ada\_file};\par
+\fi
+
+\M27. Input goes into an array called \\{buffer}.
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\&{type}\8\\{buffer\_type}\8\&{is}\?\8\1\&{array}\8\1(\?\p{INTEGER}\8\&{range}%
+\?\8\BOX\2)\2\8\&{of}\?\8\\{ASCII\_code};\6
+\&{subtype}\8\\{buffer\_index}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?\\{buf%
+\_size};\6
+\\{buffer}\?:\?\\{buffer\_type}\?\1(\?\\{buffer\_index}\?\2)\?;\par
+\fi
+
+\M28. The \\{input\_ln} procedure brings the next line of input from the
+specified
+file into the \\{buffer} array and returns the value \p{TRUE}, unless the file
+has already been entirely read, in which case it returns \p{FALSE}. The
+conventions of \TeX\ are followed; i.e., \\{ASCII\_code} numbers representing
+the next line of the file are input into \\{buffer}\?(\?0\?)\?, \\{buffer}\?(%
+\?1\?)\?, \dots,
+\\{buffer}\?(\?\\{limit}\?-\?1\?)\?; trailing blanks are ignored;
+and the global variable \\{limit} is set to the length of the
+line. The value of \\{limit} must be strictly less than \\{buf\_size}.
+
+We assume that none of the \\{ASCII\_code} values
+of \\{buffer}\?(\?\|j\?)\? for 0\?\L\?\|j\?<\?\\{limit} is equal to 0, %
+\bn{8}{177}, \\{line\_feed},
+\\{form\_feed}, or \\{carriage\_return}.
+
+\Y\P\?\4\X23:Specification of procedures visible from \\{input\_output}\X%
+\mathrel{+}\S\?\6
+\&{function}\8\1\\{input\_ln}\?(\1\?\|f\?:\?\\{text\_file}\?\2)\&{return}\?\8%
+\p{BOOLEAN}\2;\par
+\fi
+
+\M29. \P\?\X24:Procedures in \\{input\_output}\X\mathrel{+}\S\?\6
+\&{function}\8\1\\{input\_ln}\?(\1\?\|f\?:\?\\{text\_file}\?\2)\&{return}\?\8%
+\p{BOOLEAN}\2\8\&{is}\8\C{inputs a line or returns \p{FALSE}}\1\6
+\\{final\_limit}\?:\?\\{buffer\_index}\?\K\?0;\C{\\{limit} without trailing
+blanks}\6
+\|c\?:\?\\{text\_char};\6
+\4\&{begin}\6
+\\{limit}\?\K\?0;\6
+\&{if}\1\1\?\8\R\?\p{TEXT\_IO}\?.\?\p{IS\_OPEN}\?\1(\?\|f\?\2)\ORE\?\p{TEXT%
+\_IO}\?.\?\p{END\_OF\_FILE}\?\1(\?\|f\?\2)\?\2\8\&{then}\6
+\?\&{return}\?\8\p{FALSE};\6
+\4\&{else}\6
+\1\&{while}\?\8\R\?\p{TEXT\_IO}\?.\?\p{END\_OF\_LINE}\?\1(\?\|f\?\2)\?\8%
+\&{loop}\6
+\p{TEXT\_IO}\?.\?\p{GET}\?\1(\?\|f\?,\39\?\|c\?\2)\?;\5
+\\{buffer}\?\1(\?\\{limit}\?\2)\K\?\\{xord}\?\1(\?\|c\?\2)\?;\5
+\\{incr}\?\1(\?\\{limit}\?\2)\?;\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\\{limit}\?-\?1\?\2)\I\?\H{\ }\2\8\&{then}\6
+\\{final\_limit}\?\K\?\\{limit};\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{limit}\?=\?\\{buf\_size}\2\8\&{then}\6
+\p{TEXT\_IO}\?.\?\p{SKIP\_LINE}\?\1(\?\|f\?\2)\?;\5
+\\{decr}\?\1(\?\\{limit}\?\2)\?;\C{keep \\{buffer}\?(\?\\{buf\_size}\?)\?
+empty}\6
+\\{print\_nl}\?\1(\?\.{"!\ Input\ line\ too\ long"}\?\2)\?;\5
+\\{loc}\?\K\?0;\5
+\\{error};\5
+\?\&{return}\?\8\p{TRUE};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop};\6
+\p{TEXT\_IO}\?.\?\p{SKIP\_LINE}\?\1(\?\|f\?\2)\?;\5
+\\{limit}\?\K\?\\{final\_limit};\5
+\?\&{return}\?\8\p{TRUE};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\\{input\_ln};\par
+\fi
+
+\N30.  Reporting errors to the user.
+The \.{ATANGLE} processor operates in two phases: first it inputs the source
+file and stores a compressed representation of the program, then it produces
+the \ADA\ output from the compressed representation.
+
+The global variable \\{phase\_one} tells whether we are in Phase I or not.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{phase\_one}\?:\?\p{BOOLEAN};\C{\p{TRUE} in Phase I, \p{FALSE} in Phase II}%
+\par
+\fi
+
+\M31. During the first phase, syntax errors are reported to the user by saying
+$$\hbox{`\\{err\_print}\?(\?\.{"!\ Error\ message"}\?)\?'},$$
+followed by `\\{jump\_out}' if no recovery from the error is provided.
+This will print the error message followed by an indication of where the
+error was spotted in the source file. Note that no period follows the error
+message, since the error routine will automatically supply a period.
+
+Errors that are noticed during the second phase are reported to the user
+in the same fashion, but the error message will be
+followed by an indication of where the error was spotted in the output file.
+
+The actual error indications are provided by a procedure called \\{error}.
+
+\Y\P\4\D\\{err\_print}\?\1(\?\#\?\2)\S\?\\{print\_nl}\?\1(\?\#\?\2)\?;\5
+\\{error}\par
+\Y\P\?\4\X23:Specification of procedures visible from \\{input\_output}\X%
+\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{error}\2;\par
+\fi
+
+\M32. \P\?\X24:Procedures in \\{input\_output}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{error}\2\8\&{is}\8\C{prints '\..' and location of error
+message}\1\6
+\|l\?:\?\\{buffer\_index};\C{index into \\{buffer}}\6
+\4\&{begin}\6
+\&{if}\1\1\8\\{phase\_one}\2\8\&{then}\6
+\X33:Print error location based on input buffer\X;\6
+\4\&{else}\6
+\X34:Print error location based on output buffer\X;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{update\_terminal};\5
+\\{mark\_error};\2\6
+\&{end}\8\\{error};\par
+\fi
+
+\M33. The error locations during Phase I can be indicated by using the global
+variables \\{loc}, \\{line}, and \\{changing}, which tell respectively the
+first
+unlooked-at position in \\{buffer}, the current line number, and whether or not
+the current line is from \\{change\_file} or \\{web\_file}.
+This routine should be modified on systems whose standard text editor
+has special line-numbering conventions.
+
+\Y\P\?\4\X33:Print error location based on input buffer\X\S\?\6
+\&{if}\1\1\8\\{changing}\2\8\&{then}\6
+\\{print}\?\1(\?\.{".\ (change\ file\ "}\?\2)\?;\6
+\4\&{else}\6
+\\{print}\?\1(\?\.{".\ ("}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{print}\?\1(\?\.{"l."}\?\2)\?;\5
+\\{print\_int}\?\1(\?\\{line}\?,\39\?1\?\2)\?;\5
+\\{print\_ln}\?\1(\?\.{")"}\?\2)\?;\6
+\&{if}\1\1\8\\{loc}\?\G\?\\{limit}\2\8\&{then}\6
+\|l\?\K\?\\{limit};\6
+\4\&{else}\6
+\|l\?\K\?\\{loc};\2\6
+\&{end}\8\2\&{if}\1;\6
+\1\&{for}\8\|k\?\in\?1\?\to\?\|l\8\&{loop}\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\|k\?-\?1\?\2)=\?\\{tab\_mark}\2\8\&{then}\6
+\\{print}\?\1(\?\.{"\ "}\?\2)\?;\6
+\4\&{else}\6
+\\{print}\?\1(\?\\{xchr}\?\1(\?\\{buffer}\?\1(\?\|k\?-\?1\?\2)\2)\2)\?;\C{print
+the characters already read}\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop};\6
+\\{new\_ln};\6
+\1\&{for}\8\|k\?\in\?1\?\to\?\|l\8\&{loop}\6
+\\{print}\?\1(\?\.{"\ "}\?\2)\?;\2\6
+\&{end}\8\&{loop};\C{space out the next line}\6
+\1\&{for}\8\|k\?\in\?\|l\?+\?1\?\to\?\\{limit}\8\&{loop}\6
+\\{print}\?\1(\?\\{xchr}\?\1(\?\\{buffer}\?\1(\?\|k\?-\?1\?\2)\2)\2)\?;\2\6
+\&{end}\8\&{loop};\C{print the part not yet read}\6
+\\{print}\?\1(\?\.{"\ "}\?\2)\?\C{this space separates the message from future
+asterisks}\par
+\U section~32.\fi
+
+\M34. The position of errors detected during the second phase can be indicated
+by outputting the partially-filled output buffer, which contains \\{out\_ptr}
+entries. The current output file name is determined by \\{file\_name} and
+\\{fn\_length}, whereas the line number comes from \\{f\_line}.
+
+\Y\P\?\4\X34:Print error location based on output buffer\X\S\?\6
+\\{print}\?\1(\?\.{".("}\?\mathbin{\.\&}\?\\{file\_name}\?\1(\?1\?\to\?\\{fn%
+\_length}\?\2)\mathbin{\.\&}\?\.{"\ l."}\?\2)\?;\5
+\\{print\_int}\?\1(\?\\{f\_line}\?,\39\?1\?\2)\?;\5
+\\{print\_ln}\?\1(\?\.{")"}\?\2)\?;\6
+\1\&{for}\8\|j\?\in\?1\?\to\?\\{out\_ptr}\8\&{loop}\6
+\\{print}\?\1(\?\\{xchr}\?\1(\?\\{out\_buf}\?\1(\?\|j\?-\?1\?\2)\2)\2)\?;%
+\C{print current partial line}\2\6
+\&{end}\8\&{loop};\6
+\\{print}\?\1(\?\.{"...\ "}\?\2)\?\C{indicate that this information is partial}%
+\par
+\U section~32.\fi
+
+\M35. The \\{jump\_out} macro just raises the \\{end\_of\_ATANGLE} exception.
+It is used when no recovery from a particular error has
+been provided.
+
+\Y\P\4\D\\{jump\_out}\?\S\?\&{raise}\8\\{end\_of\_ATANGLE}\par
+\P\4\D\\{fatal\_error}\?\1(\?\#\?\2)\S\?\\{print\_nl}\?\1(\?\#\?\2)\?;\5
+\\{error};\5
+\\{mark\_fatal};\5
+\\{jump\_out}\par
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{end\_of\_ATANGLE}\?:\&{exception}\?;\par
+\fi
+
+\M36. Sometimes the program's behavior is far different from what it should be,
+and \.{ATANGLE} prints an error message that is really for the \.{ATANGLE}
+maintenance person, not the user. In such cases the program says
+\\{confusion}\?(\?\.{"indication\ of\ where\ we\ are"}\?)\?.
+
+\Y\P\4\D\\{confusion}\?\1(\?\#\?\2)\S\?\\{fatal\_error}\?\1(\?\.{"!\ This\ can%
+\'t\ happen\ ("}\?\mathbin{\.\&}\?\#\?\mathbin{\.\&}\?\.{")"}\?\2)\6
+\?\par
+\fi
+
+\M37. An overflow stop occurs if \.{ATANGLE}'s tables aren't large enough.
+
+\Y\P\4\D\\{overflow}\?\1(\?\#\?\2)\S\?\\{fatal\_error}\?\1(\?\.{"!\ Sorry,\ "}%
+\?\mathbin{\.\&}\?\#\?\mathbin{\.\&}\?\.{"\ capacity\ exceeded"}\?\2)\6
+\?\par
+\fi
+
+\N38.  Data structures.
+Most of the user's \ADA\ code is packed into seven- or eight-bit integers
+in two large arrays called \\{byte\_mem} and \\{tok\_mem}.
+The \\{byte\_mem} array holds the names of identifiers, strings, and modules;
+the \\{tok\_mem} array holds the replacement texts
+for macros and modules. Allocation is sequential, since things are deleted
+only during Phase II, and only in a last-in-first-out manner.
+
+Auxiliary arrays \\{byte\_start} and \\{tok\_start} are used as directories to
+\\{byte\_mem} and \\{tok\_mem}, and the \\{link}, \\{ilk}, \\{equiv}, and %
+\\{text\_link}
+arrays give further information about names. These auxiliary arrays
+consist of sixteen-bit items.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\&{subtype}\8\\{eight\_bits}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?255;%
+\C{unsigned one-byte quantity}\6
+\&{subtype}\8\\{sixteen\_bits}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?65%
+\_535;\C{unsigned two-byte
+quantity}\par
+\fi
+
+\M39. \.{ATANGLE} has been designed to avoid the need for indices that are more
+than sixteen bits wide, so that it can be used on most computers. But
+there are programs that need more than 65536 tokens, and some programs
+even need more than 65536 bytes; \TeX\ is one of these.  To get around
+this problem, a slight complication has been added to the data structures:
+\\{byte\_mem} and \\{tok\_mem} are two-dimensional arrays, whose first index is
+either 0 or 1. (For generality, the first index is actually allowed to run
+between 0 and \\{ww}\?-\?1 in \\{byte\_mem}, or between 0 and \\{zz}\?-\?1 in %
+\\{tok\_mem},
+where \\{ww} and \\{zz} are set to 2 and~3; the program will work for any
+positive values of \\{ww} and \\{zz}, and it can be simplified in obvious ways
+if \\{ww}\?=\?1 or \\{zz}\?=\?1.)
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{ww}\?:\?\&{constant}\8\p{INTEGER}\?\K\?2;\6
+\\{zz}\?:\?\&{constant}\8\p{INTEGER}\?\K\?3;\7
+\&{subtype}\8\\{w\_range}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?\\{ww}\?-%
+\?1;\6
+\&{subtype}\8\\{z\_range}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?\\{zz}\?-%
+\?1;\6
+\&{subtype}\8\\{byte\_index}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?\\{max%
+\_bytes};\6
+\&{subtype}\8\\{token\_index}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?\\{max%
+\_toks};\6
+\&{subtype}\8\\{name\_index}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?\\{max%
+\_names};\6
+\&{subtype}\8\\{text\_index}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?\\{max%
+\_texts};\7
+\&{type}\8\\{byte\_memory}\8\&{is}\?\8\1\&{array}\8\1(\?\\{w\_range}\?,\39\?%
+\\{byte\_index}\?\2)\2\8\&{of}\?\8\\{ASCII\_code};\6
+\&{optim}\1\6
+\&{pragma}\8\1\p{PACK}\?\1(\?\\{byte\_memory}\?\2)\?\2;\2\6
+\&{mitpo}\7
+\&{type}\8\\{token\_memory}\8\&{is}\?\8\1\&{array}\8\1(\?\\{z\_range}\?,\39\?%
+\\{token\_index}\?\2)\2\8\&{of}\?\8\\{eight\_bits};\6
+\&{optim}\1\6
+\&{pragma}\8\1\p{PACK}\?\1(\?\\{token\_memory}\?\2)\?\2;\2\6
+\&{mitpo}\7
+\&{type}\8\\{name\_info}\8\&{is}\?\8\1\&{array}\8\1(\?\\{name\_index}\?\2)\2\8%
+\&{of}\?\8\\{sixteen\_bits};\6
+\&{type}\8\\{token\_info}\8\&{is}\?\8\1\&{array}\8\1(\?\\{text\_index}\?\2)\2\8%
+\&{of}\?\8\\{sixteen\_bits};\7
+\\{byte\_mem}\?:\?\\{byte\_memory};\C{characters of names}\6
+\\{tok\_mem}\?:\?\\{token\_memory};\C{tokens}\6
+\\{byte\_start}\?:\?\\{name\_info};\C{directory into \\{byte\_mem}}\6
+\\{tok\_start}\?:\?\\{token\_info};\C{directory into \\{tok\_mem}}\6
+\\{link}\?:\?\\{name\_info};\C{hash table or tree links}\6
+\\{ilk}\?:\?\\{name\_info};\C{type codes or tree links}\6
+\\{equiv}\?:\?\\{name\_info};\C{info corresponding to names}\6
+\\{text\_link}\?:\?\\{token\_info};\C{relates replacement texts}\par
+\fi
+
+\M40. The names of identifiers are found by computing a hash address \|h and
+then looking at strings of bytes signified by \\{hash}\?(\?\|h\?)\?, \\{link}%
+\?(\?\\{hash}\?(\?\|h\?))\?,
+\\{link}\?(\?\\{link}\?(\?\\{hash}\?(\?\|h\?)))\?, \dots, until either finding
+the desired name
+or encountering a zero.
+
+A `\\{name\_pointer}' variable, which signifies a name, is an index into
+\\{byte\_start}. The actual sequence of characters in the name pointed to by
+\|p appears in positions \\{byte\_start}\?(\?\|p\?)\? to \\{byte\_start}\?(\?%
+\|p\?+\?\\{ww}\?)-\?1, inclusive,
+in the segment of \\{byte\_mem} whose first index is \|p\?\mathbin{\&{mod}}\?%
+\\{ww}. Thus, when
+\\{ww}\?=\?2 the even-numbered name bytes appear in \\{byte\_mem}\?(\?0\?,\?%
+\hbox{$*$}\?)\?
+and the odd-numbered ones appear in \\{byte\_mem}\?(\?1\?,\?\hbox{$*$}\?)\?.
+The pointer 0 is used for undefined module names; we don't
+want to use it for the names of identifiers, since 0 stands for a null
+pointer in a linked list.
+
+The total number of names in \\{byte\_mem}
+is called \\{name\_ptr} and the total number of bytes occupied in
+\\{byte\_mem}\?(\?\|w\?,\?\hbox{$*$}\?)\? is called \\{byte\_ptr}\?(\?\|w\?)\?.
+
+We usually have \\{byte\_start}\?(\?\\{name\_ptr}\?+\?\|w\?)=\?\\{byte\_ptr}%
+\?((\?\\{name\_ptr}\?+\?\|w\?)\mathbin{\&{mod}}\?\\{ww}\?)\?
+for 0\?\L\?\|w\?<\?\\{ww}, since these are the starting positions for the next %
+\\{ww}
+names to be stored in \\{byte\_mem}.
+
+\Y\P\4\D\\{length}\?\1(\?\#\?\2)\S\?\\{byte\_start}\?\1(\?\#\?+\?\\{ww}\?\2)-\?%
+\\{byte\_start}\?\1(\?\#\?\2)\C{the length of a name}\6
+\?\par
+\P\4\D\\{null\_array}\?\S\1(\?\&{others}\?\8\KR\?0\?\2)\6
+\?\par
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\&{subtype}\8\\{name\_pointer}\8\&{is}\8\\{name\_index};\C{identifies a name}\7
+\\{name\_ptr}\?:\?\\{name\_pointer}\?\K\?1;\C{first unused position in \\{byte%
+\_start}}\6
+\\{byte\_ptr}\?:\1\&{array}\8\1(\?\\{w\_range}\?\2)\2\8\&{of}\?\8\\{byte%
+\_index}\?\K\?\\{null\_array};\C{first unused position in \\{byte\_mem}}\par
+\fi
+
+\M41. \P\?\X15:Set initial values\X\mathrel{+}\S\?\6
+\\{byte\_start}\?\1(\?0\?\to\?\\{ww}\?\2)\K\?\\{null\_array};\C{this makes name
+0 of length zero}\par
+\fi
+
+\M42. Replacement texts are stored in \\{tok\_mem}, using similar conventions.
+A `\\{text\_pointer}' variable is an index into \\{tok\_start}, and the
+replacement text that corresponds to \|p runs from positions
+\\{tok\_start}\?(\?\|p\?)\? to \\{tok\_start}\?(\?\|p\?+\?\\{zz}\?)-\?1,
+inclusive, in the segment of
+\\{tok\_mem} whose first index is \|p\?\mathbin{\&{mod}}\?\\{zz}. Thus, when %
+\\{zz}\?=\?2 the
+even-numbered replacement texts appear in \\{tok\_mem}\?(\?0\?,\?\hbox{$*$}\?)%
+\? and the
+odd-numbered ones appear in \\{tok\_mem}\?(\?1\?,\?\hbox{$*$}\?)\?.
+Furthermore,
+\\{text\_link}\?(\?\|p\?)\? is used to connect pieces of text that have the
+same name,
+as we shall see later. The pointer 0 is used for undefined replacement
+texts.
+
+The first position of \\{tok\_mem}\?(\?\|z\?,\?\hbox{$*$}\?)\? that is
+unoccupied by
+replacement text is called \\{tok\_ptr}\?(\?\|z\?)\?, and the first unused
+location of
+\\{tok\_start} is called \\{text\_ptr}.  We usually have the identity
+\\{tok\_start}\?(\?\\{text\_ptr}\?+\?\|z\?)=\?\\{tok\_ptr}\?((\?\\{text\_ptr}%
+\?+\?\|z\?)\mathbin{\&{mod}}\?\\{zz}\?)\?, for 0\?\L\?\|z\?<\?\\{zz}, since
+these are the starting positions for the next \\{zz} replacement texts to
+be stored in \\{tok\_mem}.
+
+It is convenient to maintain a variable \|z that is equal to \\{text\_ptr}\?%
+\mathbin{\&{mod}}\?\\{zz}, so that we always insert tokens into segment \|z of %
+\\{tok\_mem}.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\&{subtype}\8\\{text\_pointer}\8\&{is}\8\\{text\_index};\C{identifies a
+replacement text}\7
+\\{text\_ptr}\?:\?\\{text\_pointer}\?\K\?1;\C{first unused position in \\{tok%
+\_start}}\6
+\\{tok\_ptr}\?:\1\&{array}\8\1(\?\\{z\_range}\?\2)\2\8\&{of}\?\8\\{token%
+\_index}\?\K\?\\{null\_array};\C{first unused position in a given segment of %
+\\{tok\_mem}}\6
+\|z\?:\?\\{z\_range}\?\K\?1\?\mathbin{\&{mod}}\?\\{zz};\C{current segment of %
+\\{tok\_mem}}\6
+\&{stat}\1\6
+\\{max\_tok\_ptr}\?:\1\&{array}\8\1(\?\\{z\_range}\?\2)\2\8\&{of}\?\8\\{token%
+\_index};\C{largest values assumed by \\{tok\_ptr}}\2\6
+\&{tats}\par
+\fi
+
+\M43. \P\?\X15:Set initial values\X\mathrel{+}\S\?\6
+\\{tok\_start}\?\1(\?0\?\to\?\\{zz}\?\2)\K\?\\{null\_array};\C{this makes
+replacement text 0 of length zero}\par
+\fi
+
+\M44. Three types of identifiers are distinguished by their \\{ilk}:
+
+\yskip\hang \\{normal} identifiers will appear in the \ADA\ program as
+ordinary identifiers since they have not been defined to be macros; the
+corresponding value in the \\{equiv} array for such identifiers is a link in a
+secondary hash table that is used to check whether any two of them agree in
+their first \\{unambig\_length} characters after letters are changed to
+uppercase.
+
+\yskip\hang \\{simple} identifiers have been defined to be simple macros;
+their \\{equiv} value points to the corresponding replacement text.
+
+\yskip\hang \\{parametric} identifiers have been defined to be parametric
+macros; like simple identifiers, their \\{equiv} value points to the
+replacement text.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{normal}\?:\?\&{constant}\8\\{sixteen\_bits}\?\K\?0;\C{ordinary identifiers
+have \\{normal} ilk}\6
+\\{simple}\?:\?\&{constant}\8\\{sixteen\_bits}\?\K\?1;\C{simple macros have %
+\\{simple} ilk}\6
+\\{parametric}\?:\?\&{constant}\8\\{sixteen\_bits}\?\K\?2;\C{parametric macros
+have \\{parametric} ilk}\par
+\fi
+
+\M45. The names of modules are stored in \\{byte\_mem} together with the
+identifier
+names, but a hash table is not used for them because \.{ATANGLE} needs to be
+able to recognize a module name when given a prefix of that name. A
+conventional binary seach tree is used to retrieve module names, with fields
+called \\{llink} and \\{rlink} in place of \\{link} and \\{ilk}. The root of
+this
+tree is \\{rlink}\?(\?0\?)\?. If \|p is a pointer to a module name, \\{equiv}%
+\?(\?\|p\?)\? points
+to its replacement text, just as in simple and parametric macros, unless this
+replacement text has not yet been defined (in which case \\{equiv}\?(\?\|p\?)=%
+\?0).
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{llink}\?:\?\\{name\_info}\8\&{renames}\8\\{link};\C{left link in binary
+search tree for module names}\6
+\\{rlink}\?:\?\\{name\_info}\8\&{renames}\8\\{ilk};\C{right link in binary
+search tree for module names}\par
+\fi
+
+\M46. \P\?\X15:Set initial values\X\mathrel{+}\S\?\6
+\\{rlink}\?\1(\?0\?\2)\K\?0;\C{the binary search tree starts out with nothing
+in it}\6
+\\{equiv}\?\1(\?0\?\2)\K\?0;\C{the undefined module has no replacement text}\par
+\fi
+
+\M47. Here is a little procedure that prints the text of a given name.
+\Y\P\?\4\X47:Specification of procedures visible from \\{data\_structures}\X\S%
+\?\6
+\&{procedure}\8\1\\{print\_id}\?(\1\?\|p\?:\?\\{name\_pointer}\?\2)\?\2;\par
+\A section~73.
+\U section~3\*.\fi
+
+\M48. \P\?\X48:Procedures in \\{data\_structures}\X\S\?\6
+\&{procedure}\8\1\\{print\_id}\?(\1\?\|p\?:\?\\{name\_pointer}\?\2)\?\2\8\&{is}%
+\8\C{print identifier or module name}\1\6
+\|w\?:\?\\{w\_range};\C{segment of \\{byte\_mem}}\6
+\4\&{begin}\6
+\&{if}\1\1\8\|p\?\G\?\\{name\_ptr}\2\8\&{then}\6
+\\{print}\?\1(\?\.{"IMPOSSIBLE"}\?\2)\?;\6
+\4\&{else}\6
+\|w\?\K\?\|p\?\mathbin{\&{mod}}\?\\{ww};\6
+\1\&{for}\8\|k\?\in\?\\{byte\_start}\?\1(\?\|p\?\2)\to\?\\{byte\_start}\?\1(\?%
+\|p\?+\?\\{ww}\?\2)-\?1\8\&{loop}\6
+\\{print}\?\1(\?\\{xchr}\?\1(\?\\{byte\_mem}\?\1(\?\|w\?,\39\?\|k\?\2)\2)\2)\?;%
+\2\6
+\&{end}\8\&{loop};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\\{print\_id};\par
+\A section~74.
+\U section~3\*.\fi
+
+\N49.  Searching for identifiers.
+The hash table described above is updated by the \\{id\_lookup} procedure,
+which finds a given identifier and returns a pointer to its index in
+\\{byte\_start}. If the identifier was not already present, it is inserted with
+a given \\{ilk} code; and an error message is printed if the identifier is
+being doubly defined.
+
+Because of the way \.{ATANGLE}'s scanning mechanism works, it is most
+convenient to let \\{id\_lookup} search for an identifier that is present in
+the
+\\{buffer} array. Two other global variables specify its position in the
+buffer: the first character is \\{buffer}\?(\?\\{id\_first}\?)\?, and the last
+is
+\\{buffer}\?(\?\\{id\_loc}\?-\?1\?)\?.
+
+We have mentioned that \\{normal} identifiers belong to two hash tables, one
+for their true names as they appear in the \.{AWEB} file and the other when
+they have been reduced to their first \\{unambig\_length} characters. The hash
+tables are kept by the method of simple chaining, where the heads of the
+individual lists appear in the \\{hash} and \\{chop\_hash} arrays. If \|h is a
+hash code, the primary hash table list starts at \\{hash}\?(\?\|h\?)\? and
+proceeds
+through \\{link} pointers; the secondary hash table list starts at
+\\{chop\_hash}\?(\?\|h\?)\? and proceeds through \\{equiv} pointers. Of course,
+the same
+identifier will probably have two different values of \|h.
+
+The \\{id\_lookup} procedure uses an auxiliary array called \\{chopped\_id} to
+contain up to \\{unambig\_length} characters of the current identifier, if
+it is necessary to compute the secondary hash code.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{id\_first}\?:\?\\{buffer\_index};\C{where the current identifier begins in
+the buffer}\6
+\\{id\_loc}\?:\?\\{buffer\_index};\C{just after the current identifier in the
+buffer}\7
+\&{subtype}\8\\{hash\_index}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?\\{hash%
+\_size};\6
+\&{subtype}\8\\{chop\_hash\_index}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?%
+\\{unambig\_length};\6
+\\{hash}\?,\39\?\\{chop\_hash}\?:\1\&{array}\8\1(\?\\{hash\_index}\?\2)\2\8%
+\&{of}\?\8\\{sixteen\_bits}\?\K\?\\{null\_array};\C{heads of hash
+lists---initially empty}\6
+\\{chopped\_id}\?:\1\&{array}\8\1(\?\\{chop\_hash\_index}\?\2)\2\8\&{of}\?\8%
+\\{ASCII\_code};\C{chopped identifier}\par
+\fi
+
+\M50. Here now is the main procedure for finding identifiers (and strings).
+The parameter \|t is set to \\{normal} except when the identifier is
+a macro name that is just being defined; in the latter case, \|t will be
+\\{simple} or \\{parametric}.
+
+\Y\P\?\4\X50:Specification of procedures visible from \\{hashing}\X\S\?\6
+\&{function}\8\1\\{id\_lookup}\?(\1\?\|t\?:\?\\{eight\_bits}\?\2)\&{return}\?\8%
+\\{name\_pointer}\2;\par
+\A sections~64 and~68.
+\U section~5\*.\fi
+
+\M51. \P\?\X51:Procedures in \\{hashing}\X\S\?\6
+\&{function}\8\1\\{id\_lookup}\?(\1\?\|t\?:\?\\{eight\_bits}\?\2)\&{return}\?\8%
+\\{name\_pointer}\2\8\&{is}\8\C{finds current            identifier}\1\6
+\|c\?:\?\\{eight\_bits};\C{byte being chopped}\6
+\|i\?:\?\\{buffer\_index};\C{index into \\{buffer}}\6
+\|h\?:\?\\{hash\_index};\C{hash code}\6
+\|k\?:\?\\{byte\_index};\C{index into \\{byte\_mem}}\6
+\|w\?:\?\\{w\_range};\C{segment of \\{byte\_mem}}\6
+\|l\?:\?\\{buffer\_index}\?\K\?\\{id\_loc}\?-\?\\{id\_first};\C{length of the
+given identifier}\6
+\|p\?,\39\?\|q\?:\?\\{name\_pointer};\C{where the identifier is being sought}\6
+\|s\?:\?\\{chop\_hash\_index};\C{index into \\{chopped\_id}}\6
+\4\&{begin}\6
+\X52:Compute the hash code \|h\X;\6
+\X53:Compute the name location \|p\X;\6
+\&{if}\1\1\?\8\1(\?\|p\?=\?\\{name\_ptr}\?\2)\V\1(\?\|t\?\I\?\\{normal}\?\2)\?%
+\2\8\&{then}\6
+\X55:Update the tables and check for possible errors\X;\2\6
+\&{end}\8\2\&{if}\1;\6
+\?\&{return}\?\8\|p;\2\6
+\&{end}\8\\{id\_lookup};\par
+\A sections~65 and~69.
+\U section~5\*.\fi
+
+\M52. A simple hash code is used: If the sequence of
+ASCII codes is $c_1c_2\ldots c_n$, its hash value will be
+$$(2^{n-1}c_1+2^{n-2}c_2+\cdots+c_n)\,\bmod\,\\{hash\_size}.$$
+
+\Y\P\?\4\X52:Compute the hash code \|h\X\S\?\6
+\|h\?\K\?\\{buffer}\?\1(\?\\{id\_first}\?\2)\?;\5
+\|i\?\K\?\\{id\_first}\?+\?1;\6
+\1\&{while}\8\|i\?<\?\\{id\_loc}\8\&{loop}\6
+\|h\?\K\1(\?\|h\?+\?\|h\?+\?\\{buffer}\?\1(\?\|i\?\2)\2)\mathbin{\&{mod}}\?%
+\\{hash\_size};\5
+\\{incr}\?\1(\?\|i\?\2)\?;\2\6
+\&{end}\8\&{loop}\par
+\U section~51.\fi
+
+\M53. If the identifier is new, it will be placed in position \|p\?=\?\\{name%
+\_ptr},
+otherwise \|p will point to its existing location.
+
+\Y\P\?\4\X53:Compute the name location \|p\X\S\?\6
+\|p\?\K\?\\{hash}\?\1(\?\|h\?\2)\?;\6
+\1\&{while}\8\|p\?\I\?0\8\&{loop}\6
+\&{if}\1\1\8\\{length}\?\1(\?\|p\?\2)=\?\|l\2\8\&{then}\6
+\X54:Compare name \|p with current identifier, \&{goto}\8\\{found} if equal\X;%
+\2\6
+\&{end}\8\2\&{if}\1;\6
+\|p\?\K\?\\{link}\?\1(\?\|p\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\|p\?\K\?\\{name\_ptr};\C{the current identifier is new}\6
+\\{link}\?\1(\?\|p\?\2)\K\?\\{hash}\?\1(\?\|h\?\2)\?;\5
+\\{hash}\?\1(\?\|h\?\2)\K\?\|p;\C{insert \|p at beginning of hash list}\6
+\4\BL\\{found}\EL\8\&{null}\par
+\U section~51.\fi
+
+\M54. \P\?\X54:Compare name \|p with current identifier, \&{goto}\8\\{found} if
+equal\X\S\?\6
+\|i\?\K\?\\{id\_first};\5
+\|k\?\K\?\\{byte\_start}\?\1(\?\|p\?\2)\?;\5
+\|w\?\K\?\|p\?\mathbin{\&{mod}}\?\\{ww};\6
+\1\&{while}\?\8\1(\?\|i\?<\?\\{id\_loc}\?\2)\W\1(\?\\{buffer}\?\1(\?\|i\?\2)=\?%
+\\{byte\_mem}\?\1(\?\|w\?,\39\?\|k\?\2)\2)\?\8\&{loop}\6
+\\{incr}\?\1(\?\|i\?\2)\?;\5
+\\{incr}\?\1(\?\|k\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\&{if}\1\1\8\|i\?=\?\\{id\_loc}\2\8\&{then}\6
+\&{goto}\8\\{found};\C{all characters agree}\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~53.\fi
+
+\M55. \P\?\X55:Update the tables and check for possible errors\X\S\?\6
+\&{if}\1\1\?\8\1(\1(\?\|p\?\I\?\\{name\_ptr}\?\2)\W\1(\?\|t\?\I\?\\{normal}\?%
+\2)\W\1(\?\\{ilk}\?\1(\?\|p\?\2)=\?\\{normal}\?\2)\2)\V\1(\1(\?\|p\?=\?\\{name%
+\_ptr}\?\2)\W\1(\?\|t\?=\?\\{normal}\?\2)\2)\?\2\8\&{then}\6
+\X56:Compute the secondary hash code \|h and put the first characters into the
+auxiliary array \\{chopped\_id}\X;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\|p\?\I\?\\{name\_ptr}\2\8\&{then}\6
+\X57:Give double-definition error and change \|p to type \|t\X;\6
+\4\&{else}\6
+\X59:Enter a new identifier into the table at position \|p\X;\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~51.\fi
+
+\M56. The following routine, which is called into play when it is necessary to
+look at the secondary hash table, computes the same hash function as before
+(but on the chopped data), and places a zero after the chopped identifier
+in \\{chopped\_id} to serve as a convenient sentinel.
+
+\Y\P\?\4\X56:Compute the secondary hash code \|h and put the first characters
+into the auxiliary array \\{chopped\_id}\X\S\?\6
+\|i\?\K\?\\{id\_first};\5
+\|s\?\K\?0;\5
+\|h\?\K\?0;\6
+\1\&{while}\?\8\1(\?\|i\?<\?\\{id\_loc}\?\2)\W\1(\?\|s\?<\?\\{unambig\_length}%
+\?\2)\?\8\&{loop}\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\|i\?\2)\G\?\H{a}\2\8\&{then}\6
+\\{chopped\_id}\?\1(\?\|s\?\2)\K\?\\{buffer}\?\1(\?\|i\?\2)-\bn{8}{40}\?;\6
+\4\&{else}\6
+\\{chopped\_id}\?\1(\?\|s\?\2)\K\?\\{buffer}\?\1(\?\|i\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\|h\?\K\1(\?\|h\?+\?\|h\?+\?\\{chopped\_id}\?\1(\?\|s\?\2)\2)\mathbin{\&{mod}}%
+\?\\{hash\_size};\5
+\\{incr}\?\1(\?\|s\?\2)\?;\5
+\\{incr}\?\1(\?\|i\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\\{chopped\_id}\?\1(\?\|s\?\2)\K\?0\par
+\U section~55.\fi
+
+\M57. If a macro has appeared before it was defined, \.{ATANGLE} will still
+work
+all right; after all, such behavior is typical of the replacement texts for
+modules, which act very much like macros. However, \.{ATANGLE} finds it
+simplest to make a blanket rule that macros should be defined before they are
+used. The following routine gives an error message and also fixes up any
+damage that may have been caused.
+
+\Y\P\?\4\X57:Give double-definition error and change \|p to type \|t\X\S\?\6
+\C{now \|p\?\I\?\\{name\_ptr} and \|t\?\I\?\\{normal}}\6
+\&{if}\1\1\8\\{ilk}\?\1(\?\|p\?\2)=\?\\{normal}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ This\ identifier\ has\ already\ appeared"}\?\2)\?;\6
+\X58:Remove \|p from secondary hash table\X;\6
+\4\&{else}\6
+\\{err\_print}\?\1(\?\.{"!\ This\ identifier\ was\ defined\ before"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{ilk}\?\1(\?\|p\?\2)\K\?\|t\par
+\U section~55.\fi
+
+\M58. When we have to remove a secondary hash entry, because a \\{normal}
+identifier is changing to another \\{ilk}, the hash code \|h and chopped
+identifier have already been computed.
+
+\Y\P\?\4\X58:Remove \|p from secondary hash table\X\S\?\6
+\|q\?\K\?\\{chop\_hash}\?\1(\?\|h\?\2)\?;\6
+\&{if}\1\1\8\|q\?=\?\|p\2\8\&{then}\6
+\\{chop\_hash}\?\1(\?\|h\?\2)\K\?\\{equiv}\?\1(\?\|p\?\2)\?;\6
+\4\&{else}\6
+\1\&{while}\8\\{equiv}\?\1(\?\|q\?\2)\I\?\|p\8\&{loop}\6
+\|q\?\K\?\\{equiv}\?\1(\?\|q\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\\{equiv}\?\1(\?\|q\?\2)\K\?\\{equiv}\?\1(\?\|p\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~57.\fi
+
+\M59. \P\?\X59:Enter a new identifier into the table at position \|p\X\S\?\6
+\&{if}\1\1\8\|t\?=\?\\{normal}\2\8\&{then}\6
+\X60:Check for ambiguity and update secondary hash\X;\2\6
+\&{end}\8\2\&{if}\1;\6
+\|w\?\K\?\\{name\_ptr}\?\mathbin{\&{mod}}\?\\{ww};\5
+\|k\?\K\?\\{byte\_ptr}\?\1(\?\|w\?\2)\?;\6
+\&{if}\1\1\8\|k\?+\?\|l\?>\?\\{max\_bytes}\2\8\&{then}\6
+\\{overflow}\?\1(\?\.{"byte\ memory"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{name\_ptr}\?>\?\\{max\_names}\?-\?\\{ww}\2\8\&{then}\6
+\\{overflow}\?\1(\?\.{"name"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\|i\?\K\?\\{id\_first};\C{get ready to move the identifier into \\{byte\_mem}}\6
+\1\&{while}\8\|i\?<\?\\{id\_loc}\8\&{loop}\6
+\\{byte\_mem}\?\1(\?\|w\?,\39\?\|k\?\2)\K\?\\{buffer}\?\1(\?\|i\?\2)\?;\5
+\\{incr}\?\1(\?\|k\?\2)\?;\5
+\\{incr}\?\1(\?\|i\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\\{byte\_ptr}\?\1(\?\|w\?\2)\K\?\|k;\5
+\\{byte\_start}\?\1(\?\\{name\_ptr}\?+\?\\{ww}\?\2)\K\?\|k;\5
+\\{incr}\?\1(\?\\{name\_ptr}\?\2)\?;\5
+\\{ilk}\?\1(\?\|p\?\2)\K\?\|t\par
+\U section~55.\fi
+
+\M60. \P\?\X60:Check for ambiguity and update secondary hash\X\S\?\6
+\|q\?\K\?\\{chop\_hash}\?\1(\?\|h\?\2)\?;\6
+\1\&{while}\8\|q\?\I\?0\8\&{loop}\6
+\X61:Check if \|q conflicts with \|p\X;\6
+\|q\?\K\?\\{equiv}\?\1(\?\|q\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\\{equiv}\?\1(\?\|p\?\2)\K\?\\{chop\_hash}\?\1(\?\|h\?\2)\?;\5
+\\{chop\_hash}\?\1(\?\|h\?\2)\K\?\|p\C{put \|p at front of secondary list}\par
+\U section~59.\fi
+
+\M61. \P\?\X61:Check if \|q conflicts with \|p\X\S\?\6
+\|k\?\K\?\\{byte\_start}\?\1(\?\|q\?\2)\?;\5
+\|s\?\K\?0;\5
+\|w\?\K\?\|q\?\mathbin{\&{mod}}\?\\{ww};\6
+\1\&{while}\?\8\1(\?\|k\?<\?\\{byte\_start}\?\1(\?\|q\?+\?\\{ww}\?\2)\2)\W\1(\?%
+\|s\?<\?\\{unambig\_length}\?\2)\?\8\&{loop}\6
+\|c\?\K\?\\{byte\_mem}\?\1(\?\|w\?,\39\?\|k\?\2)\?;\6
+\&{if}\1\1\8\|c\?\G\?\H{a}\2\8\&{then}\6
+\|c\?\K\?\|c\?-\bn{8}{40}\?;\C{convert to uppercase}\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{chopped\_id}\?\1(\?\|s\?\2)\I\?\|c\2\8\&{then}\6
+\&{goto}\8\\{not\_found};\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{incr}\?\1(\?\|s\?\2)\?;\5
+\\{incr}\?\1(\?\|k\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\&{if}\1\1\?\8\1(\?\|k\?=\?\\{byte\_start}\?\1(\?\|q\?+\?\\{ww}\?\2)\2)\W\1(\?%
+\\{chopped\_id}\?\1(\?\|s\?\2)\I\?0\?\2)\?\2\8\&{then}\6
+\&{goto}\8\\{not\_found};\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{print\_nl}\?\1(\?\.{"!\ Identifier\ conflict\ with\ "}\?\2)\?;\6
+\1\&{for}\8\\{kl}\?\in\?\\{byte\_start}\?\1(\?\|q\?\2)\to\?\\{byte\_start}\?\1(%
+\?\|q\?+\?\\{ww}\?\2)-\?1\8\&{loop}\6
+\\{print}\?\1(\?\\{xchr}\?\1(\?\\{byte\_mem}\?\1(\?\|w\?,\39\?\\{kl}\?\2)\2)\2)%
+\?;\2\6
+\&{end}\8\&{loop};\6
+\\{error};\5
+\|q\?\K\?0;\C{only one conflict will be printed, since \\{equiv}\?(\?0\?)=\?0}\6
+\4\BL\\{not\_found}\EL\8\&{null}\par
+\U section~60.\fi
+
+\N62.  Searching for module names.
+The \\{mod\_lookup} procedure finds the module name \\{mod\_text}\?(\?1\?\to\?%
+\|l\?)\? in the
+search tree, after inserting it if necessary, and returns a pointer to
+where it was found.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\&{subtype}\8\\{long\_name\_index}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?%
+\\{longest\_name};\6
+\\{mod\_text}\?:\1\&{array}\8\1(\?\\{long\_name\_index}\?\2)\2\8\&{of}\?\8%
+\\{ASCII\_code};\C{name being sought for}\par
+\fi
+
+\M63. According to the rules of \.{AWEB}, no module name should be a proper
+prefix
+of another, so a ``clean'' comparison should occur between any two names. The
+result of \\{mod\_lookup} is 0 if this prefix condition is violated. An error
+message is printed when such violations are detected during phase two of
+\.{AWEAVE}.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\&{type}\8\\{compare}\8\&{is}\?\8\1(\?\\{less}\?,\39\?\\{equal}\?,\39\?%
+\\{greater}\?,\39\?\\{prefix}\?,\39\?\\{extension}\?\2)\?;\par
+\fi
+
+\M64. \P\?\X50:Specification of procedures visible from \\{hashing}\X%
+\mathrel{+}\S\?\6
+\&{function}\8\1\\{mod\_lookup}\?(\1\?\|l\?:\?\\{sixteen\_bits}\?\2)\&{return}%
+\?\8\\{name\_pointer}\2;\par
+\fi
+
+\M65. \P\?\X51:Procedures in \\{hashing}\X\mathrel{+}\S\?\6
+\&{function}\8\1\\{mod\_lookup}\?(\1\?\|l\?:\?\\{sixteen\_bits}\?\2)\&{return}%
+\?\8\\{name\_pointer}\2\8\&{is}\8\C{finds module name}\1\6
+\|c\?:\?\\{compare}\?\K\?\\{greater};\C{comparison between two names}\6
+\|j\?:\?\\{long\_name\_index};\C{index into \\{mod\_text}}\6
+\|k\?:\?\\{byte\_index};\C{index into \\{byte\_mem}}\6
+\|w\?:\?\\{w\_range};\C{segment of \\{byte\_mem}}\6
+\|p\?:\?\\{name\_pointer};\C{current node of the search tree}\6
+\|q\?:\?\\{name\_pointer}\?\K\?0;\C{father of node \|p}\6
+\4\&{begin}\6
+\|p\?\K\?\\{rlink}\?\1(\?0\?\2)\?;\C{\\{rlink}\?(\?0\?)\? is the root of the
+tree}\6
+\1\&{while}\8\|p\?\I\?0\8\&{loop}\6
+\X67:Set \(\|c to the result of comparing the given name to name \|p\X;\6
+\|q\?\K\?\|p;\6
+\&{if}\1\1\8\|c\?=\?\\{less}\2\8\&{then}\6
+\|p\?\K\?\\{llink}\?\1(\?\|q\?\2)\?;\6
+\4\&{elsif}\1\8\|c\?=\?\\{greater}\2\8\&{then}\6
+\|p\?\K\?\\{rlink}\?\1(\?\|q\?\2)\?;\6
+\4\&{else}\6
+\&{goto}\8\\{found};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop};\6
+\X66:Enter a new module name into the tree\X;\6
+\4\BL\\{found}\EL\8\&{if}\1\1\8\|c\?\I\?\\{equal}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Incompatible\ section\ names"}\?\2)\?;\6
+\|p\?\K\?0;\2\6
+\&{end}\8\2\&{if}\1;\6
+\?\&{return}\?\8\|p;\2\6
+\&{end}\8\\{mod\_lookup};\par
+\fi
+
+\M66. \P\?\X66:Enter a new module name into the tree\X\S\?\6
+\|w\?\K\?\\{name\_ptr}\?\mathbin{\&{mod}}\?\\{ww};\5
+\|k\?\K\?\\{byte\_ptr}\?\1(\?\|w\?\2)\?;\6
+\&{if}\1\1\8\|k\?+\?\|l\?>\?\\{max\_bytes}\2\8\&{then}\6
+\\{overflow}\?\1(\?\.{"byte\ memory"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{name\_ptr}\?>\?\\{max\_names}\?-\?\\{ww}\2\8\&{then}\6
+\\{overflow}\?\1(\?\.{"name"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\|p\?\K\?\\{name\_ptr};\6
+\&{if}\1\1\8\|c\?=\?\\{less}\2\8\&{then}\6
+\\{llink}\?\1(\?\|q\?\2)\K\?\|p;\6
+\4\&{else}\6
+\\{rlink}\?\1(\?\|q\?\2)\K\?\|p;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{llink}\?\1(\?\|p\?\2)\K\?0;\5
+\\{rlink}\?\1(\?\|p\?\2)\K\?0;\5
+\|c\?\K\?\\{equal};\5
+\\{equiv}\?\1(\?\|p\?\2)\K\?0;\6
+\1\&{for}\8\\{kj}\?\in\?1\?\to\?\|l\8\&{loop}\6
+\\{byte\_mem}\?\1(\?\|w\?,\39\?\|k\?+\?\\{kj}\?-\?1\?\2)\K\?\\{mod\_text}\?\1(%
+\?\\{kj}\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\\{byte\_ptr}\?\1(\?\|w\?\2)\K\?\|k\?+\?\|l;\5
+\\{byte\_start}\?\1(\?\\{name\_ptr}\?+\?\\{ww}\?\2)\K\?\|k\?+\?\|l;\5
+\\{incr}\?\1(\?\\{name\_ptr}\?\2)\?\par
+\U section~65.\fi
+
+\M67. \P\?\X67:Set \(\|c to the result of comparing the given name to name \|p%
+\X\S\?\6
+\|k\?\K\?\\{byte\_start}\?\1(\?\|p\?\2)\?;\5
+\|w\?\K\?\|p\?\mathbin{\&{mod}}\?\\{ww};\5
+\|c\?\K\?\\{equal};\5
+\|j\?\K\?1;\6
+\1\&{while}\?\8\1(\?\|k\?<\?\\{byte\_start}\?\1(\?\|p\?+\?\\{ww}\?\2)\2)\W\1(\?%
+\|j\?\L\?\|l\?\2)\W\1(\?\\{mod\_text}\?\1(\?\|j\?\2)=\?\\{byte\_mem}\?\1(\?\|w%
+\?,\39\?\|k\?\2)\2)\?\8\&{loop}\6
+\\{incr}\?\1(\?\|k\?\2)\?;\5
+\\{incr}\?\1(\?\|j\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\&{if}\1\1\8\|k\?=\?\\{byte\_start}\?\1(\?\|p\?+\?\\{ww}\?\2)\?\2\8\&{then}\6
+\&{if}\1\1\8\|j\?>\?\|l\2\8\&{then}\6
+\|c\?\K\?\\{equal};\6
+\4\&{else}\6
+\|c\?\K\?\\{extension};\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{elsif}\1\8\|j\?>\?\|l\2\8\&{then}\6
+\|c\?\K\?\\{prefix};\6
+\4\&{elsif}\1\8\\{mod\_text}\?\1(\?\|j\?\2)<\?\\{byte\_mem}\?\1(\?\|w\?,\39\?%
+\|k\?\2)\?\2\8\&{then}\6
+\|c\?\K\?\\{less};\6
+\4\&{else}\6
+\|c\?\K\?\\{greater};\2\6
+\&{end}\8\2\&{if}\1\par
+\U sections~65 and~69.\fi
+
+\M68. The \\{prefix\_lookup} procedure is supposed to find exactly one module
+name that has \\{mod\_text}\?(\?1\?\to\?\|l\?)\? as a prefix. Actually the
+algorithm silently
+accepts also the situation that some module name is a prefix of
+\\{mod\_text}\?(\?1\?\to\?\|l\?)\?, because the user who painstakingly typed in
+more than
+necessary probably doesn't want to be told about the wasted effort.
+
+\Y\P\?\4\X50:Specification of procedures visible from \\{hashing}\X\mathrel{+}%
+\S\?\6
+\&{function}\8\1\\{prefix\_lookup}\?(\1\?\|l\?:\?\\{sixteen\_bits}\?\2)%
+\&{return}\?\8\\{name\_pointer}\2;\par
+\fi
+
+\M69. \P\?\X51:Procedures in \\{hashing}\X\mathrel{+}\S\?\6
+\&{function}\8\1\\{prefix\_lookup}\?(\1\?\|l\?:\?\\{sixteen\_bits}\?\2)%
+\&{return}\?\8\\{name\_pointer}\2\8\&{is}\8\C{finds name extension}\1\6
+\|c\?:\?\\{compare};\C{comparison between two names}\6
+\\{count}\?:\?\\{name\_index}\?\K\?0;\C{the number of hits}\6
+\|j\?:\?\\{long\_name\_index};\C{index into \\{mod\_text}}\6
+\|k\?:\?\\{byte\_index};\C{index into \\{byte\_mem}}\6
+\|w\?:\?\\{w\_range};\C{segment of \\{byte\_mem}}\6
+\|p\?:\?\\{name\_pointer};\C{current node of the search tree}\6
+\|q\?:\?\\{name\_pointer}\?\K\?0;\C{another place to resume the search after
+one         branch is done}\6
+\|r\?:\?\\{name\_pointer}\?\K\?0;\C{extension found}\6
+\4\&{begin}\6
+\|p\?\K\?\\{rlink}\?\1(\?0\?\2)\?;\C{begin search at root of tree}\6
+\1\&{while}\8\|p\?\I\?0\8\&{loop}\6
+\X67:Set \(\|c to the result of comparing the given name to name \|p\X;\6
+\&{if}\1\1\8\|c\?=\?\\{less}\2\8\&{then}\6
+\|p\?\K\?\\{llink}\?\1(\?\|p\?\2)\?;\6
+\4\&{elsif}\1\8\|c\?=\?\\{greater}\2\8\&{then}\6
+\|p\?\K\?\\{rlink}\?\1(\?\|p\?\2)\?;\6
+\4\&{else}\6
+\|r\?\K\?\|p;\5
+\\{incr}\?\1(\?\\{count}\?\2)\?;\5
+\|q\?\K\?\\{rlink}\?\1(\?\|p\?\2)\?;\5
+\|p\?\K\?\\{llink}\?\1(\?\|p\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\|p\?=\?0\2\8\&{then}\6
+\|p\?\K\?\|q;\5
+\|q\?\K\?0;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop};\6
+\&{if}\1\1\8\\{count}\?\I\?1\2\8\&{then}\6
+\&{if}\1\1\8\\{count}\?=\?0\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Name\ does\ not\ match"}\?\2)\?;\6
+\4\&{else}\6
+\\{err\_print}\?\1(\?\.{"!\ Ambiguous\ prefix"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\?\&{return}\?\8\|r;\C{the result will be 0 if there was no match}\2\6
+\&{end}\8\\{prefix\_lookup};\par
+\fi
+
+\N70.  Tokens.
+Replacement texts, which represent \ADA\ code in a compressed format, appear
+in \\{tok\_mem} as mentioned above. The codes in these texts are called
+`tokens'; some tokens occupy two consecutive eight-bit byte positions, and
+the others take just one byte.
+
+If $p>0$ points to a replacement text, \\{tok\_start}\?(\?\|p\?)\? is the %
+\\{tok\_mem}
+position of the first eight-bit code of that text. If \\{text\_link}\?(\?\|p%
+\?)=\?0,
+this is the replacement text for a macro, otherwise it is the replacement
+text for a module. In the latter case \\{text\_link}\?(\?\|p\?)\? is either
+equal to
+\\{module\_flag}, which means that there is no further text for this module, or
+\\{text\_link}\?(\?\|p\?)\? points to a continuation of this replacement text;
+such links
+are created when several modules have \ADA\ texts with the same name, and
+they also tie together all the \ADA\ texts of unnamed modules. The
+replacement text pointer for the first unnamed module appears in
+\\{text\_link}\?(\?0\?)\?, and the most recent such pointer is \\{last%
+\_unnamed}.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{module\_flag}\?:\?\&{constant}\8\\{sixteen\_bits}\?\K\?\\{max\_texts};%
+\C{final \\{link} in module replacement texts}\6
+\\{last\_unnamed}\?:\?\\{text\_pointer}\?\K\?0;\C{most recent replacement text
+of unnamed module}\par
+\fi
+
+\M71. \P\?\X15:Set initial values\X\mathrel{+}\S\?\6
+\\{text\_link}\?\1(\?0\?\2)\K\?0;\par
+\fi
+
+\M72. If the first byte of a token is less than \?\bn{8}{200}\?, the token
+occupies a
+single byte. Otherwise we make a sixteen-bit token by combining two
+consecutive bytes \|a and \|b. If \?\bn{8}{200}\L\?\|a\?<\bn{8}{250}\?, then
+$(a-\bn{8}{200})\times2^8+b$ points to an identifier; if \?\bn{8}{250}\L\?\|a%
+\?<\bn{8}{320}\?,
+then $(a-\bn{8}{250})\times2^8+b$ points to a module name; otherwise, i.e.,
+if \?\bn{8}{320}\L\?\|a\?<\bn{8}{400}\?, then $(a-\bn{8}{320})\times2^8+b$ is
+the number of the
+module in which the current replacement text appears.
+
+Codes less than \bn{8}{200} are 7-bit ASCII codes that represent themselves.
+In particular, a single-character identifier like `\|x' will be a one-byte
+token, while all longer identifiers will occupy two bytes.
+
+Some of the 7-bit ASCII codes will not be present, however, so we can
+use them for special purposes. The following symbolic names are used:
+
+\yskip\hang \\{param} denotes insertion of a parameter. This occurs only in
+the replacement texts of parametric macros, outside of single-quoted strings
+in those texts.
+
+\hang \\{begin\_comment} denotes \.{@\{}, which will become \.{--}.
+
+\hang \\{end\_comment} denotes \.{@\}}, which will become a new line.
+
+\hang \\{character\_tok} denotes the \.' that encloses an character constant.
+
+\hang \\{ascii\_tok} denotes the \.{@'} that precedes a ASCII code constant.
+
+\hang \\{output\_tok} denotes the \.{@\~} that precedes an output file-name.
+
+\hang \\{join} denotes the concatenation of adjacent items with no
+space or line breaks allowed between them (the \.{@\&} operation of \.{AWEB}).
+
+\hang \\{double\_dot} denotes `\.{..}' in \ADA.
+
+\hang \\{verbatim} denotes the \.{@=} that begins a verbatim \ADA\ string.
+It is also used for the end of the string.
+
+\hang \\{force\_line} denotes the \.{@\\} that forces a new line in the
+\ADA\ output.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{param}\?:\?\&{constant}\8\\{eight\_bits}\?\K\?0;\C{ASCII null code will not
+appear}\6
+\\{verbatim}\?:\?\&{constant}\8\\{eight\_bits}\?\K\?2;\C{extended ASCII alpha
+should not appear}\6
+\\{force\_line}\?:\?\&{constant}\8\\{eight\_bits}\?\K\?3;\C{extended ASCII beta
+should not appear}\6
+\\{begin\_comment}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{11}\?;\C{ASCII
+tab mark will not appear}\6
+\\{end\_comment}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{12}\?;\C{ASCII
+line feed will not appear}\6
+\\{character\_tok}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{14}\?;\C{ASCII
+form feed will not appear}\6
+\\{ascii\_tok}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{15}\?;\C{ASCII
+carriage return will not appear}\6
+\\{output\_tok}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{16}\?;\C{ASCII %
+\.{DLE} will not appear}\6
+\\{double\_dot}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{40}\?;\C{ASCII
+space will not appear except in strings}\6
+\\{join}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{177}\?;\C{ASCII delete
+will not appear}\par
+\fi
+
+\M73. \P\?\X47:Specification of procedures visible from \\{data\_structures}\X%
+\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{store\_two\_bytes}\?(\1\?\|x\?:\?\\{sixteen\_bits}\?\2)\?%
+\2;\par
+\fi
+
+\M74. The following procedure is used to enter a two-byte value into \\{tok%
+\_mem}
+when a replacement text is being generated.
+
+\Y\P\?\4\X48:Procedures in \\{data\_structures}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{store\_two\_bytes}\?(\1\?\|x\?:\?\\{sixteen\_bits}\?\2)\?\2%
+\8\&{is}\8\C{stores high byte, then low byte}\1\6
+\4\&{begin}\6
+\&{if}\1\1\8\\{tok\_ptr}\?\1(\?\|z\?\2)+\?2\?>\?\\{max\_toks}\2\8\&{then}\6
+\\{overflow}\?\1(\?\.{"token"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{tok\_mem}\?\1(\?\|z\?,\39\?\\{tok\_ptr}\?\1(\?\|z\?\2)\2)\K\?\|x\?/%
+\bn{8}{400}\?;\C{this could be done by a shift command}\6
+\\{tok\_mem}\?\1(\?\|z\?,\39\?\\{tok\_ptr}\?\1(\?\|z\?\2)+\?1\?\2)\K\?\|x\?%
+\mathbin{\&{mod}}\bn{8}{400}\?;\C{this could be done by a logical and}\6
+\\{tok\_ptr}\?\1(\?\|z\?\2)\K\?\\{tok\_ptr}\?\1(\?\|z\?\2)+\?2;\2\6
+\&{end}\8\\{store\_two\_bytes};\par
+\fi
+
+\N75.  Stacks for output.
+Let's make sure that our data structures contain enough information to
+produce the entire \ADA\ program as desired, by working next on the
+algorithms that actually do produce that program.
+
+\fi
+
+\M76. The output process uses a stack to keep track of what is going on at
+different ``levels'' as the macros are being expanded.
+Entries on this stack have five parts:
+
+\yskip\hang \\{end\_field} is the \\{tok\_mem} location where the replacement
+text of a particular level will end;
+
+\hang \\{byte\_field} is the \\{tok\_mem} location from which the next token
+on a particular level will be read;
+
+\hang \\{name\_field} points to the name corresponding to a particular level;
+
+\hang \\{repl\_field} points to the replacement text currently being read
+at a particular level.
+
+\hang \\{mod\_field} is the module number, or zero if this is a macro.
+
+\yskip\noindent The current values of these five quantities are referred to
+quite frequently, so they are stored in a separate place instead of in
+the \\{stack} array. We call the current values \\{cur\_end}, \\{cur\_byte},
+\\{cur\_name}, \\{cur\_repl}, and \\{cur\_mod}.
+
+The global variable \\{stack\_ptr} tells how many levels of output are
+currently in progress. The end of all output occurs when the stack is
+empty, i.e., when \\{stack\_ptr}\?=\?0.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\&{subtype}\8\\{mod\_range}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to%
+\bn{8}{27777}\?;\6
+\&{type}\8\\{output\_state}\8\&{is}\8\1\6
+\&{record}\1\6
+\\{end\_field}\?:\?\\{sixteen\_bits};\C{ending location of replacement text}\6
+\\{byte\_field}\?:\?\\{sixteen\_bits};\C{present location within replacement
+text}\6
+\\{name\_field}\?:\?\\{name\_pointer};\C{\\{byte\_start} index for text being
+output}\6
+\\{repl\_field}\?:\?\\{text\_pointer};\C{\\{tok\_start} index for text being
+output}\6
+\\{mod\_field}\?:\?\\{mod\_range};\C{module number or zero if not a module}\2\6
+\2\&{end}\8\&{record};\7
+\\{cur\_state}\?:\?\\{output\_state};\C{\\{cur\_end}, \\{cur\_byte}, \\{cur%
+\_name}, \\{cur\_repl}}\6
+\\{stack}\?:\1\&{array}\8\1(\?1\?\to\?\\{stack\_size}\?\2)\2\8\&{of}\?\8%
+\\{output\_state};\C{info for non-current levels}\6
+\\{stack\_ptr}\?:\?\p{INTEGER}\8\&{range}\80\?\to\?\\{stack\_size};\C{first
+unused location in the output state stack}\7
+\\{cur\_end}\?:\?\\{sixteen\_bits}\8\&{renames}\8\\{cur\_state}\?.\?\\{end%
+\_field};\C{current ending location in \\{tok\_mem}}\6
+\\{cur\_byte}\?:\?\\{sixteen\_bits}\8\&{renames}\8\\{cur\_state}\?.\?\\{byte%
+\_field};\C{location of next output byte in \\{tok\_mem}}\6
+\\{cur\_name}\?:\?\\{name\_pointer}\8\&{renames}\8\\{cur\_state}\?.\?\\{name%
+\_field};\C{pointer to current name being expanded}\6
+\\{cur\_repl}\?:\?\\{text\_pointer}\8\&{renames}\8\\{cur\_state}\?.\?\\{repl%
+\_field};\C{pointer to current replacement text}\6
+\\{cur\_mod}\?:\?\\{mod\_range}\8\&{renames}\8\\{cur\_state}\?.\?\\{mod%
+\_field};\C{current module number being expanded}\par
+\fi
+
+\M77. It is convenient to keep a global variable \\{zo} equal to \\{cur\_repl}%
+\?\mathbin{\&{mod}}\?\\{zz}.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{zo}\?:\?\\{z\_range};\C{the segment of \\{tok\_mem} from which output
+                      is coming}\par
+\fi
+
+\M78. Parameters must also be stacked. They are placed in \\{tok\_mem} just
+above
+the other replacement texts, and dummy parameter `names' are placed in
+\\{byte\_start} just after the other names. The variables \\{text\_ptr} and
+\\{tok\_ptr}\?(\?\|z\?)\? essentially serve as parameter stack pointers during
+the output
+phase, so there is no need for a separate data structure to handle this
+problem.
+
+\fi
+
+\M79. There is an implicit stack corresponding to meta-comments that are output
+via \.{@\{} and \.{@\}}. But this stack need not be represented in detail,
+because we only need to know whether it is empty or not. A global variable
+\\{brace\_level} tells how many items would be on this stack if it were
+present.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{brace\_level}\?:\?\\{eight\_bits};\C{current depth of $\.{@\{}\ldots\.{@\}}$
+nesting}\par
+\fi
+
+\M80. To get the output process started, we will perform the following
+initialization steps. We may assume that \\{text\_link}\?(\?0\?)\? is nonzero,
+since it
+points to the \ADA\ text in the first unnamed module that generates code; if
+there are no such modules, there is nothing to output, and an error message
+will have been generated before we do any of the initialization.
+
+\Y\P\?\4\X80:Initialize the output stacks\X\S\?\6
+\\{stack\_ptr}\?\K\?1;\5
+\\{brace\_level}\?\K\?0;\5
+\\{cur\_name}\?\K\?0;\5
+\\{cur\_repl}\?\K\?\\{text\_link}\?\1(\?0\?\2)\?;\5
+\\{zo}\?\K\?\\{cur\_repl}\?\mathbin{\&{mod}}\?\\{zz};\5
+\\{cur\_byte}\?\K\?\\{tok\_start}\?\1(\?\\{cur\_repl}\?\2)\?;\5
+\\{cur\_end}\?\K\?\\{tok\_start}\?\1(\?\\{cur\_repl}\?+\?\\{zz}\?\2)\?;\5
+\\{cur\_mod}\?\K\?0;\par
+\U section~100.\fi
+
+\M81. When the replacement text for name \|p is to be inserted into the output,
+the following subroutine is called to save the old level of output and get
+the new one going.
+
+\Y\P\?\4\X81:Procedures in \\{output\_phase}\X\S\?\6
+\&{procedure}\8\1\\{push\_level}\?(\1\?\|p\?:\?\\{name\_pointer}\?\2)\?\2\8%
+\&{is}\8\C{suspends the current level}\1\6
+\4\&{begin}\6
+\&{if}\1\1\8\\{stack\_ptr}\?=\?\\{stack\_size}\2\8\&{then}\6
+\\{overflow}\?\1(\?\.{"stack"}\?\2)\?;\6
+\4\&{else}\6
+\\{stack}\?\1(\?\\{stack\_ptr}\?\2)\K\?\\{cur\_state};\C{save \\{cur\_end}, %
+\\{cur\_byte}, etc.}\6
+\\{incr}\?\1(\?\\{stack\_ptr}\?\2)\?;\5
+\\{cur\_name}\?\K\?\|p;\5
+\\{cur\_repl}\?\K\?\\{equiv}\?\1(\?\|p\?\2)\?;\5
+\\{zo}\?\K\?\\{cur\_repl}\?\mathbin{\&{mod}}\?\\{zz};\5
+\\{cur\_byte}\?\K\?\\{tok\_start}\?\1(\?\\{cur\_repl}\?\2)\?;\5
+\\{cur\_end}\?\K\?\\{tok\_start}\?\1(\?\\{cur\_repl}\?+\?\\{zz}\?\2)\?;\5
+\\{cur\_mod}\?\K\?0;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\\{push\_level};\par
+\A sections~82, 84, 94, 96, 98, 101, and~114.
+\U section~6\*.\fi
+
+\M82. When we come to the end of a replacement text, the \\{pop\_level}
+subroutine
+does the right thing: It either moves to the continuation of this replacement
+text or returns the state to the most recently stacked level. Part of this
+subroutine, which updates the parameter stack, will be given later when we
+study the parameter stack in more detail.
+
+\Y\P\?\4\X81:Procedures in \\{output\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{pop\_level}\2\8\&{is}\8\C{do this when \\{cur\_byte}
+reaches \\{cur\_end}}\1\6
+\4\&{begin}\6
+\&{if}\1\1\8\\{text\_link}\?\1(\?\\{cur\_repl}\?\2)=\?0\2\8\&{then}\C{end of
+macro expansion}\6
+\&{if}\1\1\8\\{ilk}\?\1(\?\\{cur\_name}\?\2)=\?\\{parametric}\2\8\&{then}\6
+\X88:Remove a parameter from the parameter stack\X;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{elsif}\1\8\\{text\_link}\?\1(\?\\{cur\_repl}\?\2)<\?\\{module\_flag}\2\8%
+\&{then}\C{link to a continuation}\6
+\\{cur\_repl}\?\K\?\\{text\_link}\?\1(\?\\{cur\_repl}\?\2)\?;\C{we will stay on
+the same level}\6
+\\{zo}\?\K\?\\{cur\_repl}\?\mathbin{\&{mod}}\?\\{zz};\5
+\\{cur\_byte}\?\K\?\\{tok\_start}\?\1(\?\\{cur\_repl}\?\2)\?;\5
+\\{cur\_end}\?\K\?\\{tok\_start}\?\1(\?\\{cur\_repl}\?+\?\\{zz}\?\2)\?;\6
+\&{return};\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{decr}\?\1(\?\\{stack\_ptr}\?\2)\?;\C{we will go down to the previous level}\6
+\&{if}\1\1\8\\{stack\_ptr}\?>\?0\2\8\&{then}\6
+\\{cur\_state}\?\K\?\\{stack}\?\1(\?\\{stack\_ptr}\?\2)\?;\5
+\\{zo}\?\K\?\\{cur\_repl}\?\mathbin{\&{mod}}\?\\{zz};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\\{pop\_level};\par
+\fi
+
+\M83. The heart of the output procedure is the \\{get\_output} routine, which
+produces the next token of output that is not a reference to a macro. This
+procedure handles all the stacking and unstacking that is necessary. It
+returns the value \\{module\_number} if the next output begins or ends the
+replacement text of some module, in which case \\{cur\_val} is that module's
+number (if beginning) or the negative of that value (if ending). The
+procedure also returns the value \\{identifier} if the next output is an
+identifier of length two or more, in which case \\{cur\_val} points to that
+identifier name.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{module\_number}\?:\?\&{constant}\8\\{sixteen\_bits}\?\K\bn{8}{201}\?;\C{code
+returned by \\{get\_output} for module numbers}\6
+\\{identifier}\?:\?\&{constant}\8\\{sixteen\_bits}\?\K\bn{8}{202}\?;\C{code
+returned by \\{get\_output} for identifiers}\7
+\\{cur\_val}\?:\?\p{INTEGER};\C{additional information corresponding to output
+token}\par
+\fi
+
+\M84. If \\{get\_output} finds that no more output remains, it returns the
+value
+zero.
+
+\Y\P\?\4\X81:Procedures in \\{output\_phase}\X\mathrel{+}\S\?\6
+\&{function}\8\1\\{get\_output}\?\8\&{return}\?\8\\{sixteen\_bits}\2\8\&{is}\8%
+\C{returns next token after macro expansion}\1\6
+\|a\?:\?\\{sixteen\_bits};\C{value of current byte}\6
+\|b\?:\?\\{eight\_bits};\C{byte being copied}\6
+\\{bal}\?:\?\\{sixteen\_bits};\C{excess of \.( versus \.) while copying a
+parameter}\6
+\|k\?:\?\\{byte\_index};\C{index into \\{byte\_mem}}\6
+\|w\?:\?\\{w\_range};\C{segment of \\{byte\_mem}}\6
+\4\&{begin}\6
+\4\BL\\{restart}\EL\8\&{if}\1\1\8\\{stack\_ptr}\?=\?0\2\8\&{then}\6
+\?\&{return}\?\80;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{cur\_byte}\?=\?\\{cur\_end}\2\8\&{then}\6
+\\{cur\_val}\?\K-\?\\{cur\_mod};\5
+\\{pop\_level};\6
+\&{if}\1\1\8\\{cur\_val}\?=\?0\2\8\&{then}\6
+\&{goto}\8\\{restart};\2\6
+\&{end}\8\2\&{if}\1;\6
+\?\&{return}\?\8\\{module\_number};\2\6
+\&{end}\8\2\&{if}\1;\6
+\|a\?\K\?\\{tok\_mem}\?\1(\?\\{zo}\?,\39\?\\{cur\_byte}\?\2)\?;\5
+\\{incr}\?\1(\?\\{cur\_byte}\?\2)\?;\6
+\&{if}\1\1\8\|a\?<\bn{8}{200}\?\2\8\&{then}\C{one-byte token}\6
+\&{if}\1\1\8\|a\?=\?\\{param}\2\8\&{then}\6
+\X89:Start scanning current macro parameter, \&{goto}\8\\{restart}\X;\6
+\4\&{else}\6
+\?\&{return}\?\8\|a;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\|a\?\K\1(\?\|a\?-\bn{8}{200}\2)\ast\bn{8}{400}+\?\\{tok\_mem}\?\1(\?\\{zo}\?,%
+\39\?\\{cur\_byte}\?\2)\?;\5
+\\{incr}\?\1(\?\\{cur\_byte}\?\2)\?;\6
+\&{if}\1\1\8\|a\?<\bn{8}{24000}\?\2\8\&{then}\C{\?\bn{8}{24000}=(\bn{8}{250}-%
+\bn{8}{200})\ast\bn{8}{400}\?}\6
+\X86:Expand macro \|a and \&{return}, or \&{goto}\8\\{restart} if no output
+found\X;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\|a\?<\bn{8}{50000}\?\2\8\&{then}\C{\?\bn{8}{50000}=(\bn{8}{320}-%
+\bn{8}{200})\ast\bn{8}{400}\?}\6
+\X85:Expand module \|a\?-\bn{8}{24000}\?, \&{goto}\8\\{restart}\X;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{cur\_val}\?\K\?\|a\?-\bn{8}{50000}\?;\5
+\\{cur\_mod}\?\K\?\\{cur\_val};\5
+\?\&{return}\?\8\\{module\_number};\2\6
+\&{end}\8\\{get\_output};\par
+\fi
+
+\M85. The user may have forgotten to give any \ADA\ text for a module name,
+or the \ADA\ text may have been associated with a different name by mistake.
+
+\Y\P\?\4\X85:Expand module \|a\?-\bn{8}{24000}\?, \&{goto}\8\\{restart}\X\S\?\6
+\|a\?\K\?\|a\?-\bn{8}{24000}\?;\6
+\&{if}\1\1\8\\{equiv}\?\1(\?\|a\?\2)\I\?0\2\8\&{then}\6
+\\{push\_level}\?\1(\?\|a\?\2)\?;\6
+\4\&{elsif}\1\8\|a\?\I\?0\2\8\&{then}\6
+\\{print\_nl}\?\1(\?\.{"!\ Not\ present:\ <"}\?\2)\?;\5
+\\{print\_id}\?\1(\?\|a\?\2)\?;\5
+\\{print}\?\1(\?\.{">"}\?\2)\?;\5
+\\{error};\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{goto}\8\\{restart}\par
+\U section~84.\fi
+
+\M86. \P\?\X86:Expand macro \|a and \&{return}, or \&{goto}\8\\{restart} if no
+output found\X\S\?\6
+\&{case}\1\8\\{ilk}\?\1(\?\|a\?\2)\?\1\8\&{is}\8\6
+\4\&{when}\8\\{normal}\KR\6
+\\{cur\_val}\?\K\?\|a;\5
+\?\&{return}\?\8\\{identifier};\6
+\4\&{when}\8\\{simple}\KR\6
+\\{push\_level}\?\1(\?\|a\?\2)\?;\5
+\&{goto}\8\\{restart};\6
+\4\&{when}\8\\{parametric}\KR\6
+\X87:Put a parameter on the parameter stack, or \&{goto}\8\\{restart} if error
+occurs\X;\6
+\\{push\_level}\?\1(\?\|a\?\2)\?;\5
+\&{goto}\8\\{restart};\6
+\4\&{when}\8\&{others}\8\KR\6
+\\{confusion}\?\1(\?\.{"output"}\?\2)\?;\2\6
+\4\2\&{end}\8\&{case};\6
+\?\&{return}\?\8\|a\par
+\U section~84.\fi
+
+\M87. We come now to the interesting part, the job of putting a parameter on
+the parameter stack. First we pop the stack if necessary until getting to
+a level that hasn't ended. Then the next character must be a `\.(';
+and since parentheses are balanced on each level, the entire parameter must
+be present, so we can copy it without difficulty.
+
+\Y\P\?\4\X87:Put a parameter on the parameter stack, or \&{goto}\8\\{restart}
+if error occurs\X\S\?\6
+\1\&{while}\?\8\1(\?\\{cur\_byte}\?=\?\\{cur\_end}\?\2)\W\1(\?\\{stack\_ptr}\?>%
+\?0\?\2)\?\8\&{loop}\6
+\\{pop\_level};\2\6
+\&{end}\8\&{loop};\6
+\&{if}\1\1\?\8\1(\?\\{stack\_ptr}\?=\?0\?\2)\V\1(\?\\{tok\_mem}\?\1(\?\\{zo}\?,%
+\39\?\\{cur\_byte}\?\2)\I\?\H{(}\?\2)\?\2\8\&{then}\6
+\\{print\_nl}\?\1(\?\.{"!\ No\ parameter\ given\ for\ "}\?\2)\?;\5
+\\{print\_id}\?\1(\?\|a\?\2)\?;\5
+\\{error};\5
+\&{goto}\8\\{restart};\2\6
+\&{end}\8\2\&{if}\1;\6
+\X90:Copy the parameter into \\{tok\_mem}\X;\6
+\\{equiv}\?\1(\?\\{name\_ptr}\?\2)\K\?\\{text\_ptr};\5
+\\{ilk}\?\1(\?\\{name\_ptr}\?\2)\K\?\\{simple};\5
+\|w\?\K\?\\{name\_ptr}\?\mathbin{\&{mod}}\?\\{ww};\5
+\|k\?\K\?\\{byte\_ptr}\?\1(\?\|w\?\2)\?;\6
+\&{if}\1\1\8\\{name\_ptr}\?>\?\\{max\_names}\?-\?\\{ww}\2\8\&{then}\6
+\\{overflow}\?\1(\?\.{"name"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{byte\_start}\?\1(\?\\{name\_ptr}\?+\?\\{ww}\?\2)\K\?\|k;\5
+\\{incr}\?\1(\?\\{name\_ptr}\?\2)\?;\6
+\&{if}\1\1\8\\{text\_ptr}\?>\?\\{max\_texts}\?-\?\\{zz}\2\8\&{then}\6
+\\{overflow}\?\1(\?\.{"text"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{text\_link}\?\1(\?\\{text\_ptr}\?\2)\K\?0;\5
+\\{tok\_start}\?\1(\?\\{text\_ptr}\?+\?\\{zz}\?\2)\K\?\\{tok\_ptr}\?\1(\?\|z\?%
+\2)\?;\5
+\\{incr}\?\1(\?\\{text\_ptr}\?\2)\?;\5
+\|z\?\K\?\\{text\_ptr}\?\mathbin{\&{mod}}\?\\{zz}\par
+\U section~86.\fi
+
+\M88. The \\{pop\_level} routine undoes the effect of parameter-pushing when
+a parameter macro is finished:
+
+\Y\P\?\4\X88:Remove a parameter from the parameter stack\X\S\?\6
+\\{decr}\?\1(\?\\{name\_ptr}\?\2)\?;\5
+\\{decr}\?\1(\?\\{text\_ptr}\?\2)\?;\5
+\|z\?\K\?\\{text\_ptr}\?\mathbin{\&{mod}}\?\\{zz}; \6
+\&{stat}\1\6
+\&{if}\1\1\8\\{tok\_ptr}\?\1(\?\|z\?\2)>\?\\{max\_tok\_ptr}\?\1(\?\|z\?\2)\?\2%
+\8\&{then}\6
+\\{max\_tok\_ptr}\?\1(\?\|z\?\2)\K\?\\{tok\_ptr}\?\1(\?\|z\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{tats}\C{the maximum value of \\{tok\_ptr} occurs just before parameter
+popping}\6
+\\{tok\_ptr}\?\1(\?\|z\?\2)\K\?\\{tok\_start}\?\1(\?\\{text\_ptr}\?\2)\?\par
+\U section~82.\fi
+
+\M89. When a parameter occurs in a replacement text, we treat it as a simple
+macro in position (\\{name\_ptr}\?-\?1):
+
+\Y\P\?\4\X89:Start scanning current macro parameter, \&{goto}\8\\{restart}\X\S%
+\?\6
+\\{push\_level}\?\1(\?\\{name\_ptr}\?-\?1\?\2)\?;\5
+\&{goto}\8\\{restart}\par
+\U section~84.\fi
+
+\M90. Similarly, a \\{param} token encountered as we copy a parameter is
+converted
+into a simple macro call for \\{name\_ptr}\?-\?1. Some care is needed to handle
+cases like \\{macro}\?(\? \#; \\{print}\?(\?\.{"\#)"}\?)\? \?)\?; the \.{\#}
+token will have been
+changed to \\{param} outside of strings, but we still must distinguish `real'
+parentheses from those in strings.
+
+\Y\P\4\D\\{app\_repl}\?\1(\?\#\?\2)\S\?\6
+\&{if}\1\1\8\\{tok\_ptr}\?\1(\?\|z\?\2)=\?\\{max\_toks}\2\8\&{then}\6
+\\{overflow}\?\1(\?\.{"token"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{tok\_mem}\?\1(\?\|z\?,\39\?\\{tok\_ptr}\?\1(\?\|z\?\2)\2)\K\?\#;\5
+\\{incr}\?\1(\?\\{tok\_ptr}\?\1(\?\|z\?\2)\2)\?\par
+\Y\P\?\4\X90:Copy the parameter into \\{tok\_mem}\X\S\?\6
+\\{bal}\?\K\?1;\5
+\\{incr}\?\1(\?\\{cur\_byte}\?\2)\?;\C{skip the opening `\.('}\6
+\1\&{loop}\6
+\|b\?\K\?\\{tok\_mem}\?\1(\?\\{zo}\?,\39\?\\{cur\_byte}\?\2)\?;\5
+\\{incr}\?\1(\?\\{cur\_byte}\?\2)\?;\6
+\&{if}\1\1\8\|b\?=\?\\{param}\2\8\&{then}\6
+\\{store\_two\_bytes}\?\1(\?\\{name\_ptr}\?+\bn{8}{77777}\2)\?;\6
+\4\&{else}\6
+\&{if}\1\1\8\|b\?\G\bn{8}{200}\?\2\8\&{then}\6
+\\{app\_repl}\?\1(\?\|b\?\2)\?;\5
+\|b\?\K\?\\{tok\_mem}\?\1(\?\\{zo}\?,\39\?\\{cur\_byte}\?\2)\?;\5
+\\{incr}\?\1(\?\\{cur\_byte}\?\2)\?;\6
+\4\&{else}\6
+\&{case}\1\8\|b\1\8\&{is}\8\6
+\4\&{when}\8\H{(}\KR\6
+\\{incr}\?\1(\?\\{bal}\?\2)\?;\6
+\4\&{when}\8\H{)}\KR\6
+\\{decr}\?\1(\?\\{bal}\?\2)\?;\5
+\?\&{exit}\8\&{when}\?\8\\{bal}\?=\?0;\6
+\4\&{when}\8\\{character\_tok}\?\mathrel{\.|}\?\\{ascii\_tok}\KR\6
+\\{app\_repl}\?\1(\?\|b\?\2)\?;\5
+\|b\?\K\?\\{tok\_mem}\?\1(\?\\{zo}\?,\39\?\\{cur\_byte}\?\2)\?;\5
+\\{incr}\?\1(\?\\{cur\_byte}\?\2)\?;\6
+\4\&{when}\8\H{"}\KR\6
+\1\&{repeat}\6
+\\{app\_repl}\?\1(\?\|b\?\2)\?;\5
+\|b\?\K\?\\{tok\_mem}\?\1(\?\\{zo}\?,\39\?\\{cur\_byte}\?\2)\?;\5
+\\{incr}\?\1(\?\\{cur\_byte}\?\2)\?;\6
+\&{if}\1\1\8\|b\?=\?\H{"}\?\W\?\\{tok\_mem}\?\1(\?\\{zo}\?,\39\?\\{cur\_byte}\?%
+\2)=\?\H{"}\2\8\&{then}\6
+\\{app\_repl}\?\1(\?\H{"}\?\2)\?;\5
+\\{app\_repl}\?\1(\?\H{"}\?\2)\?;\5
+\|b\?\K\?\\{tok\_mem}\?\1(\?\\{zo}\?,\39\?\\{cur\_byte}\?+\?1\?\2)\?;\5
+\\{cur\_byte}\?\K\?\\{cur\_byte}\?+\?2;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{until}\?\8\1(\?\|b\?=\?\H{"}\?\2)\?;\C{copy string, don't change \\{bal}}\6
+\4\&{when}\8\&{others}\8\KR\6
+\&{null};\2\6
+\4\2\&{end}\8\&{case};\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{app\_repl}\?\1(\?\|b\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop}\par
+\U section~87.\fi
+
+\N91.  Producing the output.
+The \\{get\_output} routine above handles most of the complexity of output
+generation, but there are two further considerations that have a nontrivial
+effect on \.{ATANGLE}'s algorithms.
+
+First, we want to make sure that the output is broken into lines not
+exceeding \\{line\_length} characters per line, where these breaks occur at
+valid places (e.g., not in the middle of a string or a constant or an
+identifier, not between `\./' and `\.=', not at a `\.{@\&}' position
+where quantities are being joined together). Therefore we assemble the
+output into a buffer before deciding where the line breaks will appear.
+However, we make very little attempt to make ``logical'' line breaks that
+would enhance the readability of the output; people are supposed to read
+the input of \.{ATANGLE} or the \TeX ed output of \.{AWEAVE}, but not the
+tangled-up output. The only concession to readability is that a break after
+a semicolon will be made if possible, since commonly used ``pretty
+printing'' routines give better results in such cases.
+
+The following solution to these problems has been adopted: An array
+\\{out\_buf} contains characters that have been generated but not yet output,
+and there are three pointers into this array. One of these, \\{out\_ptr}, is
+the number of characters currently in the buffer, and we will have
+1\?\L\?\\{out\_ptr}\?\L\?\\{line\_length} most of the time. The second is %
+\\{break\_ptr},
+which is the largest value \?\L\?\\{out\_ptr} such that we are definitely
+entitled
+to end a line by outputting the characters \\{out\_buf}\?(\?1\?\to(\?\\{break%
+\_ptr}\?-\?1\?))\?;
+we will always have \\{break\_ptr}\?\L\?\\{line\_length}. Finally, \\{semi%
+\_ptr} is either
+zero or the largest known value of a legal break after a semicolon
+on the current line; we will always have \\{semi\_ptr}\?\L\?\\{break\_ptr}.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\&{subtype}\8\\{out\_buffer\_index}\8\&{is}\8\p{INTEGER}\8\&{range}\80\?\to\?%
+\\{out\_buf\_size};\6
+\\{out\_buf}\?:\?\\{buffer\_type}\?\1(\?\\{out\_buffer\_index}\?\2)\?;%
+\C{assembled characters}\6
+\\{out\_ptr}\?:\?\\{out\_buffer\_index};\C{first available place in \\{out%
+\_buf}}\6
+\\{break\_ptr}\?:\?\\{out\_buffer\_index};\C{last breaking place in \\{out%
+\_buf}}\6
+\\{semi\_ptr}\?:\?\\{out\_buffer\_index};\C{last semicolon breaking place in %
+\\{out\_buf}}\par
+\fi
+
+\M92. Besides having those three pointers,
+the output process is in one of several states:
+
+\yskip\hang \\{num\_or\_id} means that the last item in the buffer is a number
+or
+identifier, hence a blank space or line break must be inserted if the next
+item is also a number or identifier.
+
+\yskip\hang \\{unbreakable} means that the last item in the buffer was followed
+by the \.{@\&} operation that inhibits spaces between it and the next item.
+
+\yskip\hang \\{misc} means none of the above.
+
+\yskip\noindent
+In all states the last item in the buffer lies between \\{break\_ptr} and
+\\{out\_ptr}\?-\?1, inclusive.
+
+Beside the states there is a boolean variable, called \\{comment\_output},
+which is set true, if the material to be output is part of the meta-comments
+between `\.{@\{}' and `\.{@\}}' and therefore has to be preceded by
+`\.{--}'.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{misc}\?:\?\&{constant}\8\\{eight\_bits}\?\K\?0;\C{state associated with
+special characters}\6
+\\{num\_or\_id}\?:\?\&{constant}\8\\{eight\_bits}\?\K\?1;\C{state associated
+with numbers and identifiers}\6
+\\{unbreakable}\?:\?\&{constant}\8\\{eight\_bits}\?\K\?2;\C{state associated
+with \.{@\&}}\7
+\\{out\_state}\?:\?\\{eight\_bits};\C{current status of partial output}\6
+\\{comment\_output}\?:\?\p{BOOLEAN};\C{outputting meta-comment?}\par
+\fi
+
+\M93. During the output process, \\{line} will equal the number of the next
+line
+to be output.
+
+\Y\P\?\4\X93:Initialize the output buffer\X\S\?\6
+\\{out\_state}\?\K\?\\{misc};\5
+\\{out\_ptr}\?\K\?0;\5
+\\{break\_ptr}\?\K\?0;\5
+\\{semi\_ptr}\?\K\?0;\5
+\\{out\_buf}\?\1(\?0\?\2)\K\?0;\5
+\\{line}\?\K\?1;\5
+\\{comment\_output}\?\K\?\p{FALSE};\par
+\U section~100.\fi
+
+\M94. Here is a routine that is invoked when \\{out\_ptr}\?>\?\\{line\_length}
+or when it is time to flush out the final line. The \\{flush\_buffer} procedure
+often writes out the line up to the current \\{break\_ptr} position, then moves
+the
+remaining information to the front of \\{out\_buf}. However, it prefers to
+write only up to \\{semi\_ptr}, if the residual line won't be too long.
+
+\Y\P\4\D\\{check\_break}\?\S\?\6
+\&{if}\1\1\8\\{out\_ptr}\?>\?\\{line\_length}\2\8\&{then}\6
+\\{flush\_buffer}; \&{end} \&{if}\1\par
+\Y\P\?\4\X81:Procedures in \\{output\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{flush\_buffer}\2\8\&{is}\8\C{writes one line to output
+file}\1\6
+\|b\?:\?\\{out\_buffer\_index}\?\K\?\\{break\_ptr};\C{value of \\{break\_ptr}
+upon entry}\6
+\4\&{begin}\6
+\&{if}\1\1\8\\{comment\_output}\2\8\&{then}\6
+\p{TEXT\_IO}\?.\?\p{PUT}\?\1(\?\\{ada\_file}\?,\39\?\.{"--"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\?\8\1(\?\\{semi\_ptr}\?\I\?0\?\2)\W\1(\?\\{out\_ptr}\?-\?\\{semi%
+\_ptr}\?\L\?\\{line\_length}\?\2)\?\2\8\&{then}\6
+\\{break\_ptr}\?\K\?\\{semi\_ptr};\2\6
+\&{end}\8\2\&{if}\1;\6
+\1\&{for}\8\|k\?\in\?1\?\to\?\\{break\_ptr}\8\&{loop}\6
+\p{TEXT\_IO}\?.\?\p{PUT}\?\1(\?\\{ada\_file}\?,\39\?\\{xchr}\?\1(\?\\{out\_buf}%
+\?\1(\?\|k\?-\?1\?\2)\2)\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\\{new\_ln}\?\1(\?\\{ada\_file}\?\2)\?;\5
+\\{incr}\?\1(\?\\{line}\?\2)\?;\5
+\\{incr}\?\1(\?\\{f\_line}\?\2)\?;\6
+\&{if}\1\1\8\\{line}\?\mathbin{\&{mod}}\?100\?=\?0\2\8\&{then}\6
+\\{print}\?\1(\?\.{"."}\?\2)\?;\6
+\&{if}\1\1\8\\{line}\?\mathbin{\&{mod}}\?500\?=\?0\2\8\&{then}\6
+\\{print\_int}\?\1(\?\\{line}\?,\39\?1\?\2)\?;\5
+\\{update\_terminal};\C{progress report}\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{break\_ptr}\?<\?\\{out\_ptr}\2\8\&{then}\6
+\&{if}\1\1\8\\{out\_buf}\?\1(\?\\{break\_ptr}\?\2)=\?\H{\ }\2\8\&{then}\6
+\\{incr}\?\1(\?\\{break\_ptr}\?\2)\?;\C{drop space at break}\6
+\&{if}\1\1\8\\{break\_ptr}\?>\?\|b\2\8\&{then}\6
+\|b\?\K\?\\{break\_ptr};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{out\_buf}\?\1(\?0\?\to\?\\{out\_ptr}\?-\?\\{break\_ptr}\?-\?1\?\2)\K\?\\{out%
+\_buf}\?\1(\?\\{break\_ptr}\?\to\?\\{out\_ptr}\?-\?1\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{out\_ptr}\?\K\?\\{out\_ptr}\?-\?\\{break\_ptr};\5
+\\{break\_ptr}\?\K\?\|b\?-\?\\{break\_ptr};\5
+\\{semi\_ptr}\?\K\?0;\6
+\&{if}\1\1\8\\{out\_ptr}\?>\?\\{line\_length}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Long\ line\ must\ be\ truncated"}\?\2)\?;\6
+\\{out\_ptr}\?\K\?\\{line\_length};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\\{flush\_buffer};\par
+\fi
+
+\M95. \P\?\X95:Empty the last line from the buffer\X\S\?\6
+\\{break\_ptr}\?\K\?\\{out\_ptr};\5
+\\{semi\_ptr}\?\K\?0;\5
+\\{flush\_buffer};\6
+\&{if}\1\1\8\\{brace\_level}\?\I\?0\2\8\&{then}\6
+\\{new\_ln};\5
+\\{print}\?\1(\?\.{"!\ Program\ ended\ at\ brace\ level\ "}\?\2)\?;\5
+\\{print\_int}\?\1(\?\\{brace\_level}\?,\39\?1\?\2)\?;\5
+\\{error};\2\6
+\&{end}\8\2\&{if}\1;\par
+\U section~100.\fi
+
+\M96. Another simple and useful routine appends the decimal equivalent of
+a nonnegative integer to the output buffer.
+
+\Y\P\4\D\\{app}\?\1(\?\#\?\2)\S\?\\{out\_buf}\?\1(\?\\{out\_ptr}\?\2)\K\?\#; %
+\\{incr}\?\1(\?\\{out\_ptr}\?\2)\C{append a single character}\6
+\?\par
+\Y\P\?\4\X81:Procedures in \\{output\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{send\_val}\?(\1\?\|v\?:\?\p{INTEGER}\?\2)\?\2\8\&{is}\8%
+\C{puts \|v into buffer, assumes \|v\?\G\?0}\1\6
+\|k\?:\?\\{out\_buffer\_index}\?\K\?\\{out\_buf\_size};\C{index into \\{out%
+\_buf}}\6
+\|u\?:\?\p{INTEGER}\?\K\?\|v;\6
+\4\&{begin}\C{first we put the digits at the very end of \\{out\_buf}}\6
+\1\&{repeat}\6
+\\{out\_buf}\?\1(\?\|k\?\2)\K\?\|u\?\mathbin{\&{mod}}\?10;\5
+\|u\?\K\?\|u\?/\?10;\5
+\\{decr}\?\1(\?\|k\?\2)\?;\2\6
+\&{until}\?\8\1(\?\|u\?=\?0\?\2)\?;\6
+\1\&{repeat}\6
+\\{incr}\?\1(\?\|k\?\2)\?;\5
+\\{app}\?\1(\?\\{out\_buf}\?\1(\?\|k\?\2)+\?\H{0}\?\2)\?;\2\6
+\&{until}\?\8\1(\?\|k\?=\?\\{out\_buf\_size}\?\2)\?;\C{then we append them,
+most significant first}\2\6
+\&{end}\8\\{send\_val};\par
+\fi
+
+\M97. The output states are kept up to date by the \\{send\_out} procedure,
+which
+has two parameters: \|t tells the type of information being sent and
+\|v contains the information proper. Some information may also be passed
+in the array \\{out\_contrib}.
+
+\yskip\hang If \|t\?=\?\\{misc} then \|v is a character to be output.
+
+\hang If \|t\?=\?\\{str} then \|v is the length of a string or something like
+`\.{/=}' in \\{out\_contrib}.
+
+\hang If \|t\?=\?\\{ident} then \|v is the length of an identifier in \\{out%
+\_contrib}.
+
+\hang If \|t\?=\?\\{frac} then \|v is the length of a fraction and/or exponent
+in
+\\{out\_contrib}.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{str}\?:\?\&{constant}\8\\{eight\_bits}\?\K\?1;\C{\\{send\_out} code for a
+string}\6
+\\{ident}\?:\?\&{constant}\8\\{eight\_bits}\?\K\?2;\C{\\{send\_out} code for an
+identifier}\6
+\\{frac}\?:\?\&{constant}\8\\{eight\_bits}\?\K\?3;\C{\\{send\_out} code for a
+fraction}\7
+\\{out\_contrib}\?:\?\\{buffer\_type}\?\1(\?1\?\to\?\\{line\_length}\?\2)\?;%
+\C{a contribution to \\{out\_buf}}\par
+\fi
+
+\M98. A slightly subtle point in the following code is that the user may ask
+for a \\{join} operation (i.e., \.{@\&}) following whatever is being sent
+out.  We will see later that \\{join} is implemented in part by calling
+\\{send\_out}\?(\?\\{frac}\?,\?0\?)\?.
+
+\Y\P\?\4\X81:Procedures in \\{output\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{send\_out}\?(\?\|t\?:\?\\{eight\_bits};\?\,\35\1\?\|v\?:\?%
+\\{sixteen\_bits}\?\2)\?\2\8\&{is}\8\C{outputs \|v of type \|t}\1\6
+\4\&{begin}\6
+\X99:Get the buffer ready for appending the new information\X;\6
+\&{if}\1\1\8\|t\?\I\?\\{misc}\2\8\&{then}\6
+\1\&{for}\8\|k\?\in\?1\?\to\?\|v\8\&{loop}\6
+\\{app}\?\1(\?\\{out\_contrib}\?\1(\?\|k\?\2)\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\4\&{else}\6
+\\{app}\?\1(\?\|v\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{check\_break};\6
+\&{if}\1\1\?\8\1(\?\|t\?=\?\\{misc}\?\2)\W\1(\?\|v\?=\?\H{;}\?\2)\?\2\8\&{then}%
+\6
+\\{semi\_ptr}\?\K\?\\{out\_ptr};\5
+\\{break\_ptr}\?\K\?\\{out\_ptr};\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\|t\?\G\?\\{ident}\2\8\&{then}\6
+\\{out\_state}\?\K\?\\{num\_or\_id};\C{\|t\?=\?\\{ident} or \\{frac}}\6
+\4\&{else}\6
+\\{out\_state}\?\K\?\\{misc};\C{\|t\?=\?\\{str} or \\{misc}}\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\\{send\_out};\par
+\fi
+
+\M99. \P\?\X99:Get the buffer ready for appending the new information\X\S\?\6
+\4\BL\\{restart}\EL\8\&{case}\1\8\\{out\_state}\1\8\&{is}\8\6
+\4\&{when}\8\\{num\_or\_id}\KR\6
+\&{if}\1\1\8\|t\?\I\?\\{frac}\2\8\&{then}\6
+\\{break\_ptr}\?\K\?\\{out\_ptr};\6
+\&{if}\1\1\8\|t\?=\?\\{ident}\2\8\&{then}\6
+\\{app}\?\1(\?\H{\ }\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{when}\8\\{misc}\KR\6
+\&{if}\1\1\8\|t\?\I\?\\{frac}\2\8\&{then}\6
+\\{break\_ptr}\?\K\?\\{out\_ptr};\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{when}\8\&{others}\8\KR\6
+\&{null};\C{this is for \\{unbreakable} state}\2\6
+\4\2\&{end}\8\&{case}\par
+\U section~98.\fi
+
+\N100.  The big output switch.
+To complete the output process, we need a routine that takes the results
+of \\{get\_output} and feeds them to \\{send\_out} or \\{send\_val}.
+This procedure `\\{send\_the\_output}' will be invoked just once, as follows:
+
+\Y\P\?\4\X100:Phase II: Output the contents of the compressed tables\X\S\?\6
+\&{if}\1\1\8\\{text\_link}\?\1(\?0\?\2)=\?0\2\8\&{then}\6
+\\{print\_nl}\?\1(\?\.{"!\ No\ output\ was\ specified."}\?\2)\?;\5
+\\{mark\_harmless};\6
+\4\&{else}\6
+\\{print\_nl}\?\1(\?\.{"Writing\ the\ output\ file"}\?\2)\?;\5
+\\{update\_terminal};\6
+\X80:Initialize the output stacks\X\6
+\X93:Initialize the output buffer\X\6
+\\{send\_the\_output};\6
+\X95:Empty the last line from the buffer\X\6
+\\{print\_nl}\?\1(\?\.{"Done."}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~114.\fi
+
+\M101. A many-way switch is used to send the output:
+
+\Y\P\?\4\X81:Procedures in \\{output\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{send\_the\_output}\2\8\&{is}\8\1\6
+\\{cur\_char}\?:\?\\{eight\_bits};\C{the latest character received}\6
+\|k\?:\?\p{INTEGER}\8\&{range}\80\?\to\?\\{line\_length};\C{index into \\{out%
+\_contrib}}\6
+\|j\?:\?\\{byte\_index};\C{index into \\{byte\_mem}}\6
+\|w\?:\?\\{w\_range};\C{segment of \\{byte\_mem}}\6
+\4\&{begin}\6
+\1\&{while}\8\\{stack\_ptr}\?>\?0\8\&{loop}\6
+\\{cur\_char}\?\K\?\\{get\_output};\6
+\4\BL\\{reswitch}\EL\8\&{case}\1\8\\{cur\_char}\1\8\&{is}\8\6
+\4\&{when}\80\KR\8\&{null};\C{this case might arise if output ends
+unexpectedly}\6
+\hbox{\4}\X104:Cases related to identifiers\X\6
+\hbox{\4}\X110:Cases related to constants, possibly leading to \\{get%
+\_fraction} or \\{reswitch}\X\6
+\hbox{\4}\X102:Cases like \.{/=} and \.{:=}\X\6
+\4\&{when}\8\H{"}\KR\8\X105:Send a string, \&{goto}\8\\{reswitch}\X;\6
+\4\&{when}\?\8\X103:Other printable characters\X\?\KR\8\\{send\_out}\?\1(\?%
+\\{misc}\?,\39\?\\{cur\_char}\?\2)\?;\6
+\hbox{\4}\X112:Cases involving \.{@\{} and \.{@\}}\X\6
+\4\&{when}\8\\{join}\KR\8\\{send\_out}\?\1(\?\\{frac}\?,\39\?0\?\2)\?;\5
+\\{out\_state}\?\K\?\\{unbreakable};\6
+\4\&{when}\8\\{verbatim}\KR\8\X106:Send verbatim string\X;\6
+\4\&{when}\8\\{output\_tok}\KR\8\X108:Get the \\{file\_name} and redirect
+further output\X;\6
+\4\&{when}\8\\{force\_line}\KR\8\X113:Force a line break\X;\6
+\4\&{when}\8\&{others}\8\KR\6
+\\{new\_ln};\5
+\\{print}\?\1(\?\.{"!\ Can\'t\ output\ ASCII\ code\ "}\?\2)\?;\5
+\\{print\_int}\?\1(\?\\{cur\_char}\?,\39\?1\?\2)\?;\5
+\\{error};\2\6
+\4\2\&{end}\8\&{case};\6
+\&{goto}\8\\{continue};\6
+\4\BL\\{get\_fraction}\EL\8\X111:Special code to finish real constants\X;\6
+\4\BL\\{continue}\EL\8\&{null};\2\6
+\&{end}\8\&{loop};\2\6
+\&{end}\8\\{send\_the\_output};\par
+\fi
+
+\M102. \P\?\X102:Cases like \.{/=} and \.{:=}\X\S\?\6
+\4\&{when}\8\\{and\_sign}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?3\?\2)\K\1(\?\H{A}%
+\?,\39\?\H{N}\?,\39\?\H{D}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{ident}\?,\39\?3\?\2)\?;\6
+\4\&{when}\8\\{not\_sign}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?3\?\2)\K\1(\?\H{N}%
+\?,\39\?\H{O}\?,\39\?\H{T}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{ident}\?,\39\?3\?\2)\?;\6
+\4\&{when}\8\\{set\_element\_sign}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)\K%
+\1(\?\H{I}\?,\39\?\H{N}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{ident}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{or\_sign}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)\K\1(\?\H{O}%
+\?,\39\?\H{R}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{ident}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{left\_arrow}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)\K\1(\?%
+\H{:}\?,\39\?\H{=}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{not\_equal}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)\K\1(\?%
+\H{/}\?,\39\?\H{=}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{less\_or\_equal}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)\K\1(%
+\?\H{<}\?,\39\?\H{=}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{greater\_or\_equal}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)\K%
+\1(\?\H{>}\?,\39\?\H{=}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{equivalence\_sign}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)\K%
+\1(\?\H{=}\?,\39\?\H{=}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{double\_dot}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)\K\1(\?%
+\H{.}\?,\39\?\H{.}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{right\_arrow}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)\K\1(\?%
+\H{=}\?,\39\?\H{>}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{box\_sign}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)\K\1(\?\H{<}%
+\?,\39\?\H{>}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{left\_label\_bracket}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)%
+\K\1(\?\H{<}\?,\39\?\H{<}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{right\_label\_bracket}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)%
+\K\1(\?\H{>}\?,\39\?\H{>}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{double\_star}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)\K\1(\?%
+\H{*}\?,\39\?\H{*}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\4\&{when}\8\\{character\_tok}\KR\8\\{out\_contrib}\?\1(\?1\?\to\?3\?\2)\K\1(\?%
+\H{\'}\?,\39\?\\{get\_output}\?,\39\?\H{\'}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?3\?\2)\?;\6
+\4\&{when}\8\\{ascii\_tok}\KR\6
+\&{if}\1\1\8\\{out\_state}\?=\?\\{num\_or\_id}\2\8\&{then}\6
+\\{send\_out}\?\1(\?\\{misc}\?,\39\?\H{\ }\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{send\_val}\?\1(\?\\{get\_output}\?\2)\?;\5
+\\{out\_state}\?\K\?\\{num\_or\_id};\par
+\U section~101.\fi
+
+\M103. Please don't ask how all of the following characters can actually get
+through \.{ATANGLE} outside of strings. It seems that \H{\{}
+cannot actually occur at this point of the program, but it has
+been included just in case \.{ATANGLE} changes.
+
+\Y\P\?\4\X103:Other printable characters\X\S\?\6
+\H{!}\?\mathrel{\.|}\?\H{\#}\?\mathrel{\.|}\?\H{\$}\?\mathrel{\.|}\?\H{\%}\?%
+\mathrel{\.|}\?\H{\&}\?\mathrel{\.|}\?\H{\'}\?\mathrel{\.|}\?\H{(}\?\mathrel{%
+\.|}\?\H{)}\?\mathrel{\.|}\?\H{*}\?\mathrel{\.|}\?\H{,}\?\mathrel{\.|}\?\H{/}\?%
+\mathrel{\.|}\?\H{:}\?\mathrel{\.|}\?\H{;}\?\mathrel{\.|}\?\H{<}\?\mathrel{\.|}%
+\?\H{=}\?\mathrel{\.|}\?\H{>}\?\mathrel{\.|}\?\H{?}\?\mathrel{\.|}\?\H{@}\?%
+\mathrel{\.|}\?\H{[}\?\mathrel{\.|}\?\H{\\}\?\mathrel{\.|}\?\H{]}\?\mathrel{%
+\.|}\?\H{\^}\?\mathrel{\.|}\?\H{\_}\?\mathrel{\.|}\?\H{\`}\?\mathrel{\.|}\?\H{%
+\{}\?\mathrel{\.|}\?\H{|}\?\mathrel{\.|}\?\H{+}\?\mathrel{\.|}\?\H{-}\?\6
+\?\par
+\U section~101.\fi
+
+\M104. Single-character identifiers represent themselves, while longer ones
+appear in \\{byte\_mem}. All must be converted to uppercase,
+with underlines removed. Extremely long identifiers must be chopped.
+
+\Y\P\?\4\X104:Cases related to identifiers\X\S\?\6
+\4\&{when}\8\H{A}\?\to\?\H{Z}\KR\8\\{out\_contrib}\?\1(\?1\?\2)\K\?\\{cur%
+\_char};\5
+\\{send\_out}\?\1(\?\\{ident}\?,\39\?1\?\2)\?;\6
+\4\&{when}\8\H{a}\?\to\?\H{z}\KR\8\\{out\_contrib}\?\1(\?1\?\2)\K\?\\{cur%
+\_char}\?-\bn{8}{40}\?;\5
+\\{send\_out}\?\1(\?\\{ident}\?,\39\?1\?\2)\?;\6
+\4\&{when}\8\\{identifier}\KR\8\|k\?\K\?0;\5
+\|j\?\K\?\\{byte\_start}\?\1(\?\\{cur\_val}\?\2)\?;\5
+\|w\?\K\?\\{cur\_val}\?\mathbin{\&{mod}}\?\\{ww};\6
+\1\&{while}\?\8\1(\?\|k\?<\?\\{max\_id\_length}\?\2)\W\1(\?\|j\?<\?\\{byte%
+\_start}\?\1(\?\\{cur\_val}\?+\?\\{ww}\?\2)\2)\?\8\&{loop}\6
+\\{incr}\?\1(\?\|k\?\2)\?;\5
+\\{out\_contrib}\?\1(\?\|k\?\2)\K\?\\{byte\_mem}\?\1(\?\|w\?,\39\?\|j\?\2)\?;\5
+\\{incr}\?\1(\?\|j\?\2)\?;\6
+\&{if}\1\1\8\\{out\_contrib}\?\1(\?\|k\?\2)\G\?\H{a}\2\8\&{then}\6
+\\{out\_contrib}\?\1(\?\|k\?\2)\K\?\\{out\_contrib}\?\1(\?\|k\?\2)-\bn{8}{40}%
+\?;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop};\6
+\\{send\_out}\?\1(\?\\{ident}\?,\39\?\|k\?\2)\?;\par
+\U section~101.\fi
+
+\M105. After sending a string, we need to look ahead at the next character, in
+order
+to see if there were two consecutive single-quote marks. Afterwards we go to
+\\{reswitch} to process the next character.
+
+\Y\P\?\4\X105:Send a string, \&{goto}\8\\{reswitch}\X\S\?\6
+\|k\?\K\?1;\5
+\\{out\_contrib}\?\1(\?1\?\2)\K\?\H{"};\6
+\1\&{repeat}\6
+\&{if}\1\1\8\|k\?<\?\\{line\_length}\2\8\&{then}\6
+\\{incr}\?\1(\?\|k\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{out\_contrib}\?\1(\?\|k\?\2)\K\?\\{get\_output};\2\6
+\&{until}\?\8\1(\1(\?\\{out\_contrib}\?\1(\?\|k\?\2)=\?\H{"}\?\2)\V\1(\?%
+\\{stack\_ptr}\?=\?0\?\2)\2)\?;\6
+\&{if}\1\1\8\|k\?=\?\\{line\_length}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ String\ too\ long"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{send\_out}\?\1(\?\\{str}\?,\39\?\|k\?\2)\?;\5
+\\{cur\_char}\?\K\?\\{get\_output};\6
+\&{if}\1\1\8\\{cur\_char}\?=\?\H{"}\2\8\&{then}\6
+\\{out\_state}\?\K\?\\{unbreakable};\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{goto}\8\\{reswitch}\par
+\U section~101.\fi
+
+\M106. Sending a verbatim string is similar, but we don't have to look ahead.
+
+\Y\P\?\4\X106:Send verbatim string\X\S\?\6
+\|k\?\K\?0;\6
+\1\&{repeat}\6
+\&{if}\1\1\8\|k\?<\?\\{line\_length}\2\8\&{then}\6
+\\{incr}\?\1(\?\|k\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{out\_contrib}\?\1(\?\|k\?\2)\K\?\\{get\_output};\2\6
+\&{until}\?\8\1(\1(\?\\{out\_contrib}\?\1(\?\|k\?\2)=\?\\{verbatim}\?\2)\V\1(\?%
+\\{stack\_ptr}\?=\?0\?\2)\2)\?;\6
+\&{if}\1\1\8\|k\?=\?\\{line\_length}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Verbatim\ string\ too\ long"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{send\_out}\?\1(\?\\{str}\?,\39\?\|k\?-\?1\?\2)\?\par
+\U section~101.\fi
+
+\M107. Getting the new output file name is similar to sending a verbatim
+string;
+if there is a legal name, the file will be created and the variables
+\\{file\_name} and \\{fn\_length} will be set accordingly and \\{f\_line} is
+set
+to~1.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{file\_name}\?:\?\p{STRING}\?\1(\?1\?\to\?80\?\2)\?;\6
+\\{fn\_length}\?:\?\p{INTEGER}\8\&{range}\81\?\to\?80;\6
+\\{f\_line}\?:\?\p{INTEGER};\par
+\fi
+
+\M108. Before we redirect output we will empty the output buffer.
+
+\Y\P\?\4\X108:Get the \\{file\_name} and redirect further output\X\S\?\6
+\X113:Force a line break\X;\6
+\|k\?\K\?0;\6
+\1\&{loop}\6
+\\{cur\_char}\?\K\?\\{get\_output};\5
+\?\&{exit}\8\&{when}\8\1(\?\\{cur\_char}\?=\?\\{output\_tok}\?\2)\V\1(\?%
+\\{stack\_ptr}\?=\?0\?\2)\?;\6
+\\{incr}\?\1(\?\|k\?\2)\?;\5
+\\{file\_name}\?\1(\?\|k\?\2)\K\?\\{xchr}\?\1(\?\\{cur\_char}\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\&{if}\1\1\8\|k\?>\?0\2\8\&{then}\6
+\p{TEXT\_IO}\?.\?\p{CLOSE}\?\1(\?\\{ada\_file}\?\2)\?;\5
+\\{fn\_length}\?\K\?\|k;\6
+\&{if}\1\1\?\8\R\?\\{create\_ada\_file}\?\1(\?\\{file\_name}\?\1(\?1\?\to\?\|k%
+\?\2)\2)\?\2\8\&{then}\6
+\\{fatal\_error}\?\1(\?\.{"!\ Could\ not\ open\ file\ \`"}\?\mathbin{\.\&}\?%
+\\{file\_name}\?\1(\?1\?\to\?\|k\?\2)\mathbin{\.\&}\?\.{"\'."}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{f\_line}\?\K\?1;\6
+\4\&{else}\6
+\\{err\_print}\?\1(\?\.{"!\ File\ name\ should\ have\ length\ >\ 0"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~101.\fi
+
+\M109. In the cases related to numeric literals there is some care needed,
+because of the ``based literal'', which \ADA\ supports; a global
+variable \\{scanning\_based\_number} tells whether there is more to do.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{scanning\_based\_number}\?:\?\p{BOOLEAN}\?\K\?\p{FALSE};\par
+\fi
+
+\M110. \P\?\X110:Cases related to constants, possibly leading to \\{get%
+\_fraction} or \\{reswitch}\X\S\?\6
+\4\&{when}\8\H{0}\?\to\?\H{9}\KR\6
+\\{scanning\_based\_number}\?\K\?\p{FALSE};\5
+\|k\?\K\?0;\6
+\1\&{loop}\6
+\&{if}\1\1\8\\{cur\_char}\?\I\?\H{\_}\2\8\&{then}\6
+\\{incr}\?\1(\?\|k\?\2)\?;\5
+\\{out\_contrib}\?\1(\?\|k\?\2)\K\?\\{cur\_char};\5
+\\{cur\_char}\?\K\?\\{get\_output};\6
+\&{if}\1\1\8\\{cur\_char}\?=\?\H{\#}\2\8\&{then}\6
+\\{scanning\_based\_number}\?\K\R\?\\{scanning\_based\_number};\6
+\4\&{else}\6
+\?\&{exit}\8\&{when}\8\1(\1(\R\?\\{scanning\_based\_number}\?\2)\W\1(\?\\{cur%
+\_char}\?\notin\?\H{0}\?\to\?\H{9}\?\2)\W\1(\?\\{cur\_char}\?\I\?\H{\_}\?\2)\2)%
+\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{else}\6
+\\{cur\_char}\?\K\?\\{get\_output};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop};\6
+\\{send\_out}\?\1(\?\\{ident}\?,\39\?\|k\?\2)\?;\5
+\|k\?\K\?0;\6
+\&{if}\1\1\8\\{cur\_char}\?=\?\H{e}\2\8\&{then}\6
+\\{cur\_char}\?\K\?\H{E};\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{cur\_char}\?=\?\H{E}\2\8\&{then}\6
+\&{goto}\8\\{get\_fraction};\6
+\4\&{else}\6
+\&{goto}\8\\{reswitch};\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{when}\8\H{.}\KR\6
+\|k\?\K\?1;\5
+\\{out\_contrib}\?\1(\?1\?\2)\K\?\H{.};\5
+\\{cur\_char}\?\K\?\\{get\_output};\6
+\&{if}\1\1\8\\{cur\_char}\?=\?\H{.}\2\8\&{then}\6
+\\{out\_contrib}\?\1(\?2\?\2)\K\?\H{.};\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\4\&{elsif}\1\8\\{cur\_char}\?\in\?\H{0}\?\to\?\H{9}\2\8\&{then}\6
+\&{goto}\8\\{get\_fraction};\6
+\4\&{else}\6
+\\{send\_out}\?\1(\?\\{misc}\?,\39\?\H{.}\?\2)\?;\5
+\&{goto}\8\\{reswitch};\2\6
+\&{end}\8\2\&{if}\1;\par
+\U section~101.\fi
+
+\M111. The following code appears at label `\\{get\_fraction}', when we want to
+scan to the end of a real constant. The first \|k characters of a fraction
+have already been placed in \\{out\_contrib}, and \\{cur\_char} is the next
+character.
+
+\Y\P\?\4\X111:Special code to finish real constants\X\S\?\6
+\1\&{repeat}\6
+\&{if}\1\1\8\|k\?<\?\\{line\_length}\2\8\&{then}\6
+\\{incr}\?\1(\?\|k\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{out\_contrib}\?\1(\?\|k\?\2)\K\?\\{cur\_char};\5
+\\{cur\_char}\?\K\?\\{get\_output};\6
+\&{if}\1\1\?\8\1(\?\\{out\_contrib}\?\1(\?\|k\?\2)=\?\H{E}\?\2)\W\1(\1(\?\\{cur%
+\_char}\?=\?\H{+}\?\2)\V\1(\?\\{cur\_char}\?=\?\H{-}\?\2)\2)\?\2\8\&{then}\6
+\&{if}\1\1\8\|k\?<\?\\{line\_length}\2\8\&{then}\6
+\\{incr}\?\1(\?\|k\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{out\_contrib}\?\1(\?\|k\?\2)\K\?\\{cur\_char};\5
+\\{cur\_char}\?\K\?\\{get\_output};\6
+\4\&{elsif}\1\8\\{cur\_char}\?=\?\H{e}\2\8\&{then}\6
+\\{cur\_char}\?\K\?\H{E};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{until}\?\8\1(\1(\?\\{cur\_char}\?\I\?\H{E}\?\2)\W\1(\?\\{cur\_char}\?\notin%
+\?\H{0}\?\to\?\H{9}\?\2)\2)\?;\6
+\&{if}\1\1\8\|k\?=\?\\{line\_length}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Fraction\ too\ long"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{send\_out}\?\1(\?\\{frac}\?,\39\?\|k\?\2)\?;\5
+\&{goto}\8\\{reswitch}\par
+\U section~101.\fi
+
+\M112. Here the variable \\{comment\_output} is set corresponding to the value
+of
+\\{brace\_level}; further after each comment a line break is inserted.
+
+\Y\P\?\4\X112:Cases involving \.{@\{} and \.{@\}}\X\S\?\6
+\4\&{when}\8\\{begin\_comment}\KR\6
+\X113:Force a line break\X;\6
+\\{incr}\?\1(\?\\{brace\_level}\?\2)\?;\5
+\\{comment\_output}\?\K\?\p{TRUE};\6
+\4\&{when}\8\\{end\_comment}\KR\6
+\&{if}\1\1\8\\{brace\_level}\?>\?0\2\8\&{then}\6
+\\{decr}\?\1(\?\\{brace\_level}\?\2)\?;\6
+\&{if}\1\1\8\\{brace\_level}\?=\?0\2\8\&{then}\6
+\X113:Force a line break\X;\6
+\\{comment\_output}\?\K\?\p{FALSE};\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{else}\6
+\\{err\_print}\?\1(\?\.{"!\ Extra\ @\}"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{when}\8\\{module\_number}\KR\6
+\\{semi\_ptr}\?\K\?0;\5
+\\{out\_contrib}\?\1(\?1\?\to\?2\?\2)\K\1(\?\H{-}\?,\39\?\H{-}\?\2)\?;\5
+\\{send\_out}\?\1(\?\\{str}\?,\39\?2\?\2)\?;\6
+\1\&{while}\8\\{cur\_char}\?=\?\\{module\_number}\8\&{loop}\6
+\\{out\_state}\?\K\?\\{unbreakable};\5
+\\{send\_out}\?\1(\?\\{misc}\?,\39\?\H{\{}\?\2)\?;\5
+\\{out\_state}\?\K\?\\{unbreakable};\6
+\&{if}\1\1\8\\{cur\_val}\?<\?0\2\8\&{then}\6
+\\{send\_out}\?\1(\?\\{misc}\?,\39\?\H{:}\?\2)\?;\5
+\\{out\_state}\?\K\?\\{unbreakable};\5
+\\{send\_val}\?\1(-\?\\{cur\_val}\?\2)\?;\6
+\4\&{else}\6
+\\{send\_val}\?\1(\?\\{cur\_val}\?\2)\?;\5
+\\{out\_state}\?\K\?\\{unbreakable};\5
+\\{send\_out}\?\1(\?\\{misc}\?,\39\?\H{:}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{out\_state}\?\K\?\\{unbreakable};\5
+\\{send\_out}\?\1(\?\\{misc}\?,\39\?\H{\}}\?\2)\?;\5
+\\{cur\_char}\?\K\?\\{get\_output};\2\6
+\&{end}\8\&{loop};\6
+\X113:Force a line break\X;\6
+\&{goto}\8\\{reswitch};\par
+\U section~101.\fi
+
+\M113. \P\?\X113:Force a line break\X\S\?\6
+\\{send\_out}\?\1(\?\\{str}\?,\39\?0\?\2)\?;\C{normalize the buffer}\6
+\1\&{while}\8\\{out\_ptr}\?>\?0\8\&{loop}\6
+\&{if}\1\1\8\\{out\_ptr}\?\L\?\\{line\_length}\2\8\&{then}\6
+\\{break\_ptr}\?\K\?\\{out\_ptr};\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{flush\_buffer};\2\6
+\&{end}\8\&{loop};\6
+\\{out\_state}\?\K\?\\{misc}\par
+\U sections~101, 108, and~112(3).\fi
+
+\M114. \P\?\X81:Procedures in \\{output\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{phase\_ii}\2\8\&{is}\8\1\6
+\4\&{begin}\6
+\X100:Phase II: Output the contents of the compressed tables\X;\2\6
+\&{end}\8\\{phase\_ii};\par
+\fi
+
+\N115.  Introduction to the input phase.
+We have now seen that \.{ATANGLE} will be able to output the full
+\ADA\ program, if we can only get that program into the byte memory in
+the proper format. The input process is something like the output process
+in reverse, since we compress the text as we read it in and we expand it
+as we write it out.
+
+There are three main input routines. The most interesting is the one that
+gets the next token of an \ADA\ text; the other two are used to scan rapidly
+past \TeX\ text in the \.{AWEB} source code. One of the latter routines will
+jump to the next token that starts with `\.{@}', and the other skips to the
+end of an \ADA\ comment.
+
+\fi
+
+\M116. But first we need to consider the low-level routine \\{get\_line}
+that takes care of merging \\{change\_file} into \\{web\_file}. The \\{get%
+\_line}
+procedure also updates the line numbers for error messages.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{line}\?:\?\p{INTEGER};\C{the number of the current line in the current file}%
+\6
+\\{other\_line}\?:\?\p{INTEGER};\C{the number of the current line in the input
+file that   is not currently being read}\6
+\\{temp\_line}\?:\?\p{INTEGER};\C{used when interchanging \\{line} with %
+\\{other\_line}}\6
+\\{limit}\?:\?\\{buffer\_index};\C{the last character position occupied in the
+buffer}\6
+\\{loc}\?:\?\\{buffer\_index};\C{the next character position to be read from
+the buffer}\6
+\\{input\_has\_ended}\?:\?\p{BOOLEAN};\C{if \p{TRUE}, there is no more input}\6
+\\{changing}\?:\?\p{BOOLEAN};\C{if \p{TRUE}, the current line is from \\{change%
+\_file}}\par
+\fi
+
+\M117. As we change \\{changing} from \p{TRUE} to \p{FALSE} and back again, we
+must
+remember to swap the values of \\{line} and \\{other\_line} so that the
+\\{err\_print} routine will be sure to report the correct line number.
+
+\Y\P\4\D\\{change\_changing}\?\S\?\\{changing}\?\K\R\?\\{changing};\5
+\\{temp\_line}\?\K\?\\{other\_line};\5
+\\{other\_line}\?\K\?\\{line};\5
+\\{line}\?\K\?\\{temp\_line}\C{\\{line}\hbox{$\null\BA\null$}\\{other\_line}}%
+\par
+\fi
+
+\M118. When \\{changing} is \p{FALSE}, the next line of \\{change\_file} is
+kept in
+\\{change\_buffer}\?(\?0\?\to\?\\{change\_limit}\?)\?, for purposes of
+comparison with the next
+line of \\{web\_file}. After the change file has been completely input, we
+set \\{change\_limit}\?\K\?0, so that no further matches will be made.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{change\_buffer}\?:\?\\{buffer\_type}\?\1(\?\\{buffer\_index}\?\2)\?;\6
+\\{change\_limit}\?:\?\\{buffer\_index};\C{the last position occupied in %
+\\{change\_buffer}}\par
+\fi
+
+\M119. Here's a simple function that checks if the two buffers are different.
+
+\Y\P\?\4\X119:Procedures in \\{input\_phase}\X\S\?\6
+\&{function}\8\1\\{lines\_dont\_match}\?\8\&{return}\?\8\p{BOOLEAN}\2\8\&{is}\8%
+\1\6
+\4\&{begin}\6
+\&{if}\1\1\8\\{change\_limit}\?\I\?\\{limit}\2\8\&{then}\6
+\?\&{return}\?\8\p{TRUE};\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{limit}\?>\?0\?\ANT\?\\{change\_buffer}\?\1(\?0\?\to\?\\{limit}%
+\?-\?1\?\2)\I\?\\{buffer}\?\1(\?0\?\to\?\\{limit}\?-\?1\?\2)\?\2\8\&{then}\6
+\?\&{return}\?\8\p{TRUE};\6
+\4\&{else}\6
+\?\&{return}\?\8\p{FALSE};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\\{lines\_dont\_match};\par
+\A sections~120, 124, 127, 132, 133, 134, 137, 149, 155, 157, and~164.
+\U section~7\*.\fi
+
+\M120. Procedure \\{prime\_the\_change\_buffer} sets \\{change\_buffer} in
+preparation
+for the next matching operation. Since blank lines in the change file are
+not used for matching, we have \?(\?\\{change\_limit}\?=\?0\?)\W\R\?%
+\\{changing} if and
+only if the change file is exhausted. This procedure is called only
+when \\{changing} is true; hence error messages will be reported correctly.
+
+\Y\P\?\4\X119:Procedures in \\{input\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{prime\_the\_change\_buffer}\2\8\&{is}\8\1\6
+\4\&{begin}\6
+\\{change\_limit}\?\K\?0;\C{this value will be used if the change file ends}\6
+\X121:Skip over comment lines in the change file; \&{return} if end of file\X;\6
+\X122:Skip to the next nonblank line; \&{return} if end of file\X;\6
+\X123:Move \\{buffer} and \\{limit} to \\{change\_buffer} and \\{change\_limit}%
+\X;\2\6
+\&{end}\8\\{prime\_the\_change\_buffer};\par
+\fi
+
+\M121. While looking for a line that begins with \.{@x} in the change file,
+we allow lines that begin with \.{@}, as long as they don't begin with
+\.{@y} or \.{@z} (which would probably indicate that the change file is
+fouled up).
+
+\Y\P\?\4\X121:Skip over comment lines in the change file; \&{return} if end of
+file\X\S\?\6
+\1\&{loop}\6
+\\{incr}\?\1(\?\\{line}\?\2)\?;\6
+\&{if}\1\1\?\8\R\?\\{input\_ln}\?\1(\?\\{change\_file}\?\2)\?\2\8\&{then}\6
+\&{return};\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{limit}\?<\?2\2\8\&{then}\6
+\&{goto}\8\\{continue};\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{buffer}\?\1(\?0\?\2)\I\?\H{@}\2\8\&{then}\6
+\&{goto}\8\\{continue};\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{buffer}\?\1(\?1\?\2)\in\?\H{X}\?\to\?\H{Z}\2\8\&{then}\6
+\\{buffer}\?\1(\?1\?\2)\K\?\\{buffer}\?\1(\?1\?\2)+\?\H{z}\?-\?\H{Z};%
+\C{lowercasify}\2\6
+\&{end}\8\2\&{if}\1;\6
+\?\&{exit}\8\&{when}\?\8\\{buffer}\?\1(\?1\?\2)=\?\H{x};\6
+\&{if}\1\1\8\\{buffer}\?\1(\?1\?\2)\in\?\H{y}\?\to\?\H{z}\2\8\&{then}\6
+\\{loc}\?\K\?2;\5
+\\{err\_print}\?\1(\?\.{"!\ Where\ is\ the\ matching\ @x?"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\BL\\{continue}\EL\8\&{null};\2\6
+\&{end}\8\&{loop}\par
+\U section~120.\fi
+
+\M122. Here we are looking at lines following the \.{@x}.
+
+\Y\P\?\4\X122:Skip to the next nonblank line; \&{return} if end of file\X\S\?\6
+\1\&{repeat}\6
+\\{incr}\?\1(\?\\{line}\?\2)\?;\6
+\&{if}\1\1\?\8\R\?\\{input\_ln}\?\1(\?\\{change\_file}\?\2)\?\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Change\ file\ ended\ after\ @x"}\?\2)\?;\6
+\&{return};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{until}\?\8\1(\?\\{limit}\?>\?0\?\2)\?\par
+\U section~120.\fi
+
+\M123. \P\?\X123:Move \\{buffer} and \\{limit} to \\{change\_buffer} and %
+\\{change\_limit}\X\S\?\6
+\\{change\_limit}\?\K\?\\{limit};\6
+\&{if}\1\1\8\\{limit}\?>\?0\2\8\&{then}\6
+\\{change\_buffer}\?\1(\?0\?\to\?\\{limit}\?-\?1\?\2)\K\?\\{buffer}\?\1(\?0\?%
+\to\?\\{limit}\?-\?1\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1\par
+\U sections~120 and~124.\fi
+
+\M124. The following procedure is used to see if the next change entry should
+go into effect; it is called only when \\{changing} is false.
+The idea is to test whether or not the current
+contents of \\{buffer} matches the current contents of \\{change\_buffer}.
+If not, there's nothing more to do; but if so, a change is called for:
+All of the text down to the \.{@y} is supposed to match. An error
+message is issued if any discrepancy is found. Then the procedure
+prepares to read the next line from \\{change\_file}.
+
+\Y\P\?\4\X119:Procedures in \\{input\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{check\_change}\2\8\&{is}\8\C{switches to \\{change\_file}
+if the buffers match}\1\6
+\|n\?:\?\p{INTEGER}\?\K\?0;\C{the number of discrepancies found}\6
+\4\&{begin}\6
+\&{if}\1\1\8\\{lines\_dont\_match}\2\8\&{then}\6
+\&{return};\2\6
+\&{end}\8\2\&{if}\1;\6
+\1\&{loop}\6
+\\{change\_changing};\C{now it's \p{TRUE}}\6
+\\{incr}\?\1(\?\\{line}\?\2)\?;\6
+\&{if}\1\1\?\8\R\?\\{input\_ln}\?\1(\?\\{change\_file}\?\2)\?\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Change\ file\ ended\ before\ @y"}\?\2)\?;\6
+\\{change\_limit}\?\K\?0;\5
+\\{change\_changing};\C{\p{FALSE} again}\6
+\&{return};\2\6
+\&{end}\8\2\&{if}\1;\6
+\X125:If the current line starts with \.{@y}, report any discrepancies and %
+\&{return}\X;\6
+\X123:Move \\{buffer} and \\{limit} to \\{change\_buffer} and \\{change\_limit}%
+\X;\6
+\\{change\_changing};\C{now it's \p{FALSE}}\6
+\\{incr}\?\1(\?\\{line}\?\2)\?;\6
+\&{if}\1\1\?\8\R\?\\{input\_ln}\?\1(\?\\{web\_file}\?\2)\?\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ AWEB\ file\ ended\ during\ a\ change"}\?\2)\?;\6
+\\{input\_has\_ended}\?\K\?\p{TRUE};\5
+\&{return};\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{lines\_dont\_match}\2\8\&{then}\6
+\\{incr}\?\1(\?\|n\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop};\2\6
+\&{end}\8\\{check\_change};\par
+\fi
+
+\M125. \P\?\X125:If the current line starts with \.{@y}, report any
+discrepancies and \&{return}\X\S\?\6
+\&{if}\1\1\?\8\1(\?\\{limit}\?>\?1\?\2)\ANT\?\\{buffer}\?\1(\?0\?\2)=\?\H{@}\2%
+\8\&{then}\6
+\&{if}\1\1\8\\{buffer}\?\1(\?1\?\2)\in\?\H{X}\?\to\?\H{Z}\2\8\&{then}\6
+\\{buffer}\?\1(\?1\?\2)\K\?\\{buffer}\?\1(\?1\?\2)+\?\H{z}\?-\?\H{Z};%
+\C{lowercasify}\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\?\8\1(\?\\{buffer}\?\1(\?1\?\2)=\?\H{x}\?\2)\V\1(\?\\{buffer}\?\1(%
+\?1\?\2)=\?\H{z}\?\2)\?\2\8\&{then}\6
+\\{loc}\?\K\?2;\5
+\\{err\_print}\?\1(\?\.{"!\ Where\ is\ the\ matching\ @y?"}\?\2)\?;\6
+\4\&{elsif}\1\8\\{buffer}\?\1(\?1\?\2)=\?\H{y}\2\8\&{then}\6
+\&{if}\1\1\8\|n\?>\?0\2\8\&{then}\6
+\\{loc}\?\K\?2;\5
+\\{new\_ln};\5
+\\{print}\?\1(\?\.{"!\ Hmm...\ "}\?\2)\?;\5
+\\{print\_int}\?\1(\?\|n\?,\39\?1\?\2)\?;\5
+\\{print}\?\1(\?\.{"\ of\ the\ preceding\ lines\ failed\ to\ match"}\?\2)\?;\5
+\\{error};\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{return};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~124.\fi
+
+\M126. \P\?\X126:Initialize the input system\X\S\?\6
+\\{line}\?\K\?0;\5
+\\{other\_line}\?\K\?0;\6
+\\{changing}\?\K\?\p{TRUE};\5
+\\{prime\_the\_change\_buffer};\5
+\\{change\_changing};\6
+\\{limit}\?\K\?0;\5
+\\{loc}\?\K\?1;\5
+\\{buffer}\?\1(\?0\?\2)\K\?\H{\ };\5
+\\{input\_has\_ended}\?\K\?\p{FALSE}\par
+\U section~164.\fi
+
+\M127. The \\{get\_line} procedure is called when \\{loc}\?>\?\\{limit}; it
+puts the next
+line of merged input into the buffer and updates the other variables
+appropriately. A space is placed at the right end of the line.
+
+\Y\P\?\4\X119:Procedures in \\{input\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{get\_line}\2\8\&{is}\8\C{inputs the next line}\1\6
+\4\&{begin}\6
+\4\BL\\{restart}\EL\8\&{if}\1\1\8\\{changing}\2\8\&{then}\6
+\X129:Read from \\{change\_file} and maybe turn off \\{changing}\X;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\?\8\R\?\\{changing}\2\8\&{then}\6
+\X128:Read from \\{web\_file} and maybe turn on \\{changing}\X;\6
+\&{if}\1\1\8\\{changing}\2\8\&{then}\6
+\&{goto}\8\\{restart};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{loc}\?\K\?0;\5
+\\{buffer}\?\1(\?\\{limit}\?\2)\K\?\H{\ };\2\6
+\&{end}\8\\{get\_line};\par
+\fi
+
+\M128. \P\?\X128:Read from \\{web\_file} and maybe turn on \\{changing}\X\S\?\6
+\\{incr}\?\1(\?\\{line}\?\2)\?;\6
+\&{if}\1\1\?\8\R\?\\{input\_ln}\?\1(\?\\{web\_file}\?\2)\?\2\8\&{then}\6
+\\{input\_has\_ended}\?\K\?\p{TRUE};\6
+\4\&{elsif}\1\?\8\1(\?\\{limit}\?=\?\\{change\_limit}\?\2)\ANT\1(\1(\?%
+\\{buffer}\?\1(\?0\?\2)=\?\\{change\_buffer}\?\1(\?0\?\2)\2)\ANT\1(\?\\{change%
+\_limit}\?>\?0\?\2)\2)\?\2\8\&{then}\6
+\\{check\_change};\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~127.\fi
+
+\M129. \P\?\X129:Read from \\{change\_file} and maybe turn off \\{changing}\X\S%
+\?\6
+\\{incr}\?\1(\?\\{line}\?\2)\?;\6
+\&{if}\1\1\?\8\R\?\\{input\_ln}\?\1(\?\\{change\_file}\?\2)\?\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Change\ file\ ended\ without\ @z"}\?\2)\?;\6
+\\{buffer}\?\1(\?0\?\to\?1\?\2)\K\1(\?\H{@}\?,\39\?\H{z}\?\2)\?;\5
+\\{limit}\?\K\?2;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\?\8\1(\?\\{limit}\?>\?1\?\2)\ANT\1(\?\\{buffer}\?\1(\?0\?\2)=\?\H{@}%
+\?\2)\?\2\8\&{then}\C{check if the change has ended}\6
+\&{if}\1\1\8\\{buffer}\?\1(\?1\?\2)\in\?\H{X}\?\to\?\H{Z}\2\8\&{then}\6
+\\{buffer}\?\1(\?1\?\2)\K\?\\{buffer}\?\1(\?1\?\2)+\?\H{z}\?-\?\H{Z};%
+\C{lowercasify}\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{buffer}\?\1(\?1\?\2)\in\?\H{x}\?\to\?\H{y}\2\8\&{then}\6
+\\{loc}\?\K\?2;\5
+\\{err\_print}\?\1(\?\.{"!\ Where\ is\ the\ matching\ @z?"}\?\2)\?;\6
+\4\&{elsif}\1\8\\{buffer}\?\1(\?1\?\2)=\?\H{z}\2\8\&{then}\6
+\\{prime\_the\_change\_buffer};\5
+\\{change\_changing};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~127.\fi
+
+\M130. At the end of the program, we will tell the user if the change file
+had a line that didn't match any relevant line in \\{web\_file}.
+
+\Y\P\?\4\X130:Check that all changes have been read\X\S\?\6
+\&{if}\1\1\8\\{change\_limit}\?\I\?0\2\8\&{then}\C{\\{changing} is false}\6
+\\{buffer}\?\1(\?0\?\to\?\\{change\_limit}\?\2)\K\?\\{change\_buffer}\?\1(\?0\?%
+\to\?\\{change\_limit}\?\2)\?;\5
+\\{limit}\?\K\?\\{change\_limit};\5
+\\{changing}\?\K\?\p{TRUE};\5
+\\{line}\?\K\?\\{other\_line};\5
+\\{loc}\?\K\?\\{change\_limit};\5
+\\{err\_print}\?\1(\?\.{"!\ Change\ file\ entry\ did\ not\ match"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~167.\fi
+
+\M131. Important milestones are reached during the input phase when certain
+control codes are sensed.
+
+Control codes in \.{AWEB} begin with `\.{@}', and the next character
+identifies the code. Some of these are of interest only to \.{AWEAVE},
+so \.{ATANGLE} ignores them; the others are converted by \.{ATANGLE} into
+internal code numbers by the \\{control\_code} function below. The ordering
+of these internal code numbers has been chosen to simplify the program logic;
+larger numbers are given to the control codes that denote more significant
+milestones.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{ignore}\?:\?\&{constant}\8\\{eight\_bits}\?\K\?0;\C{control code of no
+interest to \.{ATANGLE}}\6
+\\{control\_text}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{203}\?;\C{control
+code for `\.{@t}', `\.{@\^}', etc.}\6
+\\{format}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{204}\?;\C{control code
+for `\.{@f}'}\6
+\\{definition}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{205}\?;\C{control
+code for `\.{@d}'}\6
+\\{begin\_ada}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{206}\?;\C{control
+code for `\.{@a}'}\6
+\\{module\_name}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{207}\?;\C{control
+code for `\.{@<}'}\6
+\\{new\_module}\?:\?\&{constant}\8\\{eight\_bits}\?\K\bn{8}{210}\?;\C{control
+code for `\.{@\ }' and `\.{@*}'}\par
+\fi
+
+\M132. \P\?\X119:Procedures in \\{input\_phase}\X\mathrel{+}\S\?\6
+\&{function}\8\1\\{control\_code}\?(\1\?\|c\?:\?\\{ASCII\_code}\?\2)\&{return}%
+\?\8\\{eight\_bits}\2\8\&{is}\8\C{convert \|c after \.{@}}\1\6
+\4\&{begin}\6
+\&{case}\1\8\|c\1\8\&{is}\8\6
+\4\&{when}\8\H{@}\KR\8\?\&{return}\?\8\H{@};\C{`quoted' at sign}\6
+\4\&{when}\8\H{\'}\KR\8\?\&{return}\?\8\\{ascii\_tok};\C{precedes ASCII code
+constant}\6
+\4\&{when}\8\H{\~}\KR\8\?\&{return}\?\8\\{output\_tok};\C{precedes output
+file-name}\6
+\4\&{when}\8\H{\ }\?\mathrel{\.|}\?\\{tab\_mark}\KR\8\?\&{return}\?\8\\{new%
+\_module};\C{beginning of a new module}\6
+\4\&{when}\8\H{*}\KR\8\\{print}\?\1(\?\.{"*"}\?\2)\?;\5
+\\{print\_int}\?\1(\?\\{module\_count}\?+\?1\?,\39\?1\?\2)\?;\5
+\\{update\_terminal};\C{print a progress report}\6
+\?\&{return}\?\8\\{new\_module};\C{beginning of a new module}\6
+\4\&{when}\8\H{D}\?\mathrel{\.|}\?\H{d}\KR\8\?\&{return}\?\8\\{definition};%
+\C{macro definition}\6
+\4\&{when}\8\H{F}\?\mathrel{\.|}\?\H{f}\KR\8\?\&{return}\?\8\\{format};%
+\C{format definition}\6
+\4\&{when}\8\H{\{}\KR\8\?\&{return}\?\8\\{begin\_comment};\C{begin-comment
+delimiter}\6
+\4\&{when}\8\H{\}}\KR\8\?\&{return}\?\8\\{end\_comment};\C{end-comment
+delimiter}\6
+\4\&{when}\8\H{A}\?\mathrel{\.|}\?\H{a}\KR\8\?\&{return}\?\8\\{begin\_ada};\C{%
+\ADA\ text in unnamed module}\6
+\4\&{when}\8\H{T}\?\mathrel{\.|}\?\H{t}\?\mathrel{\.|}\?\H{\^}\?\mathrel{\.|}\?%
+\H{i}\?\mathrel{\.|}\?\H{I}\?\mathrel{\.|}\?\H{b}\?\mathrel{\.|}\?\H{B}\?%
+\mathrel{\.|}\?\H{r}\?\mathrel{\.|}\?\H{R}\?\mathrel{\.|}\?\H{p}\?\mathrel{\.|}%
+\?\H{P}\?\mathrel{\.|}\?\H{s}\?\mathrel{\.|}\?\H{S}\?\mathrel{\.|}\?\H{.}\?%
+\mathrel{\.|}\?\H{:}\KR\8\?\&{return}\?\8\\{control\_text};\C{control text to
+be ignored}\6
+\4\&{when}\8\H{\&}\KR\8\?\&{return}\?\8\\{join};\C{concatenate two tokens}\6
+\4\&{when}\8\H{<}\KR\8\?\&{return}\?\8\\{module\_name};\C{beginning of a module
+name}\6
+\4\&{when}\8\H{=}\KR\8\?\&{return}\?\8\\{verbatim};\C{beginning of \ADA\
+verbatim mode}\6
+\4\&{when}\8\H{\\}\KR\8\?\&{return}\?\8\\{force\_line};\C{force a new line in %
+\ADA\ output}\6
+\4\&{when}\8\&{others}\8\KR\8\?\&{return}\?\8\\{ignore};\C{ignore all other
+cases}\2\6
+\4\2\&{end}\8\&{case};\2\6
+\&{end}\8\\{control\_code};\par
+\fi
+
+\M133. The \\{skip\_ahead} procedure reads through the input at fairly high
+speed
+until finding the next non-ignorable control code, which it returns.
+
+\Y\P\?\4\X119:Procedures in \\{input\_phase}\X\mathrel{+}\S\?\6
+\&{function}\8\1\\{skip\_ahead}\?\8\&{return}\?\8\\{eight\_bits}\2\8\&{is}\8%
+\C{skip to next control code}\1\6
+\|c\?:\?\\{eight\_bits};\C{control code found}\6
+\4\&{begin}\6
+\1\&{loop}\6
+\&{if}\1\1\8\\{loc}\?>\?\\{limit}\2\8\&{then}\6
+\\{get\_line};\6
+\&{if}\1\1\8\\{input\_has\_ended}\2\8\&{then}\6
+\?\&{return}\?\8\\{new\_module};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{buffer}\?\1(\?\\{limit}\?+\?1\?\2)\K\?\H{@};\6
+\1\&{while}\8\\{buffer}\?\1(\?\\{loc}\?\2)\I\?\H{@}\8\&{loop}\6
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\&{if}\1\1\8\\{loc}\?\L\?\\{limit}\2\8\&{then}\6
+\\{loc}\?\K\?\\{loc}\?+\?2;\5
+\|c\?\K\?\\{control\_code}\?\1(\?\\{buffer}\?\1(\?\\{loc}\?-\?1\?\2)\2)\?;\6
+\&{if}\1\1\?\8\1(\?\|c\?\I\?\\{ignore}\?\2)\V\1(\?\\{buffer}\?\1(\?\\{loc}\?-%
+\?1\?\2)=\?\H{>}\?\2)\?\2\8\&{then}\6
+\?\&{return}\?\8\|c;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop};\2\6
+\&{end}\8\\{skip\_ahead};\par
+\fi
+
+\M134. The \\{skip\_comment} procedure reads through the input at somewhat high
+speed
+until finding the first unmatched right brace or until coming to the end
+of the file. It ignores characters following `\.\\' characters, since all
+braces that aren't nested are supposed to be hidden in that way. For
+example, consider the process of skipping the first comment below,
+where the string containing the right brace has been typed as \.{`\\.\\\}'}
+in the \.{AWEB} file.
+
+\Y\P\?\4\X119:Procedures in \\{input\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{skip\_comment}\2\8\&{is}\8\C{skips to next unmatched `\.%
+\}'}\1\6
+\\{bal}\?:\?\\{eight\_bits}\?\K\?0;\C{excess of left braces}\6
+\|c\?:\?\\{ASCII\_code};\C{current character}\6
+\4\&{begin}\6
+\1\&{loop}\6
+\&{if}\1\1\8\\{loc}\?>\?\\{limit}\2\8\&{then}\6
+\\{get\_line};\6
+\&{if}\1\1\8\\{input\_has\_ended}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Input\ ended\ in\ mid-comment"}\?\2)\?;\6
+\&{return};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\|c\?\K\?\\{buffer}\?\1(\?\\{loc}\?\2)\?;\5
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\6
+\X135:Do special things when \|c\?=\?\.{"@"}\?,\?\.{"\\"}\?,\?\.{"\{"}\?,\?\.{"%
+\}"}; \&{return} at end\X;\2\6
+\&{end}\8\&{loop};\2\6
+\&{end}\8\\{skip\_comment};\par
+\fi
+
+\M135. \P\?\X135:Do special things when \|c\?=\?\.{"@"}\?,\?\.{"\\"}\?,\?\.{"%
+\{"}\?,\?\.{"\}"}; \&{return} at end\X\S\?\6
+\&{if}\1\1\8\|c\?=\?\H{@}\2\8\&{then}\6
+\|c\?\K\?\\{buffer}\?\1(\?\\{loc}\?\2)\?;\6
+\&{if}\1\1\?\8\1(\?\|c\?\I\?\H{\ }\?\2)\W\1(\?\|c\?\I\?\\{tab\_mark}\?\2)\W\1(%
+\?\|c\?\I\?\H{*}\?\2)\W\1(\?\|c\?\I\?\H{z}\?\2)\W\1(\?\|c\?\I\?\H{Z}\?\2)\?\2\8%
+\&{then}\6
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\6
+\4\&{else}\6
+\\{err\_print}\?\1(\?\.{"!\ Section\ ended\ in\ mid-comment"}\?\2)\?;\6
+\\{decr}\?\1(\?\\{loc}\?\2)\?;\5
+\&{return};\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{elsif}\1\?\8\1(\?\|c\?=\?\H{\\}\?\2)\W\1(\?\\{buffer}\?\1(\?\\{loc}\?\2)\I%
+\?\H{@}\?\2)\?\2\8\&{then}\6
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\6
+\4\&{elsif}\1\8\|c\?=\?\H{\{}\2\8\&{then}\6
+\\{incr}\?\1(\?\\{bal}\?\2)\?;\6
+\4\&{elsif}\1\8\|c\?=\?\H{\}}\2\8\&{then}\6
+\&{if}\1\1\8\\{bal}\?=\?0\2\8\&{then}\6
+\&{return};\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{decr}\?\1(\?\\{bal}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~134.\fi
+
+\N136.  Inputting the next token.
+As stated above, \.{ATANGLE}'s most interesting input procedure is the
+\\{get\_next} routine that inputs the next token. However, the procedure
+isn't especially difficult.
+
+In most cases the tokens output by \\{get\_next} have the form used in
+replacement texts, except that two-byte tokens are not produced.
+An identifier that isn't one letter long is represented by the
+output `\\{identifier}', and in such a case the global variables
+\\{id\_first} and \\{id\_loc} will have been set to the appropriate values
+needed by the \\{id\_lookup} procedure.
+Control codes produce the corresponding output of the \\{control\_code}
+function above; and if that code is \\{module\_name}, the value of \\{cur%
+\_module}
+will point to the \\{byte\_start} entry for that module name.
+
+Another global variable, \\{scanning\_based\_number}, is \p{TRUE} during the
+time
+that letters should be treated as if they were digits; \\{scanning\_character}
+is set \p{TRUE} if the input \.'$x$\.', where $x$ is a character, or the
+ASCII code controlcode `\.{@'} is encoutered.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{cur\_module}\?:\?\\{name\_pointer};\C{name of module just scanned}\6
+\\{scanning\_character}\?:\?\p{BOOLEAN}\?\K\?\p{FALSE};\C{are we scanning a
+character literal?}\par
+\fi
+
+\M137. At the top level, \\{get\_next} is a multi-way switch based on the next
+character in the input buffer. A \\{new\_module} code is inserted at the
+very end of the input file.
+
+\Y\P\?\4\X119:Procedures in \\{input\_phase}\X\mathrel{+}\S\?\6
+\&{function}\8\1\\{get\_next}\?\8\&{return}\?\8\\{eight\_bits}\2\8\&{is}\8%
+\C{produces the next input token}\1\6
+\|c\?:\?\\{eight\_bits};\C{the current character}\6
+\|d\?:\?\\{eight\_bits};\C{the next character}\6
+\|k\?:\?\\{long\_name\_index};\C{index into \\{mod\_text}}\6
+\4\&{begin}\6
+\4\BL\\{restart}\EL\8\&{if}\1\1\8\\{loc}\?>\?\\{limit}\2\8\&{then}\6
+\\{get\_line};\6
+\&{if}\1\1\8\\{input\_has\_ended}\2\8\&{then}\6
+\?\&{return}\?\8\\{new\_module};\6
+\4\&{elsif}\1\8\\{scanning\_based\_number}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Improper\ based\ number,\ \#\ sign\ missing"}\?\2)%
+\?;\6
+\\{scanning\_based\_number}\?\K\?\p{FALSE};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\|c\?\K\?\\{buffer}\?\1(\?\\{loc}\?\2)\?;\5
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\6
+\&{if}\1\1\8\\{scanning\_based\_number}\2\8\&{then}\6
+\&{if}\1\1\8\|c\?=\?\H{\#}\2\8\&{then}\6
+\\{scanning\_based\_number}\?\K\?\p{FALSE};\2\6
+\&{end}\8\2\&{if}\1;\6
+\?\&{return}\?\8\|c;\6
+\4\&{elsif}\1\8\\{scanning\_character}\2\8\&{then}\6
+\&{if}\1\1\8\|c\?=\?\H{@}\2\8\&{then}\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{@}\2\8\&{then}\6
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\6
+\4\&{else}\6
+\\{err\_print}\?\1(\?\.{"!\ You\ should\ double\ @\ signs\ in\ character\
+literals"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\5
+\\{scanning\_character}\?\K\?\p{FALSE};\5
+\?\&{return}\?\8\|c;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{case}\1\8\|c\1\8\&{is}\8\6
+\4\&{when}\8\H{\#}\KR\6
+\&{if}\1\1\?\8\1(\?\\{loc}\?>\?1\?\2)\ANT\1(\?\\{buffer}\?\1(\?\\{loc}\?-\?2\?%
+\2)\in\?\H{0}\?\to\?\H{9}\?\2)\?\2\8\&{then}\6
+\\{scanning\_based\_number}\?\K\?\p{TRUE};\2\6
+\&{end}\8\2\&{if}\1;\6
+\?\&{return}\?\8\H{\#};\6
+\4\&{when}\8\H{A}\?\to\?\H{Z}\?\mathrel{\.|}\?\H{a}\?\to\?\H{z}\KR\8\X139:Get
+an identifier\X;\6
+\4\&{when}\8\H{@}\KR\8\X140:Get control code and possible module name\X;\6
+\hbox{\4}\X138:Compress two-symbol combinations like `\.{:=}'\X\6
+\4\&{when}\8\H{\ }\?\mathrel{\.|}\?\\{tab\_mark}\KR\8\&{goto}\8\\{restart};%
+\C{ignore spaces and tabs}\6
+\4\&{when}\8\H{\{}\KR\8\\{skip\_comment};\5
+\&{goto}\8\\{restart};\6
+\4\&{when}\8\H{\'}\KR\8\X146:If this is the beginning of an character token
+then set \\{scanning\_character} to \p{TRUE} and \?\&{return}\?\8\\{character%
+\_tok}; otherwise do nothing\X;\6
+\4\&{when}\8\&{others}\8\KR\8\&{null};\2\6
+\4\2\&{end}\8\&{case};\6
+\?\&{return}\?\8\|c;\2\6
+\&{end}\8\\{get\_next};\par
+\fi
+
+\M138.
+\Y\P\4\D\\{compress}\?\1(\?\#\?\2)\S\?\6
+\&{if}\1\1\8\\{loc}\?\L\?\\{limit}\2\8\&{then}\6
+\|c\?\K\?\#;\5
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1\par
+\Y\P\?\4\X138:Compress two-symbol combinations like `\.{:=}'\X\S\?\6
+\4\&{when}\8\H{.}\KR\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{.}\2\8\&{then}\6
+\\{compress}\?\1(\?\\{double\_dot}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{when}\8\H{:}\KR\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{=}\2\8\&{then}\6
+\\{compress}\?\1(\?\\{left\_arrow}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{when}\8\H{=}\KR\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{=}\2\8\&{then}\6
+\\{compress}\?\1(\?\\{equivalence\_sign}\?\2)\?;\6
+\4\&{elsif}\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{>}\2\8\&{then}\6
+\\{compress}\?\1(\?\\{right\_arrow}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{when}\8\H{>}\KR\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{=}\2\8\&{then}\6
+\\{compress}\?\1(\?\\{greater\_or\_equal}\?\2)\?;\6
+\4\&{elsif}\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{>}\2\8\&{then}\6
+\\{compress}\?\1(\?\\{right\_label\_bracket}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{when}\8\H{<}\KR\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{=}\2\8\&{then}\6
+\\{compress}\?\1(\?\\{less\_or\_equal}\?\2)\?;\6
+\4\&{elsif}\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{<}\2\8\&{then}\6
+\\{compress}\?\1(\?\\{left\_label\_bracket}\?\2)\?;\6
+\4\&{elsif}\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{>}\2\8\&{then}\6
+\\{compress}\?\1(\?\\{box\_sign}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{when}\8\H{/}\KR\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{=}\2\8\&{then}\6
+\\{compress}\?\1(\?\\{not\_equal}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{when}\8\H{*}\KR\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{*}\2\8\&{then}\6
+\\{compress}\?\1(\?\\{double\_star}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\par
+\U section~137.\fi
+
+\M139. We have to look at the preceding character to make sure this isn't part
+of a real constant, before trying to find an identifier starting with
+`\.e' or `\.E'.
+
+\Y\P\?\4\X139:Get an identifier\X\S\?\6
+\&{if}\1\1\?\8\1(\1(\1(\?\|c\?=\?\H{e}\?\2)\V\1(\?\|c\?=\?\H{E}\?\2)\2)\W\1(\?%
+\\{loc}\?>\?1\?\2)\2)\ANT\1(\1(\?\\{buffer}\?\1(\?\\{loc}\?-\?2\?\2)\in\?\H{0}%
+\?\to\?\H{9}\?\2)\V\?\\{buffer}\?\1(\?\\{loc}\?-\?2\?\2)=\?\H{\#}\?\2)\?\2\8%
+\&{then}\6
+\|c\?\K\?0;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\|c\?\I\?0\2\8\&{then}\6
+\\{decr}\?\1(\?\\{loc}\?\2)\?;\5
+\\{id\_first}\?\K\?\\{loc};\6
+\1\&{repeat}\6
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\5
+\|d\?\K\?\\{buffer}\?\1(\?\\{loc}\?\2)\?;\2\6
+\&{until}\?\8\1(\1(\1(\?\|d\?<\?\H{0}\?\2)\V\1(\1(\?\|d\?>\?\H{9}\?\2)\W\1(\?%
+\|d\?<\?\H{A}\?\2)\2)\V\1(\1(\?\|d\?>\?\H{Z}\?\2)\W\1(\?\|d\?<\?\H{a}\?\2)\2)\V%
+\1(\?\|d\?>\?\H{z}\?\2)\2)\W\1(\?\|d\?\I\?\H{\_}\?\2)\2)\?;\6
+\&{if}\1\1\8\\{loc}\?>\?\\{id\_first}\?+\?1\2\8\&{then}\6
+\\{id\_loc}\?\K\?\\{loc};\5
+\?\&{return}\?\8\\{identifier};\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{else}\6
+\?\&{return}\?\8\H{E};\C{exponent of a real constant}\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~137.\fi
+
+\M140. After an \.{@} sign has been scanned, the next character tells us
+whether there is more work to do.
+
+\Y\P\?\4\X140:Get control code and possible module name\X\S\?\6
+\|c\?\K\?\\{control\_code}\?\1(\?\\{buffer}\?\1(\?\\{loc}\?\2)\2)\?;\5
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\6
+\&{if}\1\1\8\|c\?=\?\\{ignore}\2\8\&{then}\6
+\&{goto}\8\\{restart};\6
+\4\&{elsif}\1\8\|c\?=\?\\{module\_name}\2\8\&{then}\6
+\X141:Scan the module name and make \\{cur\_module} point to it\X;\6
+\4\&{elsif}\1\8\|c\?=\?\\{control\_text}\2\8\&{then}\6
+\1\&{repeat}\6
+\|c\?\K\?\\{skip\_ahead};\2\6
+\&{until}\?\8\1(\?\|c\?\I\?\H{@}\?\2)\?;\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\\{loc}\?-\?1\?\2)\I\?\H{>}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Improper\ @\ within\ control\ text"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{goto}\8\\{restart};\6
+\4\&{elsif}\1\8\|c\?=\?\\{ascii\_tok}\2\8\&{then}\6
+\&{if}\1\1\?\8\1(\?\\{buffer}\?\1(\?\\{loc}\?+\?1\?\2)=\?\H{\'}\?\2)\ORE\1(\?%
+\\{buffer}\?\1(\?\\{loc}\?\to\?\\{loc}\?+\?2\?\2)=\1(\?\H{@}\?,\39\?\H{@}\?,\39%
+\?\H{\'}\?\2)\2)\?\2\8\&{then}\6
+\\{scanning\_character}\?\K\?\p{TRUE};\6
+\4\&{else}\6
+\\{err\_print}\?\1(\?\.{"!\ Improper\ ASCII-code\ sequence,\ \'\ sign\ mising"}%
+\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~137.\fi
+
+\M141. \P\?\X141:Scan the module name and make \\{cur\_module} point to it\X\S%
+\?\6
+\X143:Put module name into \\{mod\_text}\?(\?1\?\to\?\|k\?)\?\X;\6
+\&{if}\1\1\?\8\1(\?\|k\?>\?3\?\2)\ANT\1(\?\\{mod\_text}\?\1(\?\|k\?-\?2\?\to\?%
+\|k\?\2)=\1(\?\H{.}\?,\39\?\H{.}\?,\39\?\H{.}\?\2)\2)\?\2\8\&{then}\6
+\\{cur\_module}\?\K\?\\{prefix\_lookup}\?\1(\?\|k\?-\?3\?\2)\?;\6
+\4\&{else}\6
+\\{cur\_module}\?\K\?\\{mod\_lookup}\?\1(\?\|k\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~140.\fi
+
+\M142. Module names are placed into the \\{mod\_text} array with consecutive
+spaces,
+tabs, and carriage-returns replaced by single spaces. There will be no
+spaces at the beginning or the end. (We set \\{mod\_text}\?(\?0\?)\K\?\H{\ } to
+facilitate
+this, since the \\{mod\_lookup} routine uses \\{mod\_text}\?(\?1\?)\? as the
+first
+character of the name.)
+
+\Y\P\?\4\X15:Set initial values\X\mathrel{+}\S\?\6
+\\{mod\_text}\?\1(\?0\?\2)\K\?\H{\ };\par
+\fi
+
+\M143. \P\?\X143:Put module name into \\{mod\_text}\?(\?1\?\to\?\|k\?)\?\X\S\?\6
+\|k\?\K\?0;\6
+\1\&{loop}\6
+\&{if}\1\1\8\\{loc}\?>\?\\{limit}\2\8\&{then}\6
+\\{get\_line};\6
+\&{if}\1\1\8\\{input\_has\_ended}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Input\ ended\ in\ section\ name"}\?\2)\?;\6
+\&{exit};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\|d\?\K\?\\{buffer}\?\1(\?\\{loc}\?\2)\?;\5
+\X144:If end of name, \&{exit}\X;\6
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\6
+\&{if}\1\1\8\|k\?<\?\\{longest\_name}\?-\?1\2\8\&{then}\6
+\\{incr}\?\1(\?\|k\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\?\8\1(\?\|d\?=\?\H{\ }\?\2)\V\1(\?\|d\?=\?\\{tab\_mark}\?\2)\?\2\8%
+\&{then}\6
+\|d\?\K\?\H{\ };\6
+\&{if}\1\1\8\\{mod\_text}\?\1(\?\|k\?-\?1\?\2)=\?\H{\ }\2\8\&{then}\6
+\\{decr}\?\1(\?\|k\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{mod\_text}\?\1(\?\|k\?\2)\K\?\|d;\2\6
+\&{end}\8\&{loop};\6
+\X145:Check for overlong name\X;\6
+\&{if}\1\1\?\8\1(\?\\{mod\_text}\?\1(\?\|k\?\2)=\?\H{\ }\?\2)\W\1(\?\|k\?>\?0\?%
+\2)\?\2\8\&{then}\6
+\\{decr}\?\1(\?\|k\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~141.\fi
+
+\M144. \P\?\X144:If end of name, \&{exit}\X\S\?\6
+\&{if}\1\1\8\|d\?=\?\H{@}\2\8\&{then}\6
+\|d\?\K\?\\{buffer}\?\1(\?\\{loc}\?+\?1\?\2)\?;\6
+\&{if}\1\1\8\|d\?=\?\H{>}\2\8\&{then}\6
+\\{loc}\?\K\?\\{loc}\?+\?2;\5
+\&{exit};\6
+\4\&{elsif}\1\?\8\1(\?\|d\?=\?\H{\ }\?\2)\V\1(\?\|d\?=\?\\{tab\_mark}\?\2)\V\1(%
+\?\|d\?=\?\H{*}\?\2)\?\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Section\ name\ didn\'t\ end"}\?\2)\?;\6
+\&{exit};\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{incr}\?\1(\?\|k\?\2)\?;\5
+\\{mod\_text}\?\1(\?\|k\?\2)\K\?\H{@};\5
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\C{now \|d\?=\?\\{buffer}\?(\?\\{loc}\?)\? again}%
+\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~143.\fi
+
+\M145. \P\?\X145:Check for overlong name\X\S\?\6
+\&{if}\1\1\8\|k\?\G\?\\{longest\_name}\?-\?2\2\8\&{then}\6
+\\{print\_nl}\?\1(\?\.{"!\ Section\ name\ too\ long:\ "}\?\2)\?;\6
+\1\&{for}\8\|j\?\in\?\p{INTEGER}\8\&{range}\81\?\to\?25\8\&{loop}\6
+\\{print}\?\1(\?\\{xchr}\?\1(\?\\{mod\_text}\?\1(\?\|j\?\2)\2)\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\\{print}\?\1(\?\.{"..."}\?\2)\?;\5
+\\{mark\_harmless};\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~143.\fi
+
+\M146. \P\?\X146:If this is the beginning of an character token then set %
+\\{scanning\_character} to \p{TRUE} and \?\&{return}\?\8\\{character\_tok};
+otherwise do nothing\X\S\?\6
+\&{if}\1\1\?\8\1(\?\\{buffer}\?\1(\?\\{loc}\?+\?1\?\2)=\?\H{\'}\?\2)\ORE\1(\?%
+\\{buffer}\?\1(\?\\{loc}\?\to\?\\{loc}\?+\?2\?\2)=\1(\?\H{@}\?,\39\?\H{@}\?,\39%
+\?\H{\'}\?\2)\2)\?\2\8\&{then}\6
+\\{scanning\_character}\?\K\?\p{TRUE};\5
+\?\&{return}\?\8\\{character\_tok};\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~137.\fi
+
+\N147.  Scanning a macro definition.
+The rules for generating the replacement texts corresponding to simple
+macros, parametric macros, and \ADA\ texts of a module are almost
+identical, so a single procedure is used for all three cases. The
+differences are that
+
+\yskip\item{a)} The sign \# denotes a parameter only when it appears
+outside of strings in a parametric macro; otherwise it stands for the
+ASCII character \#.
+
+\item{b)}Module names are not allowed in simple macros or parametric macros;
+in fact, the appearance of a module name terminates such macros and denotes
+the name of the current module.
+
+\item{c)}The symbols \.{@d} and \.{@f} and \.{@a} are not allowed after
+module names, while they terminate macro definitions.
+
+\fi
+
+\M148. Therefore there is a procedure \\{scan\_repl} whose parameter \|t
+specifies
+either \\{simple} or \\{parametric} or \\{module\_name}. After \\{scan\_repl}
+has
+acted, \\{cur\_repl\_text} will point to the replacement text just generated,
+and
+\\{next\_control} will contain the control code that terminated the activity.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{cur\_repl\_text}\?:\?\\{text\_pointer};\C{replacement text formed by \\{scan%
+\_repl}}\6
+\\{next\_control}\?:\?\\{sixteen\_bits};\par
+\fi
+
+\M149. \P\?\X119:Procedures in \\{input\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{scan\_repl}\?(\1\?\|t\?:\?\\{eight\_bits}\?\2)\?\2\8\&{is}%
+\8\C{creates a replacement text}\1\6
+\|a\?:\?\\{sixteen\_bits};\C{the current token}\6
+\|b\?:\?\\{ASCII\_code};\C{a character from the buffer}\6
+\\{bal}\?:\?\\{eight\_bits}\?\K\?0;\C{left parentheses minus right parentheses}%
+\6
+\4\&{begin}\6
+\1\&{loop}\6
+\4\BL\\{continue}\EL\8\|a\?\K\?\\{get\_next};\6
+\&{case}\1\8\|a\1\8\&{is}\8\6
+\4\&{when}\8\H{(}\KR\8\\{incr}\?\1(\?\\{bal}\?\2)\?;\6
+\4\&{when}\8\H{)}\KR\8\&{if}\1\1\8\\{bal}\?=\?0\2\8\&{then}\8\\{err\_print}\?%
+\1(\?\.{"!\ Extra\ )"}\?\2)\?;\8\&{else}\8\\{decr}\?\1(\?\\{bal}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{when}\8\H{"}\KR\8\X152:Copy a string from the buffer to \\{tok\_mem}\X;\6
+\4\&{when}\8\\{character\_tok}\?\mathrel{\.|}\?\\{ascii\_tok}\KR\8\\{app\_repl}%
+\?\1(\?\|a\?\2)\?;\5
+\|a\?\K\?\\{get\_next};\6
+\4\&{when}\8\H{\#}\KR\8\&{if}\1\1\8\|t\?=\?\\{parametric}\2\8\&{then}\8\|a\?\K%
+\?\\{param};\2\6
+\&{end}\8\2\&{if}\1;\6
+\hbox{\4}\X151:In cases that \|a is a non-ASCII token (\\{identifier}, %
+\\{module\_name}, etc.), either process it and change \|a to a byte that should
+be stored, or \&{goto}\8\\{continue} if \|a should be ignored, or \?\&{exit}\8%
+\&{when}\?\8\|a signals the end of this replacement text\X\6
+\4\&{when}\8\&{others}\8\KR\8\&{null};\2\6
+\4\2\&{end}\8\&{case};\6
+\\{app\_repl}\?\1(\?\|a\?\2)\?;\C{store \|a in \\{tok\_mem}}\2\6
+\&{end}\8\&{loop};\6
+\\{next\_control}\?\K\?\|a;\6
+\X150:Make sure the parentheses balance\X;\6
+\&{if}\1\1\8\\{text\_ptr}\?>\?\\{max\_texts}\?-\?\\{zz}\2\8\&{then}\6
+\\{overflow}\?\1(\?\.{"text"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{cur\_repl\_text}\?\K\?\\{text\_ptr};\5
+\\{tok\_start}\?\1(\?\\{text\_ptr}\?+\?\\{zz}\?\2)\K\?\\{tok\_ptr}\?\1(\?\|z\?%
+\2)\?;\5
+\\{incr}\?\1(\?\\{text\_ptr}\?\2)\?;\6
+\&{if}\1\1\8\|z\?=\?\\{zz}\?-\?1\2\8\&{then}\6
+\|z\?\K\?0;\6
+\4\&{else}\6
+\\{incr}\?\1(\?\|z\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\\{scan\_repl};\par
+\fi
+
+\M150. \P\?\X150:Make sure the parentheses balance\X\S\?\6
+\&{if}\1\1\8\\{bal}\?>\?0\2\8\&{then}\6
+\&{if}\1\1\8\\{bal}\?=\?1\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Missing\ )"}\?\2)\?;\6
+\4\&{else}\6
+\\{new\_ln};\5
+\\{print}\?\1(\?\.{"!\ Missing\ "}\?\2)\?;\5
+\\{print\_int}\?\1(\?\\{bal}\?,\39\?1\?\2)\?;\5
+\\{print}\?\1(\?\.{"\ )\'s"}\?\2)\?;\5
+\\{error};\2\6
+\&{end}\8\2\&{if}\1;\6
+\1\&{while}\8\\{bal}\?>\?0\8\&{loop}\6
+\\{app\_repl}\?\1(\?\H{)}\?\2)\?;\5
+\\{decr}\?\1(\?\\{bal}\?\2)\?;\2\6
+\&{end}\8\&{loop};\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~149.\fi
+
+\M151. \P\?\X151:In cases that \|a is a non-ASCII token (\\{identifier}, %
+\\{module\_name}, etc.), either process it and change \|a to a byte that should
+be stored, or \&{goto}\8\\{continue} if \|a should be ignored, or \?\&{exit}\8%
+\&{when}\?\8\|a signals the end of this replacement text\X\S\?\6
+\4\&{when}\8\\{identifier}\KR\8\|a\?\K\?\\{id\_lookup}\?\1(\?\\{normal}\?\2)\?;%
+\5
+\\{app\_repl}\?\1(\1(\?\|a\?/\bn{8}{400}\2)+\bn{8}{200}\2)\?;\5
+\|a\?\K\?\|a\?\mathbin{\&{mod}}\bn{8}{400}\?;\6
+\4\&{when}\8\\{module\_name}\KR\6
+\?\&{exit}\8\&{when}\?\8\|t\?\I\?\\{module\_name};\6
+\\{app\_repl}\?\1(\1(\?\\{cur\_module}\?/\bn{8}{400}\2)+\bn{8}{250}\2)\?;\5
+\|a\?\K\?\\{cur\_module}\?\mathbin{\&{mod}}\bn{8}{400}\?;\6
+\4\&{when}\8\\{verbatim}\KR\8\X153:Copy verbatim string from the buffer to %
+\\{tok\_mem}\X;\6
+\4\&{when}\8\\{output\_tok}\KR\8\X154:Copy output file-name from the buffer to %
+\\{tok\_mem}\X;\6
+\4\&{when}\8\\{definition}\?\mathrel{\.|}\?\\{format}\?\mathrel{\.|}\?\\{begin%
+\_ada}\KR\6
+\?\&{exit}\8\&{when}\?\8\|t\?\I\?\\{module\_name};\6
+\\{err\_print}\?\1(\?\.{"!\ @"}\?\mathbin{\.\&}\?\\{xchr}\?\1(\?\\{buffer}\?\1(%
+\?\\{loc}\?-\?1\?\2)\2)\mathbin{\.\&}\?\.{"\ is\ ignored\ in\ ADA\ text"}\?\2)%
+\?;\6
+\&{goto}\8\\{continue};\6
+\4\&{when}\8\\{new\_module}\KR\8\&{exit};\par
+\U section~149.\fi
+
+\M152. \P\?\X152:Copy a string from the buffer to \\{tok\_mem}\X\S\?\6
+\|b\?\K\?\H{"};\6
+\1\&{loop}\6
+\\{app\_repl}\?\1(\?\|b\?\2)\?;\6
+\&{if}\1\1\8\|b\?=\?\H{@}\2\8\&{then}\6
+\&{if}\1\1\8\\{buffer}\?\1(\?\\{loc}\?\2)=\?\H{@}\2\8\&{then}\6
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\C{store only one \.{@}}\6
+\4\&{else}\6
+\\{err\_print}\?\1(\?\.{"!\ You\ should\ double\ @\ signs\ in\ strings"}\?\2)%
+\?;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{loc}\?=\?\\{limit}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ String\ didn\'t\ end"}\?\2)\?;\6
+\\{buffer}\?\1(\?\\{loc}\?\to\?\\{loc}\?+\?1\?\2)\K\1(\?\H{"}\?,\39\?0\?\2)\?;%
+\2\6
+\&{end}\8\2\&{if}\1;\6
+\|b\?\K\?\\{buffer}\?\1(\?\\{loc}\?\2)\?;\5
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\6
+\&{if}\1\1\8\|b\?=\?\H{"}\2\8\&{then}\6
+\?\&{exit}\8\&{when}\?\8\\{buffer}\?\1(\?\\{loc}\?\2)\I\?\H{"};\6
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\5
+\\{app\_repl}\?\1(\?\H{"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop}\C{now \|a holds the final \H{"} that will be stored}\par
+\U section~149.\fi
+
+\M153. \P\?\X153:Copy verbatim string from the buffer to \\{tok\_mem}\X\S\?\6
+\\{app\_repl}\?\1(\?\\{verbatim}\?\2)\?;\5
+\\{buffer}\?\1(\?\\{limit}\?+\?1\?\2)\K\?\H{@};\6
+\1\&{while}\8\\{buffer}\?\1(\?\\{loc}\?\2)\I\?\H{@}\8\&{loop}\6
+\\{app\_repl}\?\1(\?\\{buffer}\?\1(\?\\{loc}\?\2)\2)\?;\5
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\6
+\&{if}\1\1\?\8\1(\?\\{loc}\?<\?\\{limit}\?\2)\ANT\1(\?\\{buffer}\?\1(\?\\{loc}%
+\?\to\?\\{loc}\?+\?1\?\2)=\1(\?\H{@}\?,\39\?\H{@}\?\2)\2)\?\2\8\&{then}\6
+\\{app\_repl}\?\1(\?\H{@}\?\2)\?;\5
+\\{loc}\?\K\?\\{loc}\?+\?2;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop};\6
+\&{if}\1\1\8\\{loc}\?\G\?\\{limit}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Verbatim\ string\ didn\'t\ end"}\?\2)\?;\6
+\&{if}\1\1\8\\{loc}\?\G\?\\{buf\_size}\?-\?1\2\8\&{then}\6
+\\{loc}\?\K\?\\{buf\_size}\?-\?2;\2\6
+\&{end}\8\2\&{if}\1;\6
+\4\&{elsif}\1\8\\{buffer}\?\1(\?\\{loc}\?+\?1\?\2)\I\?\H{>}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ You\ should\ double\ @\ signs\ in\ verbatim\
+strings"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{loc}\?\K\?\\{loc}\?+\?2\C{another \\{verbatim} byte will be stored, since %
+\|a\?=\?\\{verbatim}}\par
+\U section~151.\fi
+
+\M154. \P\?\X154:Copy output file-name from the buffer to \\{tok\_mem}\X\S\?\6
+\\{app\_repl}\?\1(\?\\{output\_tok}\?\2)\?;\5
+\\{buffer}\?\1(\?\\{limit}\?+\?1\?\2)\K\?\H{@};\6
+\1\&{while}\8\\{buffer}\?\1(\?\\{loc}\?\2)\I\?\H{@}\8\&{loop}\6
+\\{app\_repl}\?\1(\?\\{buffer}\?\1(\?\\{loc}\?\2)\2)\?;\5
+\\{incr}\?\1(\?\\{loc}\?\2)\?;\6
+\&{if}\1\1\?\8\1(\?\\{loc}\?<\?\\{limit}\?\2)\ANT\1(\?\\{buffer}\?\1(\?\\{loc}%
+\?\to\?\\{loc}\?+\?1\?\2)=\1(\?\H{@}\?,\39\?\H{@}\?\2)\2)\?\2\8\&{then}\6
+\\{app\_repl}\?\1(\?\H{@}\?\2)\?;\5
+\\{loc}\?\K\?\\{loc}\?+\?2;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop};\6
+\&{if}\1\1\8\\{loc}\?\G\?\\{limit}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Output\ file\ name\ didn\'t\ end"}\?\2)\?;\6
+\4\&{elsif}\1\8\\{buffer}\?\1(\?\\{loc}\?+\?1\?\2)\I\?\H{>}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ You\ should\ double\ @\ signs\ in\ output\
+file-names"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{loc}\?\K\?\\{loc}\?+\?2\C{another \\{output\_tok} byte will be stored, since
+\|a\?=\?\\{output\_tok}}\par
+\U section~151.\fi
+
+\M155. The following procedure is used to define a simple or parametric macro,
+just after the `\.{==}' of its definition has been scanned.
+
+\Y\P\?\4\X119:Procedures in \\{input\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{define\_macro}\?(\1\?\|t\?:\?\\{eight\_bits}\?\2)\?\2\8%
+\&{is}\8\1\6
+\|p\?:\?\\{name\_pointer};\C{the identifier being defined}\6
+\4\&{begin}\6
+\|p\?\K\?\\{id\_lookup}\?\1(\?\|t\?\2)\?;\5
+\\{scan\_repl}\?\1(\?\|t\?\2)\?;\6
+\\{equiv}\?\1(\?\|p\?\2)\K\?\\{cur\_repl\_text};\5
+\\{text\_link}\?\1(\?\\{cur\_repl\_text}\?\2)\K\?0;\2\6
+\&{end}\8\\{define\_macro};\par
+\fi
+
+\N156.  Scanning a module.
+The \\{scan\_module} procedure starts when `\.{@\ }' or `\.{@*}' has been
+sensed in the input, and it proceeds until the end of that module.  It
+uses \\{module\_count} to keep track of the current module number; with luck,
+\.{AWEAVE} and \.{ATANGLE} will both assign the same numbers to modules.
+
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{module\_count}\?:\?\\{mod\_range};\C{the current module number}\par
+\fi
+
+\M157. The top level of \\{scan\_module} is trivial.
+
+\Y\P\?\4\X119:Procedures in \\{input\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{scan\_module}\2\8\&{is}\8\1\6
+\|p\?:\?\\{name\_pointer};\C{module name for the current module}\6
+\4\&{begin}\6
+\\{incr}\?\1(\?\\{module\_count}\?\2)\?;\6
+\X158:Scan the definition part of the current module\X;\6
+\X160:Scan the \ADA\ part of the current module\X;\2\6
+\&{end}\8\\{scan\_module};\par
+\fi
+
+\M158. \P\?\X158:Scan the definition part of the current module\X\S\?\6
+\\{next\_control}\?\K\?0;\6
+\1\&{loop}\6
+\4\BL\\{continue}\EL\8\1\&{while}\8\\{next\_control}\?\L\?\\{format}\8\&{loop}\6
+\\{next\_control}\?\K\?\\{skip\_ahead};\6
+\&{if}\1\1\8\\{next\_control}\?=\?\\{module\_name}\2\8\&{then}\C{we want to
+scan the module name too}\6
+\\{loc}\?\K\?\\{loc}\?-\?2;\5
+\\{next\_control}\?\K\?\\{get\_next};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\&{loop};\6
+\?\&{exit}\8\&{when}\?\8\\{next\_control}\?\I\?\\{definition};\6
+\\{next\_control}\?\K\?\\{get\_next};\C{get identifier name}\6
+\&{if}\1\1\8\\{next\_control}\?\I\?\\{identifier}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Definition\ flushed,\ must\ start\ with\ "}\?%
+\mathbin{\.\&}\?\.{"identifier\ of\ length\ >\ 1"}\?\2)\?;\6
+\&{goto}\8\\{continue};\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{next\_control}\?\K\?\\{get\_next};\C{get token after the identifier}\6
+\&{if}\1\1\8\\{next\_control}\?=\?\\{equivalence\_sign}\2\8\&{then}\6
+\\{define\_macro}\?\1(\?\\{simple}\?\2)\?;\5
+\&{goto}\8\\{continue};\6
+\4\&{else}\6
+\X159:If the next text is `\?(\?\#\?)\S\?', call \\{define\_macro} and \&{goto}%
+\8\\{continue}\X;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{err\_print}\?\1(\?\.{"!\ Definition\ flushed\ since\ it\ starts\ badly"}\?%
+\2)\?;\2\6
+\&{end}\8\&{loop}\par
+\U section~157.\fi
+
+\M159. \P\?\X159:If the next text is `\?(\?\#\?)\S\?', call \\{define\_macro}
+and \&{goto}\8\\{continue}\X\S\?\6
+\&{if}\1\1\8\\{next\_control}\?=\?\H{(}\2\8\&{then}\6
+\\{next\_control}\?\K\?\\{get\_next};\6
+\&{if}\1\1\8\\{next\_control}\?=\?\H{\#}\2\8\&{then}\6
+\\{next\_control}\?\K\?\\{get\_next};\6
+\&{if}\1\1\8\\{next\_control}\?=\?\H{)}\2\8\&{then}\6
+\\{next\_control}\?\K\?\\{get\_next};\6
+\&{if}\1\1\8\\{next\_control}\?=\?\H{=}\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ Use\ ==\ for\ macros"}\?\2)\?;\6
+\\{next\_control}\?\K\?\\{equivalence\_sign};\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\8\\{next\_control}\?=\?\\{equivalence\_sign}\2\8\&{then}\6
+\\{define\_macro}\?\1(\?\\{parametric}\?\2)\?;\5
+\&{goto}\8\\{continue};\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1;\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~158.\fi
+
+\M160. \P\?\X160:Scan the \ADA\ part of the current module\X\S\?\6
+\&{case}\1\8\\{next\_control}\1\8\&{is}\8\6
+\4\&{when}\8\\{begin\_ada}\KR\6
+\|p\?\K\?0;\6
+\4\&{when}\8\\{module\_name}\KR\6
+\|p\?\K\?\\{cur\_module};\6
+\X161:Check that \?=\? or \?\S\? follows this module name, otherwise \&{return}%
+\X;\6
+\4\&{when}\8\&{others}\8\KR\6
+\&{return};\2\6
+\4\2\&{end}\8\&{case};\6
+\X162:Insert the module number into \\{tok\_mem}\X;\6
+\\{scan\_repl}\?\1(\?\\{module\_name}\?\2)\?;\C{now \\{cur\_repl\_text} points
+to the replacement text}\6
+\X163:Update the data structure so that the replacement text is accessible\X\par
+\U section~157.\fi
+
+\M161. \P\?\X161:Check that \?=\? or \?\S\? follows this module name, otherwise
+\&{return}\X\S\?\6
+\1\&{repeat}\6
+\\{next\_control}\?\K\?\\{get\_next};\2\6
+\&{until}\?\8\1(\?\\{next\_control}\?\I\?\H{+}\?\2)\?;\C{allow optional `%
+\.{+=}'}\6
+\&{if}\1\1\?\8\1(\?\\{next\_control}\?\I\?\H{=}\?\2)\W\1(\?\\{next\_control}\?%
+\I\?\\{equivalence\_sign}\?\2)\?\2\8\&{then}\6
+\\{err\_print}\?\1(\?\.{"!\ ADA\ text\ flushed,\ =\ sign\ is\ missing"}\?\2)\?;%
+\6
+\1\&{repeat}\6
+\\{next\_control}\?\K\?\\{skip\_ahead};\2\6
+\&{until}\?\8\1(\?\\{next\_control}\?=\?\\{new\_module}\?\2)\?;\6
+\&{return};\2\6
+\&{end}\8\2\&{if}\1\par
+\U section~160.\fi
+
+\M162. \P\?\X162:Insert the module number into \\{tok\_mem}\X\S\?\6
+\\{store\_two\_bytes}\?\1(\bn{8}{150000}+\?\\{module\_count}\?\2)\?\C{\?%
+\bn{8}{150000}=\bn{8}{320}\ast\bn{8}{400}\?}\par
+\U section~160.\fi
+
+\M163. \P\?\X163:Update the data structure so that the replacement text is
+accessible\X\S\?\6
+\&{if}\1\1\8\|p\?=\?0\2\8\&{then}\C{unnamed module}\6
+\\{text\_link}\?\1(\?\\{last\_unnamed}\?\2)\K\?\\{cur\_repl\_text};\5
+\\{last\_unnamed}\?\K\?\\{cur\_repl\_text};\6
+\4\&{elsif}\1\8\\{equiv}\?\1(\?\|p\?\2)=\?0\2\8\&{then}\6
+\\{equiv}\?\1(\?\|p\?\2)\K\?\\{cur\_repl\_text};\C{first module of this name}\6
+\4\&{else}\6
+\|p\?\K\?\\{equiv}\?\1(\?\|p\?\2)\?;\6
+\1\&{while}\8\\{text\_link}\?\1(\?\|p\?\2)<\?\\{module\_flag}\8\&{loop}\6
+\|p\?\K\?\\{text\_link}\?\1(\?\|p\?\2)\?;\C{find end of list}\2\6
+\&{end}\8\&{loop};\6
+\\{text\_link}\?\1(\?\|p\?\2)\K\?\\{cur\_repl\_text};\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{text\_link}\?\1(\?\\{cur\_repl\_text}\?\2)\K\?\\{module\_flag}\C{mark this
+replacement text as a nonmacro}\par
+\U section~160.\fi
+
+\M164. \P\?\X119:Procedures in \\{input\_phase}\X\mathrel{+}\S\?\6
+\&{procedure}\8\1\\{phase\_i}\2\8\&{is}\8\1\6
+\4\&{begin}\6
+\X126:Initialize the input system\X;\6
+\\{print\_ln}\?\1(\?\\{banner}\?\2)\?;\C{print a ``banner line''}\6
+\X167:Phase I: Read all the user's text and compress it into \\{tok\_mem}\X;\2\6
+\&{end}\8\\{phase\_i};\par
+\fi
+
+\N165.  The main program.
+We have defined plenty of procedures, and it is time to put the last
+pieces of the puzzle in place. Here is where \.{ATANGLE} starts, and where
+it ends.
+
+\Y\P\4\D\\{web\_input\_file\_name}\?\S\?\.{"input.aweb"}\?\6
+\?\par
+\P\4\D\\{change\_input\_file\_name}\?\S\?\.{"input.ach"}\?\6
+\?\par
+\P\4\D\\{ada\_output\_file\_name}\?\S\?\.{"web\_output.a"}\?\6
+\?\par
+\Y\P\?\4\X10:Types and objects visible from \\{data\_structures}\X\mathrel{+}\S%
+\?\6
+\\{opened}\?:\?\p{BOOLEAN}\?\K\?\p{FALSE};\C{was previous \\{open\_a\_file}
+succesfull?}\par
+\fi
+
+\M166\*.
+\Y\P\O{atangle.adb}\?\6
+\?\&{with}\8\\{Ada}\?.\?\\{Command\_Line};\6
+\&{use}\8\\{Ada}\?.\?\\{Command\_Line};\6
+\&{with}\8\p{TEXT\_IO}\?,\39\?\\{int\_number\_io};\6
+\&{with}\8\\{data\_structures}\?,\39\?\\{input\_output}\?,\39\?\\{input\_phase}%
+\?,\39\?\\{output\_phase};\6
+\&{use}\8\\{data\_structures}\?,\39\?\\{input\_output}\?,\39\?\\{input\_phase}%
+\?,\39\?\\{output\_phase};\6
+\&{procedure}\8\1\\{ATANGLE}\2\8\&{is}\8\1\6
+\\{ac}\?:\?\p{INTEGER}\?\K\?0;\6
+\4\&{begin}\6
+\\{print\_ln}\?\1(\?\.{"Trying\ to\ open\ input\ file."}\?\2)\?;\5
+\\{ac}\?\K\?\\{Argument\_Count};\6
+\&{if}\1\1\8\\{ac}\?<\?1\2\8\&{then}\6
+\\{fatal\_error}\?\1(\?\.{"No\ file\ on\ command\ line"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{open\_a\_file}\?\1(\?\\{web\_file}\?,\39\?\p{TEXT\_IO}\?.\?\p{IN\_FILE}\?,%
+\39\?\\{Argument}\?\1(\?1\?\2),\39\?\\{opened}\?\2)\?;\6
+\&{if}\1\1\?\8\R\?\\{opened}\2\8\&{then}\6
+\\{fatal\_error}\?\1(\?\.{"AWEB\ file\ not\ open"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{opened}\?\K\?\p{FALSE};\6
+\&{if}\1\1\8\\{ac}\?\G\?2\2\8\&{then}\6
+\\{open\_a\_file}\?\1(\?\\{change\_file}\?,\39\?\p{TEXT\_IO}\?.\?\p{IN\_FILE}%
+\?,\39\?\\{Argument}\?\1(\?2\?\2),\39\?\\{opened}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\&{if}\1\1\?\8\R\?\\{opened}\2\8\&{then}\6
+\\{new\_ln};\5
+\\{print\_ln}\?\1(\?\.{"!\ No\ change\ file."}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{open\_a\_file}\?\1(\?\\{ada\_file}\?,\39\?\p{TEXT\_IO}\?.\?\p{OUT\_FILE}\?,%
+\39\?\\{ada\_output\_file\_name}\?,\39\?\\{opened}\?\2)\?;\6
+\&{if}\1\1\?\8\1(\R\?\\{opened}\?\2)\ANT\1(\R\?\\{create\_ada\_file}\?\1(\?%
+\\{ada\_output\_file\_name}\?\2)\2)\?\2\8\&{then}\6
+\\{fatal\_error}\?\1(\?\.{"ADA\ file\ not\ open"}\?\2)\?;\2\6
+\&{end}\8\2\&{if}\1;\6
+\\{fn\_length}\?\K\?\p{TEXT\_IO}\?.\?\p{NAME}\?\1(\?\\{ada\_file}\?\2)'\?%
+\p{LAST};\5
+\\{file\_name}\?\1(\?1\?\to\?\\{fn\_length}\?\2)\K\?\p{TEXT\_IO}\?.\?\p{NAME}\?%
+\1(\?\\{ada\_file}\?\2)\?;\5
+\\{f\_line}\?\K\?1;\5
+\\{phase\_i};\6
+\&{stat}\1\6
+\4\&{for}\8\\{zo}\?\in\?\\{z\_range}\8\&{loop}\6
+\\{max\_tok\_ptr}\?\1(\?\\{zo}\?\2)\K\?\\{tok\_ptr}\?\1(\?\\{zo}\?\2)\?;\2\6
+\&{end}\8\&{loop};\2\6
+\&{tats}\6
+\\{phase\_ii};\5
+\&{raise}\8\\{end\_of\_ATANGLE}; \4\&{exception} \6
+\4\&{when}\8\\{end\_of\_ATANGLE}\KR\6
+\&{stat}\1\6
+\X168:Print statistics about memory usage\X;\2\6
+\&{tats}\6
+\hbox{\4\4}\C{here files should be closed if the operating system requires it}\6
+\X169:Print the job \\{history}\X;\2\6
+\&{end}\8\\{ATANGLE};\par
+\fi
+
+\M167. \P\?\X167:Phase I: Read all the user's text and compress it into \\{tok%
+\_mem}\X\S\?\6
+\\{phase\_one}\?\K\?\p{TRUE};\5
+\\{module\_count}\?\K\?0;\6
+\1\&{repeat}\6
+\\{next\_control}\?\K\?\\{skip\_ahead};\2\6
+\&{until}\?\8\1(\?\\{next\_control}\?=\?\\{new\_module}\?\2)\?;\6
+\1\&{while}\?\8\R\?\\{input\_has\_ended}\8\&{loop}\6
+\\{scan\_module};\2\6
+\&{end}\8\&{loop};\6
+\X130:Check that all changes have been read\X;\6
+\\{phase\_one}\?\K\?\p{FALSE}\par
+\U section~164.\fi
+
+\M168. \P\?\X168:Print statistics about memory usage\X\S\?\6
+\\{print\_nl}\?\1(\?\.{"Memory\ usage\ statistics:"}\?\2)\?;\5
+\\{new\_ln};\5
+\\{print\_int}\?\1(\?\\{name\_ptr}\?,\39\?1\?\2)\?;\5
+\\{print}\?\1(\?\.{"\ names,\ "}\?\2)\?;\5
+\\{print\_int}\?\1(\?\\{text\_ptr}\?,\39\?1\?\2)\?;\5
+\\{print\_ln}\?\1(\?\.{"\ replacement\ texts;"}\?\2)\?;\5
+\\{print\_int}\?\1(\?\\{byte\_ptr}\?\1(\?0\?\2),\39\?1\?\2)\?;\6
+\1\&{for}\8\\{wo}\?\in\?1\?\to\?\\{ww}\?-\?1\8\&{loop}\6
+\\{print}\?\1(\?\.{"+"}\?\2)\?;\5
+\\{print\_int}\?\1(\?\\{byte\_ptr}\?\1(\?\\{wo}\?\2),\39\?1\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\\{print}\?\1(\?\.{"\ bytes,\ "}\?\2)\?;\5
+\\{print\_int}\?\1(\?\\{max\_tok\_ptr}\?\1(\?0\?\2),\39\?1\?\2)\?;\6
+\1\&{for}\8\\{zo}\?\in\?1\?\to\?\\{zz}\?-\?1\8\&{loop}\6
+\\{print}\?\1(\?\.{"+"}\?\2)\?;\5
+\\{print\_int}\?\1(\?\\{max\_tok\_ptr}\?\1(\?\\{zo}\?\2),\39\?1\?\2)\?;\2\6
+\&{end}\8\&{loop};\6
+\\{print}\?\1(\?\.{"\ tokens."}\?\2)\?\par
+\U section~166\*.\fi
+
+\M169. Some implementations may wish to pass the \\{history} value to the
+operating system so that it can be used to govern whether or not other
+programs are started. Here we simply report the history to the user.
+
+\Y\P\?\4\X169:Print the job \\{history}\X\S\?\6
+\&{case}\1\8\\{history}\1\8\&{is}\8\6
+\4\&{when}\8\\{spotless}\KR\8\\{print\_nl}\?\1(\?\.{"(No\ errors\ were\
+found.)"}\?\2)\?;\6
+\4\&{when}\8\\{harmless\_message}\KR\8\\{print\_nl}\?\1(\?\.{"(Did\ you\ see\
+the\ warning\ message\ above?)"}\?\2)\?;\6
+\4\&{when}\8\\{error\_message}\KR\8\\{print\_nl}\?\1(\?\.{"(Pardon\ me,\ but\ I%
+\ think\ I\ spotted\ something\ wrong.)"}\?\2)\?;\6
+\4\&{when}\8\\{fatal\_message}\KR\8\\{print\_nl}\?\1(\?\.{"(That\ was\ a\ fatal%
+\ error,\ my\ friend.)"}\?\2)\?;\2\6
+\4\2\&{end}\8\&{case};\C{there are no other cases}\6
+\\{new\_ln}\par
+\U section~166\*.\fi
+
+\N170\*.  System-dependent changes.
+This module should be replaced, if necessary, by changes to the program
+that are necessary to make \.{ATANGLE} work at a particular installation.
+It is usually best to design your change file so that all changes to
+previous modules preserve the module numbering; then everybody's version
+will be consistent with the printed program. More extensive changes,
+which introduce new modules, can be inserted here; then only the index
+itself will get a new module number.
+
+\Y\P\O{int\_number\_io.ads}\?\6
+\?\&{with}\8\p{TEXT\_IO};\6
+\&{package}\8\1\\{int\_number\_io}\?\8\&{is}\8\&{new}\?\8\p{TEXT\_IO}\?.\?%
+\p{INTEGER\_IO}\?\1(\?\p{INTEGER}\?\2)\?\2;\par
+\fi
+
+\N171\*.  Index.
+Here is a cross-reference table for the \.{ATANGLE} processor.
+All modules in which an identifier is
+used are listed with that identifier, except that reserved words are
+indexed only when they appear in format definitions, and the appearances
+of identifiers in module names are not indexed.
+Underlined entries of subprograms and packages correspond to sections where
+this entity is specified, whereas entries in italic type correspond to
+the section where the entity's body is stated.
+For any other identifier underlined entries correspond to where the
+identifier was declared. Error messages and
+a few other things like ``ASCII code'' are indexed here too.
+
+
+
+
+\fi
+
+
+\ch 1\*, 3\*, 4\*, 5\*, 6\*, 7\*, 166\*, 170\*, 171\*.
+\inx
+\:\.{\AT!a is ignored in ADA text}, 151.
+\:\.{\AT!d is ignored in ADA text}, 151.
+\:\.{\AT!f is ignored in ADA text}, 151.
+\:\|{a}, \[84], \[149].
+\:\\{ac}, 166\*.
+\:\\{Ada}, 166\*.
+\:{ADA attributes}, 13--14.
+\:\.{ADA file not open}, 166\*.
+\:\.{ADA text flushed...}, 161.
+\:\\{ada\_file}, \[25], 26, 94, 108, 166\*.
+\:\\{ada\_file\_name}, 23, \[26].
+\:\\{ada\_output\_file\_name}, \[165], 166\*.
+\:\.{Ambiguous prefix}, 69.
+\:\\{and\_sign}, 16, 102.
+\:\\{app}, \[96], 98--99.
+\:\\{app\_repl}, \[90], 149--154.
+\:\\{Argument}, 166\*.
+\:\\{Argument\_Count}, 166\*.
+\:{ASCII code}, 12, 72.
+\:{ASCII code constant}, 72.
+\:\\{ASCII\_code}, \[12], 14, 16, 27--28, 39, 49, 62, 132, 134, 149.
+\:\\{ascii\_tok}, \[72], 90, 102, 132, 140, 149.
+\:\\{ATANGLE}, \\{166\*}.
+\:\.{AWEB file ended...}, 124.
+\:\.{AWEB file not open}, 166\*.
+\:\|{b}, \[84], \[94], \[149].
+\:\\{bal}, \[84], 90, \[134], 135, \[149], 150.
+\:\\{banner}, \[1\*], 164.
+\:\\{begin\_ada}, \[131], 132, 151, 160.
+\:\\{begin\_comment}, \[72], 112, 132.
+\:\p{BOOLEAN}, 23--24, 26, 28--30, 92, 109, 116, 119, 136, 165.
+\:\\{box\_sign}, 16, 102, 138.
+\:\\{brace\_level}, \[79], 80, 95, 112.
+\:\\{break\_ptr}, \[91], 92--95, 98--99, 113.
+\:\\{buf\_size}, \[10], 27--29, 153.
+\:\\{buffer}, \[27], 28--29, 32--33, 49, 51--52, 54, 56, 59, 119, 121,
+123--130, 133--135, 137--140, 143--144, 146, 151--154.
+\:\\{buffer\_index}, \[27], 29, 32, 49, 51, 116, 118.
+\:\\{buffer\_type}, \[27], 91, 97, 118.
+\:\\{byte\_field}, \[76].
+\:\\{byte\_index}, \[39], 40, 51, 65, 69, 84, 101.
+\:\\{byte\_mem}, 38, \[39], 40, 45, 48, 51, 54, 59, 61, 65--67, 69, 84, 101,
+104.
+\:\\{byte\_memory}, \[39].
+\:\\{byte\_ptr}, \[40], 59, 66, 87, 168.
+\:\\{byte\_start}, 38, \[39], 40--41, 48--49, 54, 59, 61, 66--67, 76, 78, 87,
+104, 136.
+\:\|{c}, \[29], \[51], \[65], \[69], \[132], \[133], \[134], \[137].
+\:\.{Can't output ASCII code n}, 101.
+\:\\{carriage\_return}, 16--17, 28.
+\:\.{Change file ended...}, 122, 124, 129.
+\:\.{Change file entry did not match}, 130.
+\:\\{change\_buffer}, \[118], 119--120, 123--124, 128, 130.
+\:\\{change\_changing}, \[117], 124, 126, 129.
+\:\\{change\_file}, \[22], 33, 116, 118, 121--122, 124, 129, 166\*.
+\:\\{change\_input\_file\_name}, \[165].
+\:\\{change\_limit}, \[118], 119--120, 123--124, 128, 130.
+\:\\{changing}, 33, \[116], 117--118, 120, 124, 126--127, 130.
+\:\p{CHARACTER}, 13, 15.
+\:\\{character\_tok}, \[72], 90, 102, 146, 149.
+\:\\{check\_break}, \[94], 98.
+\:\\{check\_change}, \\{124}, 128.
+\:\\{chop\_hash}, \[49], 58, 60.
+\:\\{chop\_hash\_index}, \[49], 51.
+\:\\{chopped\_id}, \[49], 51, 56, 61.
+\:\p{CLOSE}, 108.
+\:\\{Command\_Line}, 166\*.
+\:\\{comment\_output}, \[92], 93--94, 112.
+\:\\{compare}, \[63], 65, 69.
+\:\\{compress}, \[138].
+\:\\{confusion}, \[36], 86.
+\:\\{continue}, 101, 121, 149, 151, 158--159.
+\:\\{control\_code}, 131, \\{132}, 133, 136, 140.
+\:\\{control\_text}, \[131], 132, 140.
+\:\.{Could not open file `x'}, 108.
+\:\\{count}, \[69].
+\:\p{CREATE}, 26.
+\:\\{create\_ada\_file}, \[23], \\{26}, 108, 166\*.
+\:\\{cur\_byte}, \[76], 80--82, 84, 87, 90.
+\:\\{cur\_char}, \[101], 104--105, 108, 110--112.
+\:\\{cur\_end}, \[76], 80--82, 84, 87.
+\:\\{cur\_mod}, \[76], 80--81, 84.
+\:\\{cur\_module}, \[136], 141, 151, 160.
+\:\\{cur\_name}, \[76], 80--82.
+\:\\{cur\_repl}, \[76], 77, 80--82.
+\:\\{cur\_repl\_text}, \[148], 149, 155, 160, 163.
+\:\\{cur\_state}, \[76], 81--82.
+\:\\{cur\_val}, \[83], 84, 86, 104, 112.
+\:\|{d}, \[137].
+\:\\{data\_structures}, \\{3\*}, 4\*--7\*, 166\*.
+\:\.{data\_structures.adb}, 3\*.
+\:\.{data\_structures.ads}, 3\*.
+\:\&{declare}, 8.
+\:\\{decr}, \[9], 29, 82, 88, 90, 96, 112, 135, 139, 143, 149--150.
+\:\\{default\_name}, 23, \[24].
+\:\\{define\_macro}, \\{155}, 158--159.
+\:\\{definition}, \[131], 132, 151, 158.
+\:\.{Definition flushed...}, 158.
+\:\\{double\_dot}, \[72], 102, 138.
+\:\\{double\_star}, 16, 102, 138.
+\:\\{eight\_bits}, \[38], 39, 50--51, 72, 79, 84, 92, 97--98, 101, 131--134,
+137, 149, 155.
+\:\&{end}, 8--9.
+\:\\{end\_comment}, \[72], 112, 132.
+\:\\{end\_field}, \[76].
+\:\\{end\_of\_ATANGLE}, \[35], \\{166\*}.
+\:\p{END\_OF\_FILE}, 29.
+\:\p{END\_OF\_LINE}, 29.
+\:\\{equal}, \[63], 65--67.
+\:\\{equiv}, 38, \[39], 44--46, 49, 58, 60--61, 66, 81, 85, 87, 155, 163.
+\:\\{equivalence\_sign}, 16, 102, 138, 158--159, 161.
+\:\\{err\_print}, \[31], 57, 65, 69, 94, 105--106, 108, 111--112, 117,
+121--122, 124--125, 129--130, 134--135, 137, 140, 143--144, 149--154, 158--159,
+161.
+\:\\{error}, 29, \[31], \\{32}, 35, 61, 85, 87, 95, 101, 125, 150.
+\:\\{error\_message}, \[11], 169.
+\:\\{extension}, \[63], 67.
+\:\.{Extra )}, 149.
+\:\.{Extra \AT!\}}, 112.
+\:\|{f}, \[24], \[29].
+\:\\{f\_line}, 34, 94, \[107], 108, 166\*.
+\:\p{FALSE}, 24, 26, 28--30, 93, 109--110, 112, 117--119, 124, 126, 136--137,
+165--167.
+\:\\{fatal\_error}, \[35], 36--37, 108, 166\*.
+\:\\{fatal\_message}, \[11], 169.
+\:\p{FILE}, 24, 26.
+\:\.{File name should have length > 0}, 108.
+\:\p{FILE\_MODE}, 23--24.
+\:\\{file\_name}, 34, \[107], 108, 166\*.
+\:\p{FILE\_TYPE}, 13.
+\:\\{final\_limit}, \[29].
+\:\p{FIRST}, 13.
+\:\\{flush\_buffer}, \\{94}, 95, 113.
+\:\\{fn\_length}, 34, \[107], 108, 166\*.
+\:\\{force\_line}, \[72], 101, 132.
+\:\\{form\_feed}, 16, 28.
+\:\\{format}, \[131], 132, 151, 158.
+\:\\{found}, 53--54, 65.
+\:\\{frac}, \[97], 98--99, 101, 111.
+\:\.{Fraction too long}, 111.
+\:\p{GET}, 29.
+\:\\{get\_fraction}, 101, 110--111.
+\:\\{get\_line}, 116, \\{127}, 133--134, 137, 143.
+\:\\{get\_next}, 136, \\{137}, 149, 158--159, 161.
+\:\\{get\_output}, 83, \\{84}, 91, 100--102, 105--106, 108, 110--112.
+\:\\{greater}, \[63], 65, 67, 69.
+\:\\{greater\_or\_equal}, 16, 102, 138.
+\:\|{h}, \[51].
+\:\\{harmless\_message}, \[11], 169.
+\:\\{hash}, 40, \[49], 53.
+\:\\{hash\_index}, \[49], 51.
+\:\\{hash\_size}, \[10], 49, 52, 56.
+\:\\{hashing}, \\{5\*}, 7\*.
+\:\.{hashing.adb}, 5\*.
+\:\.{hashing.ads}, 5\*.
+\:\\{history}, \[11], 169.
+\:\\{history\_type}, \[11].
+\:\.{Hmm... n of the preceding...}, 125.
+\:\|{i}, \[18], \[51].
+\:\\{id\_first}, \[49], 51--52, 54, 56, 59, 136, 139.
+\:\\{id\_loc}, \[49], 51--52, 54, 56, 59, 136, 139.
+\:\\{id\_lookup}, 49, \[50], \\{51}, 136, 151, 155.
+\:\\{ident}, \[97], 98--99, 102, 104, 110.
+\:\\{identifier}, \[83], 86, 104, 136, 139, 151, 158.
+\:\.{Identifier conflict...}, 61.
+\:\\{ignore}, \[131], 132--133, 140.
+\:\\{ilk}, 38, \[39], 44--45, 49, 55, 57--59, 82, 86--87.
+\:\.{Improper \AT! within control text}, 140.
+\:\.{Improper ASCII-code sequence...}, 140.
+\:\.{Improper based number...}, 137.
+\:\p{IN\_FILE}, 166\*.
+\:\.{Incompatible module names}, 65.
+\:\\{incr}, \[9], 29, 52, 54, 56, 59, 61, 66--67, 69, 81, 84, 87, 90, 94, 96,
+104--106, 108, 110--112, 121--122, 124, 128--129, 133--135, 137--140, 143--144,
+149, 152--154, 157.
+\:\.{Input ended in mid-comment}, 134.
+\:\.{Input ended in section name}, 143.
+\:\.{Input line too long}, 29.
+\:\\{input\_has\_ended}, \[116], 124, 126, 128, 133--134, 137, 143, 167.
+\:\\{input\_ln}, \[28], \\{29}, 121--122, 124, 128--129.
+\:\\{input\_output}, 3\*, \\{4\*}, 5\*--7\*, 166\*.
+\:\.{input\_output.adb}, 4\*.
+\:\.{input\_output.ads}, 4\*.
+\:\\{input\_phase}, \\{7\*}, 166\*.
+\:\.{input\_phase.adb}, 7\*.
+\:\.{input\_phase.ads}, 7\*.
+\:\\{int\_number\_io}, 3\*--4\*, 6\*--7\*, 20, 166\*, \\{170\*}.
+\:\.{int\_number\_io.ads}, 170\*.
+\:\p{INTEGER}, 12, 15, 27, 38--39, 49, 62, 76, 83, 91, 96, 101, 107, 116, 124,
+145, 166\*, 170\*.
+\:\p{INTEGER\_IO}, 170\*.
+\:\p{IS\_OPEN}, 24, 26, 29.
+\:\|{j}, \[34], \[65], \[69], \[101], \[145].
+\:\\{join}, \[72], 98, 101, 132.
+\:\\{jump\_out}, 31, \[35].
+\:\|{k}, \[33], \[48], \[51], \[65], \[69], \[84], \[94], \[96], \[98], \[101],
+\[137].
+\:\\{kj}, \[66].
+\:\\{kl}, \[61].
+\:\|{l}, \[32], \[51], \[65], \[69].
+\:\p{LAST}, 13, 166\*.
+\:\\{last\_unnamed}, \[70], 163.
+\:\\{left\_arrow}, 16, 102, 138.
+\:\\{left\_label\_bracket}, 16, 102, 138.
+\:\\{length}, \[40], 53.
+\:\\{less}, \[63], 65--67, 69.
+\:\\{less\_or\_equal}, 16, 102, 138.
+\:\\{limit}, 28--29, 33, \[116], 119, 121--123, 125--130, 133--134, 137--138,
+143, 152--154.
+\:\\{line}, 33, 93--94, \[116], 117, 121--122, 124, 126, 128--130.
+\:\\{line\_feed}, 16, 28.
+\:\\{line\_length}, \[10], 91, 94, 97, 101, 105--106, 111, 113.
+\:\\{lines\_dont\_match}, \\{119}, 124.
+\:\\{link}, 38, \[39], 40, 45, 49, 53, 70.
+\:\\{llink}, \[45], 65--66, 69.
+\:\\{loc}, 29, 33, \[116], 121, 125--127, 129--130, 133--135, 137--140,
+143--144, 146, 151--154, 158.
+\:\.{Long line must be truncated}, 94.
+\:\\{long\_name\_index}, \[62], 65, 69, 137.
+\:\\{longest\_name}, \[10], 62, 143, 145.
+\:\&{loop}, 9.
+\:\\{mark\_error}, \[11], 32.
+\:\\{mark\_fatal}, \[11], 35.
+\:\\{mark\_harmless}, \[11], 100, 145.
+\:\\{max\_bytes}, \[10], 39, 59, 66.
+\:\\{max\_id\_length}, \[10], 104.
+\:\\{max\_names}, \[10], 39, 59, 66, 87.
+\:\\{max\_texts}, \[10], 39, 70, 87, 149.
+\:\\{max\_tok\_ptr}, \[42], 88, 166\*, 168.
+\:\\{max\_toks}, \[10], 39, 74, 90.
+\:\\{misc}, \[92], 93, 97--99, 101--102, 110, 112--113.
+\:\.{Missing n )}, 150.
+\:\&{mitpo}, \[8].
+\:\\{mod\_field}, \[76].
+\:\\{mod\_lookup}, 62--63, \[64], \\{65}, 141--142.
+\:\\{mod\_range}, \[76], 156.
+\:\\{mod\_text}, \[62], 65--69, 137, 141--145.
+\:\p{MODE}, 24, 26.
+\:\\{mode\_of\_file}, 23, \[24].
+\:\\{module\_count}, 132, \[156], 157, 162, 167.
+\:\\{module\_flag}, 70, 82, 163.
+\:\\{module\_name}, \[131], 132, 136, 140, 148, 151, 158, 160.
+\:\\{module\_number}, \[83], 84, 112.
+\:\|{n}, \[124].
+\:\p{NAME}, 24, 26, 166\*.
+\:\.{Name does not match}, 69.
+\:\p{NAME\_ERROR}, 24, 26.
+\:\\{name\_field}, \[76].
+\:\\{name\_index}, \[39], 40, 69.
+\:\\{name\_info}, \[39], 45.
+\:\\{name\_pointer}, \[40], 47--48, 50--51, 64--65, 68--69, 76, 81, 136, 155,
+157.
+\:\\{name\_ptr}, \[40], 48, 51, 53, 55, 57, 59, 66, 87--90, 168.
+\:\p{NEW\_LINE}, 20.
+\:\\{new\_ln}, \[20], 33, 94--95, 101, 125, 150, 166\*, 168--169.
+\:\\{new\_module}, \[131], 132--133, 137, 151, 161, 167.
+\:\\{next\_control}, \[148], 149, 158--161, 167.
+\:\.{No change file.}, 166\*.
+\:\.{No output was specified}, 100.
+\:\.{No parameter given for macro}, 87.
+\:\\{normal}, \[44], 49--51, 55, 57--59, 86, 151.
+\:\.{Not present: <section name>}, 85.
+\:\\{not\_equal}, 16, 102, 138.
+\:\\{not\_found}, 61.
+\:\\{not\_sign}, 16, 102.
+\:\\{null\_array}, \[40], 41--43, 49.
+\:\\{num\_or\_id}, \[92], 98--99, 102.
+\:\p{OPEN}, 24.
+\:\\{open\_a\_file}, \[23], \\{24}, 165--166\*.
+\:\\{opened}, \[165], 166\*.
+\:\&{optim}, \[8].
+\:\\{or\_sign}, 16, 102.
+\:\\{other\_line}, \[116], 117, 126, 130.
+\:\\{out\_buf}, 34, \[91], 93--94, 96--97.
+\:\\{out\_buf\_size}, \[10], 91, 96.
+\:\\{out\_buffer\_index}, \[91], 94, 96.
+\:\\{out\_contrib}, \[97], 98, 101--102, 104--106, 110--112.
+\:\p{OUT\_FILE}, 26, 166\*.
+\:\\{out\_ptr}, 34, \[91], 92--96, 98--99, 113.
+\:\\{out\_state}, \[92], 93, 98--99, 101--102, 105, 112--113.
+\:\.{Output file name didn't end}, 154.
+\:\\{output\_phase}, \\{6\*}, 166\*.
+\:\.{output\_phase.adb}, 6\*.
+\:\.{output\_phase.ads}, 6\*.
+\:\\{output\_state}, \\{76}.
+\:\\{output\_tok}, \[72], 101, 108, 132, 151, 154.
+\:\\{overflow}, \[37], 59, 66, 74, 81, 87, 90, 149.
+\:\|{p}, \[48], \[51], \[65], \[69], \[81], \[155], \[157].
+\:\p{PACK}, 39.
+\:\\{param}, \[72], 84, 90, 149.
+\:\\{parametric}, \[44], 50, 82, 86, 148--149, 159.
+\:\\{phase\_i}, \[7\*], \\{164}, 166\*.
+\:\\{phase\_ii}, \[6\*], \\{114}, 166\*.
+\:\\{phase\_one}, \[30], 32, 167.
+\:\\{pop\_level}, \\{82}, 84, 87--88.
+\:\p{POS}, 14.
+\:\\{prefix}, \[63], 67.
+\:\\{prefix\_lookup}, \[68], \\{69}, 141.
+\:\\{prime\_the\_change\_buffer}, \\{120}, 126, 129.
+\:\\{print}, \[20], 33--34, 48, 61, 85, 90, 94--95, 101, 125, 132, 145, 150,
+168.
+\:\\{print\_id}, \[47], \\{48}, 85, 87.
+\:\\{print\_int}, \[20], 33--34, 94--95, 101, 125, 132, 150, 168.
+\:\\{print\_ln}, \[20], 33--34, 164, 166\*, 168.
+\:\\{print\_nl}, \[20], 29, 31, 35, 61, 85, 87, 100, 145, 168--169.
+\:\.{Program ended at brace level n}, 95.
+\:\\{push\_level}, \\{81}, 85--86, 89.
+\:\p{PUT}, 20, 94.
+\:\|{q}, \[51], \[65], \[69].
+\:\|{r}, \[69].
+\:\&{repeat}, \[9].
+\:\\{repl\_field}, \[76].
+\:\\{restart}, 84--87, 89, 99, 127, 137, 140.
+\:\\{reswitch}, 101, 105, 110--112.
+\:\\{right\_arrow}, 16, 102, 138.
+\:\\{right\_label\_bracket}, 16, 102, 138.
+\:\\{rlink}, \[45], 46, 65--66, 69.
+\:\|{s}, \[51].
+\:\\{scan\_module}, 156, \\{157}, 167.
+\:\\{scan\_repl}, 148, \\{149}, 155, 160.
+\:\\{scanning\_based\_number}, \[109], 110, 136--137.
+\:\\{scanning\_character}, \[136], 137, 140, 146.
+\:\.{Section ended in mid-comment}, 135.
+\:\.{Section name didn't end}, 144.
+\:\.{Section name too long}, 145.
+\:\\{semi\_ptr}, \[91], 93--95, 98, 112.
+\:\\{send\_out}, 97, \\{98}, 100--102, 104--106, 110--113.
+\:\\{send\_the\_output}, 100, \\{101}.
+\:\\{send\_val}, \\{96}, 100, 102, 112.
+\:\\{set\_element\_sign}, 16, 102.
+\:\\{simple}, \[44], 50, 86--87, 148, 158.
+\:\\{sixteen\_bits}, \[38], 39, 44, 49, 64--65, 68--70, 73--74, 76, 83--84, 98,
+148--149.
+\:\\{skip\_ahead}, \\{133}, 140, 158, 161, 167.
+\:\\{skip\_comment}, \\{134}, 137.
+\:\p{SKIP\_LINE}, 29.
+\:\.{Sorry, x capacity exceeded}, 37.
+\:\\{spotless}, \[11], 169.
+\:\\{stack}, \[76], 81--82.
+\:\\{stack\_ptr}, \[76], 80--82, 84, 87, 101, 105--106, 108.
+\:\\{stack\_size}, \[10], 76, 81.
+\:\p{STANDARD\_OUTPUT}, 20.
+\:\&{stat}, \[8].
+\:\p{STATUS\_ERROR}, 24, 26.
+\:\\{store\_two\_bytes}, \[73], \\{74}, 90, 162.
+\:\\{str}, \[97], 98, 102, 105--106, 110, 112--113.
+\:\p{STRING}, 23--24, 26, 107.
+\:\.{String didn't end}, 152.
+\:\.{String too long}, 105.
+\:\\{success}, 23, \[24].
+\:{system dependencies}, \[1\*], 13, 17, 20--21, 24, 26, 28, 33, 165, 169--170%
+\*.
+\:\|{t}, \[51], \[98], \[149], \[155].
+\:\\{tab\_mark}, 16, 33, 132, 135, 137, 143--144.
+\:\&{tats}, \[8].
+\:\\{temp\_line}, \[116], 117.
+\:\\{text\_char}, \[13], 14--15, 18, 20, 29.
+\:\\{text\_file}, \[13], 22--25, 28--29.
+\:\\{text\_index}, \[39], 42.
+\:\p{TEXT\_IO}, 3\*--7\*, 13, 20, 23, \\{24}, \\{26}, 29, 94, 108, 166\*, 170\*.
+\:\\{text\_link}, 38, \[39], 42, 70--71, 80, 82, 87, 100, 155, 163.
+\:\\{text\_pointer}, \[42], 70, 76, 148.
+\:\\{text\_ptr}, \[42], 78, 87--88, 149, 168.
+\:\.{This can't happen}, 36.
+\:\.{This identifier has already...}, 57.
+\:\.{This identifier was defined...}, 57.
+\:\\{tok\_mem}, 38, \[39], 42, 70, 74, 76--78, 84, 87, 90, 149.
+\:\\{tok\_ptr}, \[42], 74, 78, 87--88, 90, 149, 166\*.
+\:\\{tok\_start}, 38, \[39], 42--43, 70, 76, 80--82, 87--88, 149.
+\:\\{token\_index}, \[39], 42.
+\:\\{token\_info}, \[39].
+\:\\{token\_memory}, \[39].
+\:\p{TRUE}, 24, 26, 28--30, 112, 116--117, 119, 124, 126, 128, 130, 136--137,
+140, 146, 167.
+\:\|{u}, \[96].
+\:\\{unambig\_length}, \[10], 44, 49, 56, 61.
+\:\\{unbreakable}, \[92], 99, 101, 105, 112.
+\:\&{until}, \[9].
+\:\\{update\_terminal}, \[21], 32, 94, 100, 132.
+\:{uppercase}, 56, 61, 102, 110--111.
+\:\.{Use == for macros}, 159.
+\:\p{USE\_ERROR}, 24, 26.
+\:\|{v}, \[96], \[98].
+\:\p{VAL}, 14.
+\:\\{verbatim}, \[72], 101, 106, 132, 151, 153.
+\:\.{Verbatim string didn't end}, 153.
+\:\.{Verbatim string too long}, 106.
+\:\|{w}, \[48], \[51], \[65], \[69], \[84], \[101].
+\:\\{w\_range}, \[39], 40, 48, 51, 65, 69, 84, 101.
+\:\\{web\_file}, \[22], 33, 116, 118, 124, 128, 130, 166\*.
+\:\\{web\_input\_file\_name}, \[165].
+\:\.{Where is the match...}, 121, 125, 129.
+\:\\{wo}, \[168].
+\:\\{ww}, 10, \[39], 40--41, 48, 54, 59, 61, 66--67, 87, 104, 168.
+\:\|{x}, \[74].
+\:\\{xchr}, \[14], 15, 17--18, 33--34, 48, 61, 94, 108, 145, 151.
+\:\\{xord}, \[14], 18, 29.
+\:\.{You should double \AT! signs}, 137, 152--154.
+\:\|{z}, \[42].
+\:\\{z\_range}, \[39], 42, 77, 166\*.
+\:\\{zo}, \[77], 80--82, 84, 87, 90, \[166\*], \[168].
+\:\\{zz}, 10, \[39], 42--43, 77, 80--82, 87--88, 149, 168.
+\fin
+\:\X112:Cases involving \.{@\{} and \.{@\}}\X
+\U section~101.
+\:\X102:Cases like \.{/=} and \.{:=}\X
+\U section~101.
+\:\X110:Cases related to constants, possibly leading to \\{get\_fraction} or %
+\\{reswitch}\X
+\U section~101.
+\:\X104:Cases related to identifiers\X
+\U section~101.
+\:\X60:Check for ambiguity and update secondary hash\X
+\U section~59.
+\:\X145:Check for overlong name\X
+\U section~143.
+\:\X61:Check if \|q conflicts with \|p\X
+\U section~60.
+\:\X130:Check that all changes have been read\X
+\U section~167.
+\:\X161:Check that \?=\? or \?\S\? follows this module name, otherwise %
+\&{return}\X
+\U section~160.
+\:\X54:Compare name \|p with current identifier, \&{goto}\8\\{found} if equal\X
+\U section~53.
+\:\X138:Compress two-symbol combinations like `\.{:=}'\X
+\U section~137.
+\:\X52:Compute the hash code \|h\X
+\U section~51.
+\:\X53:Compute the name location \|p\X
+\U section~51.
+\:\X56:Compute the secondary hash code \|h and put the first characters into
+the auxiliary array \\{chopped\_id}\X
+\U section~55.
+\:\X152:Copy a string from the buffer to \\{tok\_mem}\X
+\U section~149.
+\:\X154:Copy output file-name from the buffer to \\{tok\_mem}\X
+\U section~151.
+\:\X90:Copy the parameter into \\{tok\_mem}\X
+\U section~87.
+\:\X153:Copy verbatim string from the buffer to \\{tok\_mem}\X
+\U section~151.
+\:\X135:Do special things when \|c\?=\?\.{"@"}\?,\?\.{"\\"}\?,\?\.{"\{"}\?,\?%
+\.{"\}"}; \&{return} at end\X
+\U section~134.
+\:\X95:Empty the last line from the buffer\X
+\U section~100.
+\:\X59:Enter a new identifier into the table at position \|p\X
+\U section~55.
+\:\X66:Enter a new module name into the tree\X
+\U section~65.
+\:\X86:Expand macro \|a and \&{return}, or \&{goto}\8\\{restart} if no output
+found\X
+\U section~84.
+\:\X85:Expand module \|a\?-\bn{8}{24000}\?, \&{goto}\8\\{restart}\X
+\U section~84.
+\:\X113:Force a line break\X
+\U sections~101, 108, and~112(3).
+\:\X139:Get an identifier\X
+\U section~137.
+\:\X140:Get control code and possible module name\X
+\U section~137.
+\:\X99:Get the buffer ready for appending the new information\X
+\U section~98.
+\:\X108:Get the \\{file\_name} and redirect further output\X
+\U section~101.
+\:\X57:Give double-definition error and change \|p to type \|t\X
+\U section~55.
+\:\X144:If end of name, \&{exit}\X
+\U section~143.
+\:\X125:If the current line starts with \.{@y}, report any discrepancies and %
+\&{return}\X
+\U section~124.
+\:\X159:If the next text is `\?(\?\#\?)\S\?', call \\{define\_macro} and %
+\&{goto}\8\\{continue}\X
+\U section~158.
+\:\X146:If this is the beginning of an character token then set \\{scanning%
+\_character} to \p{TRUE} and \?\&{return}\?\8\\{character\_tok}; otherwise do
+nothing\X
+\U section~137.
+\:\X151:In cases that \|a is a non-ASCII token (\\{identifier}, \\{module%
+\_name}, etc.), either process it and change \|a to a byte that should be
+stored, or \&{goto}\8\\{continue} if \|a should be ignored, or \?\&{exit}\8%
+\&{when}\?\8\|a signals the end of this replacement text\X
+\U section~149.
+\:\X126:Initialize the input system\X
+\U section~164.
+\:\X93:Initialize the output buffer\X
+\U section~100.
+\:\X80:Initialize the output stacks\X
+\U section~100.
+\:\X162:Insert the module number into \\{tok\_mem}\X
+\U section~160.
+\:\X150:Make sure the parentheses balance\X
+\U section~149.
+\:\X123:Move \\{buffer} and \\{limit} to \\{change\_buffer} and \\{change%
+\_limit}\X
+\U sections~120 and~124.
+\:\X103:Other printable characters\X
+\U section~101.
+\:\X167:Phase I: Read all the user's text and compress it into \\{tok\_mem}\X
+\U section~164.
+\:\X100:Phase II: Output the contents of the compressed tables\X
+\U section~114.
+\:\X33:Print error location based on input buffer\X
+\U section~32.
+\:\X34:Print error location based on output buffer\X
+\U section~32.
+\:\X168:Print statistics about memory usage\X
+\U section~166\*.
+\:\X169:Print the job \\{history}\X
+\U section~166\*.
+\:\X48, 74:Procedures in \\{data\_structures}\X
+\U section~3\*.
+\:\X51, 65, 69:Procedures in \\{hashing}\X
+\U section~5\*.
+\:\X24, 26, 29, 32:Procedures in \\{input\_output}\X
+\U section~4\*.
+\:\X119, 120, 124, 127, 132, 133, 134, 137, 149, 155, 157, 164:Procedures in %
+\\{input\_phase}\X
+\U section~7\*.
+\:\X81, 82, 84, 94, 96, 98, 101, 114:Procedures in \\{output\_phase}\X
+\U section~6\*.
+\:\X87:Put a parameter on the parameter stack, or \&{goto}\8\\{restart} if
+error occurs\X
+\U section~86.
+\:\X143:Put module name into \\{mod\_text}\?(\?1\?\to\?\|k\?)\?\X
+\U section~141.
+\:\X129:Read from \\{change\_file} and maybe turn off \\{changing}\X
+\U section~127.
+\:\X128:Read from \\{web\_file} and maybe turn on \\{changing}\X
+\U section~127.
+\:\X88:Remove a parameter from the parameter stack\X
+\U section~82.
+\:\X58:Remove \|p from secondary hash table\X
+\U section~57.
+\:\X160:Scan the \ADA\ part of the current module\X
+\U section~157.
+\:\X158:Scan the definition part of the current module\X
+\U section~157.
+\:\X141:Scan the module name and make \\{cur\_module} point to it\X
+\U section~140.
+\:\X105:Send a string, \&{goto}\8\\{reswitch}\X
+\U section~101.
+\:\X106:Send verbatim string\X
+\U section~101.
+\:\X67:Set \(\|c to the result of comparing the given name to name \|p\X
+\U sections~65 and~69.
+\:\X15, 17, 18, 41, 43, 46, 71, 142:Set initial values\X
+\U section~3\*.
+\:\X121:Skip over comment lines in the change file; \&{return} if end of file\X
+\U section~120.
+\:\X122:Skip to the next nonblank line; \&{return} if end of file\X
+\U section~120.
+\:\X111:Special code to finish real constants\X
+\U section~101.
+\:\X47, 73:Specification of procedures visible from \\{data\_structures}\X
+\U section~3\*.
+\:\X50, 64, 68:Specification of procedures visible from \\{hashing}\X
+\U section~5\*.
+\:\X23, 28, 31:Specification of procedures visible from \\{input\_output}\X
+\U section~4\*.
+\:\X89:Start scanning current macro parameter, \&{goto}\8\\{restart}\X
+\U section~84.
+\:\X10, 11, 12, 13, 14, 16, 22, 25, 27, 30, 35, 38, 39, 40, 42, 44, 45, 49, 62,
+63, 70, 72, 76, 77, 79, 83, 91, 92, 97, 107, 109, 116, 118, 131, 136, 148, 156,
+165:Types and objects visible from \\{data\_structures}\X
+\U section~3\*.
+\:\X163:Update the data structure so that the replacement text is accessible\X
+\U section~160.
+\:\X55:Update the tables and check for possible errors\X
+\U section~51.
+\con

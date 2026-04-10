@@ -1,0 +1,83 @@
+%::::::::::
+%atangle.aweb
+%::::::::::
+% This is ATANGLE.AWEB in text format, as of May 04, 1988.
+% This program by D. E. Knuth is not copyrighted and can be used freely.
+% Adaption to ADA by U. Schweigert based on TANGLE Version 2.8.
+% Version 1.0 was released May 31, 1988.
+
+ 
+% Here is TeX material that gets inserted after \input webmaca
+\def\hang{\hangindent 3em\indent\ignorespaces}
+\font\ninerm=cmr9
+\let\mc=\ninerm % medium caps for names like ADA
+\def\ADA{{\mc ADA}}
+\def\ab{$\.|\ldots\.|$} % ADA brackets (|...|)
+\def\v{\.{\char'174}} % vertical (|) in typewriter font
+\mathchardef\BA="3224 % double arrow
+\def\({} % kludge for alphabetizing certain module names
+ 
+\def\title{ATANGLE}
+\def\contentspagenumber{137} % should be odd
+\def\topofcontents{\null\vfill
+  \titlefalse % include headline on the contents page
+  \def\rheader{\mainfont Appendix E\hfil \contentspagenumber}
+  \centerline{\titlefont The {\ttitlefont ATANGLE} processor}
+  \vskip 15pt
+  \centerline{(based on {\tt TANGLE} Version 2.8)}
+  \centerline{{\ninerm[ADA-Version 1.0]}}
+  \vfill}
+\pageno=\contentspagenumber \advance\pageno by 1
+ 
+@* Introduction.
+This program converts an \.{AWEB} file to an \ADA\ file. It was written%
+---originally for conversion to {\mc PASCAL}---by D. E. Knuth in September, 
+1981; a somewhat similar {\mc SAIL} program had been developed in March, 
+1979. Since this program describes itself, a bootstrapping process involving 
+hand-translation had to be used to get started. The conversion to \ADA\
+has been done by U. Schweigert in May 1988.
+
+For large \.{AWEB} files one should have a large memory, since \.{ATANGLE}
+keeps all the \ADA\ text in memory (in an abbreviated form). This program
+uses only \ADA-features as described in ``The Programming Language \ADA\
+Reference Manual'' and is thus conform with ANSI/MIL-STD-1815A-1983.
+ 
+The system-dependent portions of \.{ATANGLE} can be identified by looking at
+the entries for `system dependencies' in the index below.
+@!@^system dependencies@>
+ 
+The ``banner line'' defined here should be changed whenever \.{ATANGLE} is
+modified.
+ 
+@d banner=="This is ATANGLE, Version 1.1"
+
+@ The program consists of several packages that are declared right now;
+each of these packages and either the specification and the body of
+the packages are send to a seperate file. The main program itself
+is declared later.
+
+@ The first package we declare is called |int_number_io| and enables us
+to output integer numbers. Further we declare a package |data_structures|,
+which will contain all the global constants, types, variables, and some
+procedures used throughout the program; it will (nearly) contain code of 
+the sections ``The character set,'' ``Data structures,'' and ``Tokens.''
+
+@a@~data_str.a@>
+@.data_str.a@>
+with TEXT_IO;
+package @!int_number_io is new TEXT_IO.INTEGER_IO(INTEGER);
+with TEXT_IO;
+package data_structures is
+  @<Types and objects visible from |data_structures|@>@;
+  @<Specification of procedures visible from |data_structures|@>@;
+end data_structures;
+@#
+@~data_str_b.a@>
+@.data_str_b.a@>
+with input_output; use input_output;
+package body data_structures is
+  @<Procedures in |data_structures|@>@;
+begin
+  @<Set initial values@>@;
+end data_structures;
+

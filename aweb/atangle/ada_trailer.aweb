@@ -1,0 +1,24 @@
+ 
+@* System-dependent changes.
+This module should be replaced, if necessary, by changes to the program
+that are necessary to make \.{ATANGLE} work at a particular installation.
+It is usually best to design your change file so that all changes to
+previous modules preserve the module numbering; then everybody's version
+will be consistent with the printed program. More extensive changes,
+which introduce new modules, can be inserted here; then only the index
+itself will get a new module number.
+@^system dependencies@>
+ 
+@* Index.
+Here is a cross-reference table for the \.{ATANGLE} processor.
+All modules in which an identifier is
+used are listed with that identifier, except that reserved words are
+indexed only when they appear in format definitions, and the appearances
+of identifiers in module names are not indexed.
+Underlined entries of subprograms and packages correspond to sections where
+this entity is specified, whereas entries in italic type correspond to
+the section where the entity's body is stated.
+For any other identifier underlined entries correspond to where the
+identifier was declared. Error messages and
+a few other things like ``ASCII code'' are indexed here too.
+ 

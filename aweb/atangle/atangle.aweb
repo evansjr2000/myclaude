@@ -1,0 +1,2973 @@
+%::::::::::
+%atangle.aweb
+%::::::::::
+% This is ATANGLE.AWEB in text format, as of May 04, 1988.
+% This program by D. E. Knuth is not copyrighted and can be used freely.
+% Adaption to ADA by U. Schweigert based on TANGLE Version 2.8.
+% Version 1.0 was released May 31, 1988.
+
+ 
+% Here is TeX material that gets inserted after \input webmaca
+\def\hang{\hangindent 3em\indent\ignorespaces}
+\font\ninerm=cmr9
+\let\mc=\ninerm % medium caps for names like ADA
+\def\ADA{{\mc ADA}}
+\def\ab{$\.|\ldots\.|$} % ADA brackets (|...|)
+\def\v{\.{\char'174}} % vertical (|) in typewriter font
+\mathchardef\BA="3224 % double arrow
+\def\({} % kludge for alphabetizing certain module names
+ 
+\def\title{ATANGLE}
+\def\contentspagenumber{137} % should be odd
+\def\topofcontents{\null\vfill
+  \titlefalse % include headline on the contents page
+  \def\rheader{\mainfont Appendix E\hfil \contentspagenumber}
+  \centerline{\titlefont The {\ttitlefont ATANGLE} processor}
+  \vskip 15pt
+  \centerline{(based on {\tt TANGLE} Version 2.8)}
+  \centerline{{\ninerm[ADA-Version 1.0]}}
+  \vfill}
+\pageno=\contentspagenumber \advance\pageno by 1
+ 
+@* Introduction.
+This program converts an \.{AWEB} file to an \ADA\ file. It was written%
+---originally for conversion to {\mc PASCAL}---by D. E. Knuth in September, 
+1981; a somewhat similar {\mc SAIL} program had been developed in March, 
+1979. Since this program describes itself, a bootstrapping process involving 
+hand-translation had to be used to get started. The conversion to \ADA\
+has been done by U. Schweigert in May 1988.
+
+For large \.{AWEB} files one should have a large memory, since \.{ATANGLE}
+keeps all the \ADA\ text in memory (in an abbreviated form). This program
+uses only \ADA-features as described in ``The Programming Language \ADA\
+Reference Manual'' and is thus conform with ANSI/MIL-STD-1815A-1983.
+ 
+The system-dependent portions of \.{ATANGLE} can be identified by looking at
+the entries for `system dependencies' in the index below.
+@!@^system dependencies@>
+ 
+The ``banner line'' defined here should be changed whenever \.{ATANGLE} is
+modified.
+ 
+@d banner=="This is ATANGLE, Version 1.0"
+
+@ The program consists of several packages that are declared right now;
+each of these packages and either the specification and the body of
+the packages are send to a seperate file. The main program itself
+is declared later.
+
+@ The first package we declare is called |int_number_io| and enables us
+to output integer numbers. Further we declare a package |data_structures|,
+which will contain all the global constants, types, variables, and some
+procedures used throughout the program; it will (nearly) contain code of 
+the sections ``The character set,'' ``Data structures,'' and ``Tokens.''
+
+@a@~data_str.a@>
+@.data_str.a@>
+with TEXT_IO;
+package @!int_number_io is new TEXT_IO.INTEGER_IO(INTEGER);
+with TEXT_IO;
+package data_structures is
+  @<Types and objects visible from |data_structures|@>@;
+  @<Specification of procedures visible from |data_structures|@>@;
+end data_structures;
+@#
+@~data_str_b.a@>
+@.data_str_b.a@>
+with input_output; use input_output;
+package body data_structures is
+  @<Procedures in |data_structures|@>@;
+begin
+  @<Set initial values@>@;
+end data_structures;
+
+@ The following package, called |input_output|, is responsible for the
+input/output features neaded by \.{ATANGLE}, and for the error handling.
+It will contain code of sections ``Input and output'' and ``Reporting
+errors to the user.''
+
+@a
+@~in_out.a@>
+@.in_out.a@>
+with TEXT_IO;
+with data_structures; use data_structures;
+package input_output is
+  @<Specification of procedures visible from |input_output|@>@;
+end input_output;
+@#
+@~in_out_b.a@>
+@.in_out_b.a@>
+with TEXT_IO,int_number_io;
+package body input_output is
+  @<Procedures in |input_output|@>@;
+end input_output;
+
+@ Additionally we have a package |hashing|, which contains the code of
+sections ``Searching for identifiers''
+and ``Searching for module names.''
+
+@a
+@~hash.a@>
+@.hash.a@>
+with data_structures; use data_structures;
+package hashing is
+  @<Specification of procedures visible from |hashing|@>@;
+end hashing;
+@#
+@~hash_b.a@>
+@.hash_b.a@>
+with TEXT_IO;
+with input_output; use input_output;
+package body hashing is
+  @<Procedures in |hashing|@>@;
+end hashing;
+
+@ The first of the two major packages will manage the output process of
+\.{ATANGLE} and contains code of sections ``Stacks for output,''
+``Producing the output,'' and ``The big output switch.''
+
+@a
+@~out_phase.a@>
+@.out_phase.a@>
+with data_structures; use data_structures;
+package output_phase is
+  procedure phase_ii;
+end output_phase;
+@#
+@~out_phase_b.a@>
+@.out_phase_b.a@>
+with TEXT_IO,int_number_io;
+with input_output; use input_output;
+package body output_phase is
+  @<Procedures in |output_phase|@>@;
+end output_phase;
+
+@ The last package will handle \.{ATANGLE}'s input process and contains code
+of sections ``Introduction to the input phase,'' ``Inputting the next
+token,'' ``Scanning a macro definition,'' and ``Scanning a module.''
+
+@a
+@~in_phase.a@>
+@.in_phase.a@>
+with data_structures; use data_structures;
+with hashing; use hashing;
+package input_phase is
+  procedure phase_i;
+end input_phase;
+@#
+@~in_phase_b.a@>
+@.in_phase_b.a@>
+with TEXT_IO,int_number_io;
+with input_output; use input_output;
+package body input_phase is
+  @<Procedures in |input_phase|@>@;
+end input_phase;
+
+@ Some of this code, delimited by |stat| and |tats|, is optionally
+included if statistics about \.{ATANGLE}'s memory usage are desired.
+Other material is optionally included when a somewhat optimal code is
+wanted; such is delimited by |optim| and |mitpo|.
+ 
+@d stat==@{ {change this to `$\\{stat}\equiv\null$'
+  when gathering usage statistics}
+@d tats==@t@>@} {change this to `$\\{tats}\equiv\null$'
+  when gathering usage statistics}
+@f stat==declare
+@f tats==end
+@d optim==@{     {change this to `$\\{optim}\equiv\null$' when optimal
+		  code is desired}
+@d mitpo==@t@>@} {change this to `$\\{mitpo}\equiv\null$' when optimal
+		  code is desired}
+@f optim==declare
+@f mitpo==end
+ 
+@ Here are some macros for common programming idioms.
+ 
+@d incr(#)  == #:=#+1@; {increase a variable by unity}
+@d decr(#)  == #:=#-1@; {decrease a variable by unity}
+@d repeat   == loop
+@d until(#) == exit when #; end loop@;
+@f repeat   == loop
+@f until    == end
+ 
+@ The following parameters are set big enough to handle \TeX, so they
+should be sufficient for most applications of \.{ATANGLE}.
+ 
+@<Types...@>=
+@!buf_size:constant := 132; {maximum length of input line}
+@!max_bytes:constant := 65_000; {|1/ww| times the number of bytes in 
+	  identifiers, strings, and module names; must be less than |65_536|}
+@!max_toks:constant := 65_000; {|1/zz| times the number of bytes in 
+			   compressed \ADA\ code; must be less than |65_536|}
+@!max_names:constant := 10_000; {number of identifiers, strings, module names;
+				must be less than |10_240|}
+@!max_texts:constant := 10_000; {number of replacement texts, must be less 
+				than |10_240|}
+@!hash_size:constant := 353; {should be prime}
+@!longest_name:constant := 400; {module names shouldn't be longer than this}
+@!line_length:constant := 132; {lines of \ADA\ output have at most this many 
+                               characters}
+@!out_buf_size:constant := 264; {length of output buffer, should be twice 
+                                 |line_length|}
+@!stack_size:constant := 50; {number of simultaneous levels of macro 
+                              expansion}
+@!max_id_length:constant := line_length; {long identifiers are chopped to 
+                            this length, which must not exceed |line_length|}
+@!unambig_length:constant := max_id_length; {identifiers must be unique if 
+                                             chopped to this length}
+
+@ A global variable called |history| will contain one of four values
+at the end of every run: |spotless| means that no unusual messages were
+printed; |harmless_message| means that a message of possible interest
+was printed but no serious errors were detected; |error_message| means that
+at least one error was found; |fatal_message| means that the program
+terminated abnormally. The value of |history| does not influence the
+behavior of the program; it is simply computed for the convenience
+of systems that might want to use such information.
+ 
+@d mark_harmless==if history=spotless then history:=harmless_message; 
+                        end if@;
+@d mark_error==history:=error_message@;
+@d mark_fatal==history:=fatal_message@;
+ 
+@<Types...@>=
+type history_type is (@!spotless,@!harmless_message,@!error_message,
+		      @!fatal_message);
+@!history:history_type:=spotless; {how bad was this run?}
+
+@* The character set.
+One of the main goals in the design of \.{AWEB} has been to make it readily
+portable between a wide variety of computers. Yet \.{AWEB} by its very
+nature must use a greater variety of characters than most computer
+programs deal with, and character encoding is one of the areas in which
+existing machines differ most widely from each other.
+ 
+To resolve this problem, all input to \.{AWEAVE} and \.{ATANGLE} is converted
+to an internal seven-bit code that is essentially standard ASCII, the 
+``American Standard Code for Information Interchange.''  The conversion is 
+done immediately when each character is read in. Conversely, characters are
+converted from ASCII to the user's external representation just before
+they are output.
+ 
+Such an internal code is relevant to users of \.{AWEB} only because it is
+the code used for preprocessed constants like \.{@@'A'}. If you are
+writing a program in \.{AWEB} that makes use of such one-character constants,
+you should convert your input to ASCII form, like \.{AWEAVE} and \.{ATANGLE}
+do. Otherwise \.{AWEB}'s internal coding scheme does not affect you.
+@^ASCII code@>
+ 
+Here is a table of the standard visible ASCII codes:
+$$\def\:{\char\count255\global\advance\count255 by 1}
+\count255='40
+\vbox{
+\hbox{\hbox to 40pt{\it\hfill0\/\hfill}%
+\hbox to 40pt{\it\hfill1\/\hfill}%
+\hbox to 40pt{\it\hfill2\/\hfill}%
+\hbox to 40pt{\it\hfill3\/\hfill}%
+\hbox to 40pt{\it\hfill4\/\hfill}%
+\hbox to 40pt{\it\hfill5\/\hfill}%
+\hbox to 40pt{\it\hfill6\/\hfill}%
+\hbox to 40pt{\it\hfill7\/\hfill}}
+\vskip 4pt
+\hrule
+\def\^{\vrule height 10.5pt depth 4.5pt}
+\halign{\hbox to 0pt{\hskip -24pt\bn{8}{#0}\hfill}&\^
+\hbox to 40pt{\tt\hfill#\hfill\^}&
+&\hbox to 40pt{\tt\hfill#\hfill\^}\cr
+04&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+05&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+06&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+07&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+10&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+11&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+12&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+13&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+14&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+15&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+16&\:&\:&\:&\:&\:&\:&\:&\:\cr\noalign{\hrule}
+17&\:&\:&\:&\:&\:&\:&\:\cr}
+\hrule width 280pt}$$
+(Actually, of course, code \bn{8}{40} is an invisible blank space.)  Code
+\bn{8}{136} was once an upward arrow (\.{\char'13}), and code \bn{8}{137} was
+once a left arrow (\.^^X), in olden times when the first draft
+of ASCII code was prepared; but \.{AWEB} works with today's standard
+ASCII in which those codes represent circumflex and underline as shown.
+ 
+@<Types...@>=
+@!subtype ASCII_code is INTEGER range 0..127; {seven-bit numbers, a subrange
+                                               of the integers}
+ 
+@ We shall use the name |text_char| to stand for the data type of the 
+characters in the input and output files.  We shall also assume that 
+|text_char| consists of the elements |text_char'FIRST|
+through  |text_char'LAST|, inclusive. The following
+definition should be adjusted if necessary.
+@^system dependencies@>
+@^ADA attributes@>
+ 
+@<Types...@>=
+subtype text_char is CHARACTER; {the data type of characters in text files}
+subtype text_file is TEXT_IO.FILE_TYPE; {file type consisting of |text_char|}
+
+ 
+@ The \.{AWEAVE} and \.{ATANGLE} processors convert between ASCII code and
+the user's external character set by means of arrays |xord| and |xchr|
+that are analogous to \ADA's |POS| and |VAL| attributes.
+@^ADA attributes@>
+ 
+@<Types...@>=
+@!xord: array (text_char) of ASCII_code;
+  {specifies conversion of input characters}
+@!xchr: array (ASCII_code) of text_char;
+  {specifies conversion of output characters}
+ 
+@ If we assume that every system using \.{AWEB} is able to read and write the
+visible characters of standard ASCII (although not necessarily using the
+ASCII codes to represent them), the following assignment statements 
+initialize most of the |xchr| array properly, without needing any 
+system-dependent changes. For example, the statement 
+\.{xchr(8\#101\#):='A';} that appears in the present \.{AWEB} file might be
+encoded in, say, {\mc EBCDIC} code on the external medium on which it 
+resides, but \.{ATANGLE} will convert from this external code to ASCII and
+back again. Therefore the assignment statement \.{XCHR(8\#101\#):='A';}
+will appear in the corresponding \ADA\ file, and \ADA\ will compile this 
+statement so that |xchr(8#101#)| receives  the character \.A in the external 
+(|text_char|) code. Note that it would be quite incorrect to say
+\.{xchr(8\#101\#):=@@'A';}, because |@'A'| is a constant of type
+|INTEGER|, not |CHARACTER|, and because we have |@'A'=65| regardless of the
+external character set.
+ 
+@<Set init...@>=
+xchr(8#40#):=' ';
+xchr(8#41#):='!';
+xchr(8#42#):='"';
+xchr(8#43#):='#';
+xchr(8#44#):='$';
+xchr(8#45#):='%';
+xchr(8#46#):='&';
+xchr(8#47#):=''';@/
+xchr(8#50#):='(';
+xchr(8#51#):=')';
+xchr(8#52#):='*';
+xchr(8#53#):='+';
+xchr(8#54#):=',';
+xchr(8#55#):='-';
+xchr(8#56#):='.';
+xchr(8#57#):='/';@/
+xchr(8#60#):='0';
+xchr(8#61#):='1';
+xchr(8#62#):='2';
+xchr(8#63#):='3';
+xchr(8#64#):='4';
+xchr(8#65#):='5';
+xchr(8#66#):='6';
+xchr(8#67#):='7';@/
+xchr(8#70#):='8';
+xchr(8#71#):='9';
+xchr(8#72#):=':';
+xchr(8#73#):=';';
+xchr(8#74#):='<';
+xchr(8#75#):='=';
+xchr(8#76#):='>';
+xchr(8#77#):='?';@/
+xchr(8#100#):='@@';
+xchr(8#101#):='A';
+xchr(8#102#):='B';
+xchr(8#103#):='C';
+xchr(8#104#):='D';
+xchr(8#105#):='E';
+xchr(8#106#):='F';
+xchr(8#107#):='G';@/
+xchr(8#110#):='H';
+xchr(8#111#):='I';
+xchr(8#112#):='J';
+xchr(8#113#):='K';
+xchr(8#114#):='L';
+xchr(8#115#):='M';
+xchr(8#116#):='N';
+xchr(8#117#):='O';@/
+xchr(8#120#):='P';
+xchr(8#121#):='Q';
+xchr(8#122#):='R';
+xchr(8#123#):='S';
+xchr(8#124#):='T';
+xchr(8#125#):='U';
+xchr(8#126#):='V';
+xchr(8#127#):='W';@/
+xchr(8#130#):='X';
+xchr(8#131#):='Y';
+xchr(8#132#):='Z';
+xchr(8#133#):='[';
+xchr(8#134#):='\';
+xchr(8#135#):=']';
+xchr(8#136#):='^';
+xchr(8#137#):='_';@/
+xchr(8#140#):='`';
+xchr(8#141#):='a';
+xchr(8#142#):='b';
+xchr(8#143#):='c';
+xchr(8#144#):='d';
+xchr(8#145#):='e';
+xchr(8#146#):='f';
+xchr(8#147#):='g';@/
+xchr(8#150#):='h';
+xchr(8#151#):='i';
+xchr(8#152#):='j';
+xchr(8#153#):='k';
+xchr(8#154#):='l';
+xchr(8#155#):='m';
+xchr(8#156#):='n';
+xchr(8#157#):='o';@/
+xchr(8#160#):='p';
+xchr(8#161#):='q';
+xchr(8#162#):='r';
+xchr(8#163#):='s';
+xchr(8#164#):='t';
+xchr(8#165#):='u';
+xchr(8#166#):='v';
+xchr(8#167#):='w';@/
+xchr(8#170#):='x';
+xchr(8#171#):='y';
+xchr(8#172#):='z';
+xchr(8#173#):='{';
+xchr(8#174#):='|';
+xchr(8#175#):='}';
+xchr(8#176#):='~';@/
+xchr(0):=' '; xchr(8#177#):=' '; {these ASCII codes are not used}
+ 
+@ Some of the ASCII codes below \bn{8}{40} have been given symbolic names in
+\.{AWEAVE} and \.{ATANGLE} because they are used with a special meaning.
+ 
+@<Types...@>=
+and_sign : constant ASCII_code:=8#4#; {equivalent to `\.{and}'}
+not_sign : constant ASCII_code:=8#5#; {equivalent to `\.{not}'}
+set_element_sign : constant ASCII_code:=8#6#; {equivalent to `\.{in}'}
+tab_mark : constant ASCII_code:=8#11#; {ASCII code used as tab-skip}
+line_feed : constant ASCII_code:=8#12#; {ASCII code thrown away at end of line}
+form_feed : constant ASCII_code:=8#14#; {ASCII code used at end of page}
+carriage_return : constant ASCII_code:=8#15#; {ASCII code used at end of line}
+right_arrow : constant ASCII_code:=8#21#; {equivalent to `\.{=>}'}
+box_sign : constant ASCII_code:=8#22#; {equivalent to `\.{<>}'}
+double_star : constant ASCII_code:=8#23#; {equivalent to `\.{**}'}
+left_label_bracket:constant ASCII_code:=8#24#; {equivalent to `\.{<<}'}
+right_label_bracket:constant ASCII_code:=8#25#; {equivalent to `\.{>>}'}
+left_arrow : constant ASCII_code:=8#30#; {equivalent to `\.{:=}'}
+not_equal : constant ASCII_code:=8#32#; {equivalent to `\.{/=}'}
+less_or_equal : constant ASCII_code:=8#34#; {equivalent to `\.{<=}'}
+greater_or_equal : constant ASCII_code:=8#35#; {equivalent to `\.{>=}'}
+equivalence_sign : constant ASCII_code:=8#36#; {equivalent to `\.{==}'}
+or_sign : constant ASCII_code:=8#37#; {equivalent to `\.{or}'}
+ 
+@ Here now is the system-dependent part of the character set.
+If \.{AWEB} is being implemented on a garden-variety \ADA\ for which
+only standard ASCII codes will appear in the input and output files, you
+don't need to make any changes here.
+@^system dependencies@>
+ 
+Changes to the present module will make \.{AWEB} more friendly on computers
+that have an extended character set, so that one can type things like
+\.^^Z\ instead of \.{/=}. If you have an extended set of characters that
+are easily incorporated into text files, you can assign codes arbitrarily
+here, giving an |xchr| equivalent to whatever characters the users of
+\.{AWEB} are allowed to have in their input files, provided that unsuitable
+characters do not correspond to special codes like |carriage_return|
+that are listed above.
+ 
+(The present file \.{ATANGLE.AWEB} does not contain any of the non-ASCII
+characters, because it is intended to be used with all implementations of
+\.{AWEB}.)
+ 
+@<Set init...@>=
+xchr(1..8#37#):=(others=>' ');
+ 
+@ The following system-independent code makes the |xord| array contain a
+suitable inverse to the information in |xchr|.
+ 
+@<Set init...@>=
+xord(text_char):=(others=>8#40#);
+for i in 1..8#176# loop xord(xchr(i)):=i;  end loop;
+ 
+@* Input and output.
+The input conventions of this program are identical to those of \.{AWEAVE}.
+Therefore people who need to make modifications to both systems
+should be able to do so without too many headaches.
+ 
+@ Terminal output is done by writing on file |STANDARD_OUTPUT|, which is
+assumed to consist of characters of type |text_char|:
+@^system dependencies@>
+ 
+@d new_ln==TEXT_IO.NEW_LINE
+@d print(#)==TEXT_IO.PUT(#) {`|print|' means write on the terminal}
+@d print_ln(#)==print(#); new_ln {`|print|' and then start new line}
+@d print_nl(#)==new_ln; print(#) {print information starting on a
+                                          new line}
+@d print_int(#)==int_number_io.PUT(#) {print out an integer value}
+
+@ The |update_terminal| procedure is called when we want
+to make sure that everything we have output to the terminal so far has
+actually left the computer's internal buffers and been sent.
+(In the \ADA-system used to develop the initial program this is not
+required.)
+@^system dependencies@>
+ 
+@d update_terminal == null {empty the terminal output buffer}
+ 
+
+@ The main input comes from |web_file|; this input may be overridden
+by changes in |change_file|. 
+(If |change_file| is empty, there are no changes.)
+ 
+@<Types...@>=
+@!web_file:text_file; {primary input}
+@!change_file:text_file; {updates}
+ 
+@ @<Specification of procedures visible from |input_output|@>=
+procedure open_a_file(f:in out text_file;mode_of_file:TEXT_IO.FILE_MODE;
+			default_name:STRING;success:out BOOLEAN);
+function create_ada_file(ada_file_name:STRING)return BOOLEAN;
+
+@ The following code opens a file and returns |TRUE| if succesfully.
+If the file is already open the procedure has no effect; this gives
+the ability to open the files by means of the change file, without
+changing the \.{AWEB}-file of \.{ATANGLE}.
+@^system dependencies@>
+ 
+
+@<Procedures in |input_output|@>=
+procedure @!open_a_file(@!f:in out text_file;
+			@!mode_of_file:TEXT_IO.FILE_MODE;
+			@!default_name:STRING;
+			@!success:out BOOLEAN) is
+begin if TEXT_IO.IS_OPEN(f) then success:=TRUE;
+      else TEXT_IO.OPEN(FILE=>f,MODE=>mode_of_file,NAME=>default_name);
+	   success:=TRUE;
+      end if;
+exception
+  when @!@!TEXT_IO.STATUS_ERROR !
+       @!@!TEXT_IO.NAME_ERROR !
+       @!@!TEXT_IO.USE_ERROR     => success:=FALSE; return;
+end open_a_file;
+ 
+@ The main output goes to |ada_file|.
+ 
+@<Types...@>=
+@!ada_file: text_file;
+ 
+@ The following code creates |ada_file|.
+@^system dependencies@>
+ 
+@<Procedures in |input_output|@>=
+function @!create_ada_file(@!ada_file_name:STRING)return BOOLEAN is
+begin if TEXT_IO.IS_OPEN(ada_file) then
+	if TEXT_IO.NAME(ada_file)=ada_file_name then
+	  return TRUE;
+        else 
+	  return FALSE;
+        end if;
+      else TEXT_IO.CREATE(FILE => ada_file,MODE => TEXT_IO.OUT_FILE ,
+			  NAME => ada_file_name);
+	   return TRUE;
+      end if;
+exception 
+  when @!@!TEXT_IO.STATUS_ERROR !
+       @!@!TEXT_IO.NAME_ERROR !
+       @!@!TEXT_IO.USE_ERROR      => return FALSE;
+end create_ada_file;
+
+@ Input goes into an array called |buffer|.
+@<Types...@>=type buffer_type is array(INTEGER range <>)of ASCII_code;
+	     subtype buffer_index is INTEGER range 0..buf_size;
+	     @!buffer: buffer_type(buffer_index);
+ 
+@ The |input_ln| procedure brings the next line of input from the specified
+file into the |buffer| array and returns the value |TRUE|, unless the file
+has already been entirely read, in which case it returns |FALSE|. The
+conventions of \TeX\ are followed; i.e., |ASCII_code| numbers representing 
+the next line of the file are input into |buffer(0)|, |buffer(1)|, \dots,
+|buffer(limit-1)|; trailing blanks are ignored; 
+and the global variable |limit| is set to the length of the
+@^system dependencies@>
+line. The value of |limit| must be strictly less than |buf_size|.
+ 
+We assume that none of the |ASCII_code| values
+of |buffer(j)| for |0<=j<limit| is equal to 0, \bn{8}{177}, |line_feed|, 
+|form_feed|, or |carriage_return|.
+
+@<Specification of procedures visible from |input_output|@>=
+function input_ln(f:text_file) return BOOLEAN;
+
+@ @<Procedures in |input_output|@>=
+function @!input_ln(@!f:text_file) return BOOLEAN is
+  {inputs a line or returns |FALSE|}
+@!final_limit:buffer_index:=0; {|limit| without trailing blanks}
+@!c:text_char;
+begin limit:=0;
+if not TEXT_IO.IS_OPEN(f) or else TEXT_IO.END_OF_FILE(f) then return FALSE;
+else  while not TEXT_IO.END_OF_LINE(f) loop
+	TEXT_IO.GET(f,c);
+        buffer(limit):=xord(c);
+        incr(limit);
+        if buffer(limit-1)/=@' ' then final_limit:=limit;
+        end if;
+        if limit=buf_size then
+	  TEXT_IO.SKIP_LINE(f);
+          decr(limit); {keep |buffer(buf_size)| empty}
+          print_nl("! Input line too long"); loc:=0; error;
+	  return TRUE;
+@.Input line too long@>
+      end if;
+    end loop;
+  TEXT_IO.SKIP_LINE(f); limit:=final_limit; return TRUE;
+  end if;
+end input_ln;
+
+
+
+@* Reporting errors to the user.
+The \.{ATANGLE} processor operates in two phases: first it inputs the source
+file and stores a compressed representation of the program, then it produces
+the \ADA\ output from the compressed representation.
+ 
+The global variable |phase_one| tells whether we are in Phase I or not.
+ 
+@<Types...@>=
+@!phase_one: BOOLEAN; {|TRUE| in Phase I, |FALSE| in Phase II}
+ 
+@ During the first phase, syntax errors are reported to the user by saying
+$$\hbox{`|err_print("! Error message")|'},$$
+followed by `|jump_out|' if no recovery from the error is provided.
+This will print the error message followed by an indication of where the 
+error was spotted in the source file. Note that no period follows the error 
+message, since the error routine will automatically supply a period.
+ 
+Errors that are noticed during the second phase are reported to the user
+in the same fashion, but the error message will be
+followed by an indication of where the error was spotted in the output file.
+ 
+The actual error indications are provided by a procedure called |error|.
+ 
+@d err_print(#)==print_nl(#); error@;
+@<Specification of procedures visible from |input_output|@>=
+procedure error;
+
+@ @<Procedures in |input_output|@>=
+procedure @!error is {prints '\..' and location of error message}
+@!l:buffer_index; {index into |buffer|}
+begin if phase_one then @<Print error location based on input buffer@>;
+else @<Print error location based on output buffer@>;
+end if;
+update_terminal; mark_error;
+end error;
+ 
+@ The error locations during Phase I can be indicated by using the global
+variables |loc|, |line|, and |changing|, which tell respectively the first
+unlooked-at position in |buffer|, the current line number, and whether or not
+the current line is from |change_file| or |web_file|.
+This routine should be modified on systems whose standard text editor
+has special line-numbering conventions.
+@^system dependencies@>
+ 
+@<Print error location based on input buffer@>=
+if changing then print(". (change file "); else print(". ("); end if;
+print("l.");
+print_int(line,1);
+print_ln(")");
+if loc>=limit then l:=limit; else l:=loc; end if;
+for k in 1..l loop
+  if buffer(k-1)=tab_mark then print(" ");
+  else print(xchr(buffer(k-1))); {print the characters already read}
+  end if;
+end loop;
+new_ln;
+for k in 1..l loop print(" "); end loop; {space out the next line}
+for k in l+1..limit loop print(xchr(buffer(k-1))); end loop;
+                  {print the part not yet read}
+print(" ")@; {this space separates the message from future asterisks}
+ 
+@ The position of errors detected during the second phase can be indicated
+by outputting the partially-filled output buffer, which contains |out_ptr|
+entries. The current output file name is determined by |file_name| and
+|fn_length|, whereas the line number comes from |f_line|.
+ 
+@<Print error location based on output...@>=
+print(".("&file_name(1..fn_length)&" l.");
+print_int(f_line,1);
+print_ln(")");
+for j in 1..out_ptr loop print(xchr(out_buf(j-1)));
+{print current partial line}
+end loop;
+print("... ")@; {indicate that this information is partial}
+ 
+@ The |jump_out| macro just raises the |end_of_ATANGLE| exception.
+It is used when no recovery from a particular error has
+been provided.
+ 
+@d jump_out==raise end_of_ATANGLE@;
+@d fatal_error(#)==print_nl(#); error; mark_fatal; jump_out@;
+ 
+@<Types...@>= @!end_of_ATANGLE : exception;
+
+@ Sometimes the program's behavior is far different from what it should be,
+and \.{ATANGLE} prints an error message that is really for the \.{ATANGLE}
+maintenance person, not the user. In such cases the program says
+|confusion("indication of where we are")|.
+ 
+@d confusion(#)==fatal_error("! This can't happen ("&#&")")
+@.This can't happen@>
+ 
+@ An overflow stop occurs if \.{ATANGLE}'s tables aren't large enough.
+ 
+@d overflow(#)==fatal_error("! Sorry, "&#&" capacity exceeded")
+@.Sorry, x capacity exceeded@>
+ 
+ 
+@* Data structures.
+Most of the user's \ADA\ code is packed into seven- or eight-bit integers
+in two large arrays called |byte_mem| and |tok_mem|.
+The |byte_mem| array holds the names of identifiers, strings, and modules;
+the |tok_mem| array holds the replacement texts
+for macros and modules. Allocation is sequential, since things are deleted 
+only during Phase II, and only in a last-in-first-out manner.
+ 
+Auxiliary arrays |byte_start| and |tok_start| are used as directories to
+|byte_mem| and |tok_mem|, and the |link|, |ilk|, |equiv|, and |text_link|
+arrays give further information about names. These auxiliary arrays
+consist of sixteen-bit items.
+ 
+@<Types...@>=
+@!subtype eight_bits is INTEGER range 0..255; {unsigned one-byte quantity}
+@!subtype sixteen_bits is INTEGER range 0..65_535; {unsigned two-byte
+                                                    quantity}
+
+@ \.{ATANGLE} has been designed to avoid the need for indices that are more
+than sixteen bits wide, so that it can be used on most computers. But
+there are programs that need more than 65536 tokens, and some programs
+even need more than 65536 bytes; \TeX\ is one of these.  To get around
+this problem, a slight complication has been added to the data structures:
+|byte_mem| and |tok_mem| are two-dimensional arrays, whose first index is
+either 0 or 1. (For generality, the first index is actually allowed to run
+between 0 and |ww-1| in |byte_mem|, or between 0 and |zz-1| in |tok_mem|,
+where |ww| and |zz| are set to 2 and~3; the program will work for any
+positive values of |ww| and |zz|, and it can be simplified in obvious ways
+if |ww=1| or |zz=1|.)
+
+@<Types...@>=
+@!ww : constant INTEGER := 2;
+@!zz : constant INTEGER := 3;
+@#
+subtype w_range is INTEGER range 0..ww-1;
+subtype z_range is INTEGER range 0..zz-1;
+subtype byte_index is INTEGER range 0..max_bytes;
+subtype token_index is INTEGER range 0..max_toks;
+subtype name_index is INTEGER range 0..max_names;
+subtype text_index is INTEGER range 0..max_texts;
+@#
+type byte_memory is array(w_range,byte_index) of ASCII_code;
+optim pragma PACK(byte_memory); mitpo@;
+@#
+type token_memory is array(z_range,token_index) of eight_bits;
+optim pragma PACK(token_memory); mitpo@;
+@#
+type name_info is array(name_index) of sixteen_bits;
+type token_info is array(text_index) of sixteen_bits;
+@#
+@!byte_mem: byte_memory; {characters of names}
+@!tok_mem: token_memory; {tokens}
+@!byte_start: name_info; {directory into |byte_mem|}
+@!tok_start: token_info; {directory into |tok_mem|}
+@!link: name_info; {hash table or tree links}
+@!ilk: name_info; {type codes or tree links}
+@!equiv: name_info; {info corresponding to names}
+@!text_link: token_info; {relates replacement texts}
+ 
+@ The names of identifiers are found by computing a hash address |h| and
+then looking at strings of bytes signified by |hash(h)|, |link(hash(h))|,
+|link(link(hash(h)))|, \dots, until either finding the desired name
+or encountering a zero.
+ 
+A `|name_pointer|' variable, which signifies a name, is an index into
+|byte_start|. The actual sequence of characters in the name pointed to by
+|p| appears in positions |byte_start(p)| to |byte_start(p+ww)-1|, inclusive,
+in the segment of |byte_mem| whose first index is |p mod ww|. Thus, when
+|ww=2| the even-numbered name bytes appear in |byte_mem(0,@t$*$@>)|
+and the odd-numbered ones appear in |byte_mem(1,@t$*$@>)|.
+The pointer 0 is used for undefined module names; we don't
+want to use it for the names of identifiers, since 0 stands for a null
+pointer in a linked list.
+ 
+The total number of names in |byte_mem|
+is called |name_ptr| and the total number of bytes occupied in
+|byte_mem(w,@t$*$@>)| is called |byte_ptr(w)|.
+ 
+We usually have |byte_start(name_ptr+w)=byte_ptr((name_ptr+w) mod ww)|
+for |0<=w<ww|, since these are the starting positions for the next |ww|
+names to be stored in |byte_mem|.
+ 
+@d length(#)==byte_start(#+ww)-byte_start(#) {the length of a name}
+@d null_array==(others=>0)
+ 
+@<Types...@>=
+subtype name_pointer is name_index; {identifies a name}
+@#
+@!name_ptr:name_pointer:=1; {first unused position in |byte_start|}
+@!byte_ptr:array (w_range) of byte_index:=null_array;
+    {first unused position in |byte_mem|}
+
+@ @<Set init...@>=
+byte_start(0..ww):=null_array; {this makes name 0 of length zero}
+ 
+@ Replacement texts are stored in |tok_mem|, using similar conventions.
+A `|text_pointer|' variable is an index into |tok_start|, and the
+replacement text that corresponds to |p| runs from positions
+|tok_start(p)| to |tok_start(p+zz)-1|, inclusive, in the segment of
+|tok_mem| whose first index is |p mod zz|. Thus, when |zz=2| the
+even-numbered replacement texts appear in |tok_mem(0,@t$*$@>)| and the
+odd-numbered ones appear in |tok_mem(1,@t$*$@>)|.  Furthermore,
+|text_link(p)| is used to connect pieces of text that have the same name,
+as we shall see later. The pointer 0 is used for undefined replacement
+texts.
+ 
+The first position of |tok_mem(z,@t$*$@>)| that is unoccupied by
+replacement text is called |tok_ptr(z)|, and the first unused location of
+|tok_start| is called |text_ptr|.  We usually have the identity
+|tok_start(text_ptr+z)=tok_ptr((text_ptr+z) mod zz)|, for |0<=z<zz|, since
+these are the starting positions for the next |zz| replacement texts to
+be stored in |tok_mem|.
+
+It is convenient to maintain a variable |z| that is equal to |text_ptr
+mod zz|, so that we always insert tokens into segment |z| of |tok_mem|.
+ 
+@<Types...@>=
+subtype text_pointer is text_index; {identifies a replacement text}
+@#
+@!text_ptr:text_pointer:=1; {first unused position in |tok_start|}
+@!tok_ptr:array(z_range) of token_index:=null_array;
+  {first unused position in a given segment of |tok_mem|}
+@!z:z_range:=1 mod zz; {current segment of |tok_mem|}
+stat @!max_tok_ptr:array(z_range) of token_index;
+  {largest values assumed by |tok_ptr|}
+tats@;
+ 
+@ @<Set init...@>=
+  tok_start(0..zz):=null_array;
+  {this makes replacement text 0 of length zero}
+ 
+@ Three types of identifiers are distinguished by their |ilk|:
+ 
+\yskip\hang |normal| identifiers will appear in the \ADA\ program as
+ordinary identifiers since they have not been defined to be macros; the
+corresponding value in the |equiv| array for such identifiers is a link in a 
+secondary hash table that is used to check whether any two of them agree in 
+their first |unambig_length| characters after letters are changed to 
+uppercase.
+ 
+\yskip\hang |simple| identifiers have been defined to be simple macros;
+their |equiv| value points to the corresponding replacement text.
+ 
+\yskip\hang |parametric| identifiers have been defined to be parametric 
+macros; like simple identifiers, their |equiv| value points to the 
+replacement text.
+ 
+@<Types...@>=
+@!normal: constant sixteen_bits := 0; {ordinary identifiers have |normal| ilk}
+@!simple: constant sixteen_bits := 1; {simple macros have |simple| ilk}
+@!parametric: constant sixteen_bits :=2; {parametric macros have |parametric| ilk}
+ 
+@ The names of modules are stored in |byte_mem| together with the identifier 
+names, but a hash table is not used for them because \.{ATANGLE} needs to be
+able to recognize a module name when given a prefix of that name. A 
+conventional binary seach tree is used to retrieve module names, with fields 
+called |llink| and |rlink| in place of |link| and |ilk|. The root of this 
+tree is |rlink(0)|. If |p| is a pointer to a module name, |equiv(p)| points 
+to its replacement text, just as in simple and parametric macros, unless this 
+replacement text has not yet been defined (in which case |equiv(p)=0|).
+ 
+@<Types...@>=
+@!llink:name_info renames link; {left link in binary search tree for module names}
+@!rlink:name_info renames ilk; {right link in binary search tree for module names}
+ 
+@ @<Set init...@>=
+rlink(0):=0; {the binary search tree starts out with nothing in it}
+equiv(0):=0; {the undefined module has no replacement text}
+ 
+@ Here is a little procedure that prints the text of a given name.
+@<Specification of procedures visible from |data_structures|@>=
+  procedure print_id(p:name_pointer);
+
+@ @<Procedures in |data_structures|@>=
+procedure @!print_id(@!p:name_pointer)is {print identifier or module name}
+@!w:w_range; {segment of |byte_mem|}
+begin if p>=name_ptr then print("IMPOSSIBLE");
+else  w:=p mod ww;
+  for k in byte_start(p)..byte_start(p+ww)-1 loop
+      print(xchr(byte_mem(w,k)));
+  end loop;
+end if;
+end print_id;
+
+@* Searching for identifiers.
+The hash table described above is updated by the |id_lookup| procedure,
+which finds a given identifier and returns a pointer to its index in
+|byte_start|. If the identifier was not already present, it is inserted with
+a given |ilk| code; and an error message is printed if the identifier is 
+being doubly defined.
+ 
+Because of the way \.{ATANGLE}'s scanning mechanism works, it is most
+convenient to let |id_lookup| search for an identifier that is present in the 
+|buffer| array. Two other global variables specify its position in the 
+buffer: the first character is |buffer(id_first)|, and the last is 
+|buffer(id_loc-1)|.
+ 
+We have mentioned that |normal| identifiers belong to two hash tables, one 
+for their true names as they appear in the \.{AWEB} file and the other when
+they have been reduced to their first |unambig_length| characters. The hash 
+tables are kept by the method of simple chaining, where the heads of the 
+individual lists appear in the |hash| and |chop_hash| arrays. If |h| is a 
+hash code, the primary hash table list starts at |hash(h)| and proceeds 
+through |link| pointers; the secondary hash table list starts at 
+|chop_hash(h)| and proceeds through |equiv| pointers. Of course, the same
+identifier will probably have two different values of |h|.
+ 
+The |id_lookup| procedure uses an auxiliary array called |chopped_id| to
+contain up to |unambig_length| characters of the current identifier, if
+it is necessary to compute the secondary hash code. 
+ 
+@<Types...@>=
+@!id_first:buffer_index; {where the current identifier begins in the buffer}
+@!id_loc:buffer_index; {just after the current identifier in the buffer}
+@#
+subtype hash_index is INTEGER range 0..hash_size;
+subtype chop_hash_index is INTEGER range 0..unambig_length;
+@!hash,@!chop_hash:array (hash_index) of sixteen_bits:=null_array;
+	      {heads of hash lists---initially empty}
+@!chopped_id:array (chop_hash_index) of ASCII_code; {chopped identifier}
+
+ 
+ 
+@ Here now is the main procedure for finding identifiers (and strings).
+The parameter |t| is set to |normal| except when the identifier is
+a macro name that is just being defined; in the latter case, |t| will be
+|simple| or |parametric|.
+
+@<Specification of procedures visible from |hashing|@>=
+  function id_lookup(t:eight_bits)return name_pointer;
+
+@ @<Procedures in |hashing|@>=
+function @!id_lookup(@!t:eight_bits)return name_pointer is {finds current
+							    identifier}
+@!c:eight_bits; {byte being chopped}
+@!i:buffer_index; {index into |buffer|}
+@!h:hash_index; {hash code}
+@!k:byte_index; {index into |byte_mem|}
+@!w:w_range; {segment of |byte_mem|}
+@!l:buffer_index:=id_loc-id_first; {length of the given identifier}
+@!p,@!q:name_pointer; {where the identifier is being sought}
+@!s:chop_hash_index; {index into |chopped_id|}
+begin
+@<Compute the hash code |h|@>;
+@<Compute the name location |p|@>;
+if (p=name_ptr)or(t/=normal) then
+  @<Update the tables and check for possible errors@>;
+end if;
+return p;
+end id_lookup;
+ 
+@ A simple hash code is used: If the sequence of
+ASCII codes is $c_1c_2\ldots c_n$, its hash value will be
+$$(2^{n-1}c_1+2^{n-2}c_2+\cdots+c_n)\,\bmod\,|hash_size|.$$
+ 
+@<Compute the hash...@>=
+h:=buffer(id_first); i:=id_first+1;
+while i<id_loc loop
+  h:=(h+h+buffer(i)) mod hash_size; incr(i);
+  end loop@;
+ 
+@ If the identifier is new, it will be placed in position |p=name_ptr|,
+otherwise |p| will point to its existing location.
+ 
+@<Compute the name location...@>=
+p:=hash(h);
+while p/=0 loop
+  if length(p)=l then
+      @<Compare name |p| with current identifier, |goto found| if equal@>;
+    end if;
+  p:=link(p);
+  end loop;
+p:=name_ptr; {the current identifier is new}
+link(p):=hash(h); hash(h):=p; {insert |p| at beginning of hash list}
+<<found>> null@;
+ 
+@ @<Compare name |p|...@>=
+i:=id_first; k:=byte_start(p); w:=p mod ww;
+while (i<id_loc)and(buffer(i)=byte_mem(w,k)) loop
+  incr(i); incr(k);
+  end loop;
+if i=id_loc then goto found; {all characters agree}
+end if@;
+
+@ @<Update the tables...@>=
+if ((p/=name_ptr)and(t/=normal)and(ilk(p)=normal)) or
+    ((p=name_ptr)and(t=normal)) then
+  @<Compute the secondary hash code |h| and put the first characters
+  into the auxiliary array |chopped_id|@>;
+end if;
+if p/=name_ptr then @<Give double-definition error and change |p|
+                      to type |t|@>;
+else @<Enter a new identifier into the table at position |p|@>;
+end if@;
+ 
+@ The following routine, which is called into play when it is necessary to
+look at the secondary hash table, computes the same hash function as before
+(but on the chopped data), and places a zero after the chopped identifier
+in |chopped_id| to serve as a convenient sentinel.
+@^uppercase@>
+ 
+@<Compute the secondary...@>=
+i:=id_first; s:=0; h:=0;
+while (i<id_loc)and(s<unambig_length) loop
+  if buffer(i)>=@'a' then chopped_id(s):=buffer(i)-8#40#;
+  else chopped_id(s):=buffer(i);
+  end if;
+  h:=(h+h+chopped_id(s)) mod hash_size; incr(s);
+  incr(i);
+  end loop;
+chopped_id(s):=0@;
+ 
+@ If a macro has appeared before it was defined, \.{ATANGLE} will still work
+all right; after all, such behavior is typical of the replacement texts for 
+modules, which act very much like macros. However, \.{ATANGLE} finds it
+simplest to make a blanket rule that macros should be defined before they are 
+used. The following routine gives an error message and also fixes up any 
+damage that may have been caused.
+ 
+@<Give double...@>= {now |p/=name_ptr| and |t/=normal|}
+if ilk(p)=normal then
+  err_print("! This identifier has already appeared");@/
+@.This identifier has already...@>
+  @<Remove |p| from secondary hash table@>;
+else err_print("! This identifier was defined before");
+@.This identifier was defined...@>
+end if;
+ilk(p):=t@;
+ 
+@ When we have to remove a secondary hash entry, because a |normal| 
+identifier is changing to another |ilk|, the hash code |h| and chopped 
+identifier have already been computed.
+ 
+@<Remove |p| from secondary...@>=
+q:=chop_hash(h);
+if q=p then chop_hash(h):=equiv(p);
+else while equiv(q)/=p loop q:=equiv(q); end loop;
+  equiv(q):=equiv(p);
+end if@;
+ 
+@ @<Enter a new identifier...@>=
+if t=normal then
+  @<Check for ambiguity and update secondary hash@>;
+end if;
+w:=name_ptr mod ww; k:=byte_ptr(w);
+if k+l>max_bytes then overflow("byte memory"); end if;
+if name_ptr>max_names-ww then overflow("name"); end if;
+i:=id_first; {get ready to move the identifier into |byte_mem|}
+while i<id_loc loop
+  byte_mem(w,k):=buffer(i); incr(k); incr(i);
+  end loop;
+byte_ptr(w):=k; byte_start(name_ptr+ww):=k; incr(name_ptr); ilk(p):=t@;
+
+ 
+@ @<Check for ambig...@>=
+q:=chop_hash(h);
+while q/=0 loop
+  @<Check if |q| conflicts with |p|@>;
+  q:=equiv(q);
+  end loop;
+equiv(p):=chop_hash(h); chop_hash(h):=p@;{put |p| at front of secondary list}
+ 
+@ @<Check if |q| conflicts...@>=
+k:=byte_start(q); s:=0; w:=q mod ww;
+while (k<byte_start(q+ww)) and (s<unambig_length) loop
+  c:=byte_mem(w,k);
+  if c>=@'a' then c:=c-8#40#; {convert to uppercase}
+@^uppercase@>
+  end if;
+  if chopped_id(s)/=c then goto not_found;
+  end if;
+  incr(s);
+  incr(k);
+  end loop;
+if (k=byte_start(q+ww))and(chopped_id(s)/=0) then goto not_found;
+end if;
+print_nl("! Identifier conflict with ");
+@.Identifier conflict...@>
+for kl in byte_start(q)..byte_start(q+ww)-1 loop print(xchr(byte_mem(w,kl)));
+end loop;
+error; q:=0; {only one conflict will be printed, since |equiv(0)=0|}
+<<not_found>> null@;
+ 
+@* Searching for module names.
+The |mod_lookup| procedure finds the module name |mod_text(1..l)| in the
+search tree, after inserting it if necessary, and returns a pointer to
+where it was found.
+ 
+@<Types...@>=
+subtype long_name_index is INTEGER range 0..longest_name;
+@!mod_text:array (long_name_index) of ASCII_code; {name being sought for}
+ 
+@ According to the rules of \.{AWEB}, no module name should be a proper prefix
+of another, so a ``clean'' comparison should occur between any two names. The 
+result of |mod_lookup| is 0 if this prefix condition is violated. An error 
+message is printed when such violations are detected during phase two of 
+\.{AWEAVE}.
+ 
+@<Types...@>=
+type compare is (@!less,@!equal,@!greater,@!prefix,@!extension);
+ 
+@ @<Specification of procedures visible from |hashing|@>=
+  function mod_lookup(l:sixteen_bits)return name_pointer;
+
+@ @<Procedures in |hashing|@>=
+function @!mod_lookup(@!l:sixteen_bits)return name_pointer is 
+      {finds module name}
+@!c:compare:=greater; {comparison between two names}
+@!j:long_name_index; {index into |mod_text|}
+@!k:byte_index; {index into |byte_mem|}
+@!w:w_range; {segment of |byte_mem|}
+@!p:name_pointer; {current node of the search tree}
+@!q:name_pointer:=0; {father of node |p|}
+begin p:=rlink(0); {|rlink(0)| is the root of the tree}
+while p/=0 loop
+  @<Set \(|c| to the result of comparing the given name to
+    name |p|@>;
+  q:=p;
+  if c=less then p:=llink(q);
+  elsif c=greater then p:=rlink(q);
+  else goto found;
+  end if;
+  end loop;
+@<Enter a new module name into the tree@>;
+<<found>> if c/=equal then
+  err_print("! Incompatible section names"); @/ p:=0;
+@.Incompatible module names@>
+  end if;
+return p;
+end mod_lookup;
+ 
+@ @<Enter a new module name...@>=
+w:=name_ptr mod ww; k:=byte_ptr(w);
+if k+l>max_bytes then overflow("byte memory");
+end if;
+if name_ptr>max_names-ww then overflow("name");
+end if;
+p:=name_ptr;
+if c=less then llink(q):=p; else rlink(q):=p;
+end if;
+llink(p):=0; rlink(p):=0; c:=equal; equiv(p):=0;
+for kj in 1..l loop byte_mem(w,k+kj-1):=mod_text(kj);
+end loop;
+byte_ptr(w):=k+l; byte_start(name_ptr+ww):=k+l; incr(name_ptr)@;
+ 
+@ @<Set \(|c|...@>=
+k:=byte_start(p); w:=p mod ww; c:=equal; j:=1;
+while (k<byte_start(p+ww)) and (j<=l) and (mod_text(j)=byte_mem(w,k)) loop
+  incr(k); incr(j);
+  end loop;
+if k=byte_start(p+ww) then
+  if j>l then c:=equal;
+  else c:=extension;
+  end if;
+elsif j>l then c:=prefix;
+elsif mod_text(j)<byte_mem(w,k) then c:=less;
+else c:=greater;
+end if@;
+ 
+@ The |prefix_lookup| procedure is supposed to find exactly one module
+name that has |mod_text(1..l)| as a prefix. Actually the algorithm silently
+accepts also the situation that some module name is a prefix of
+|mod_text(1..l)|, because the user who painstakingly typed in more than
+necessary probably doesn't want to be told about the wasted effort.
+ 
+@<Specification of procedures visible from |hashing|@>=
+  function prefix_lookup(l:sixteen_bits)return name_pointer;
+
+@ @<Procedures in |hashing|@>=
+function @!prefix_lookup(@!l:sixteen_bits)return name_pointer is 
+     {finds name extension}
+@!c:compare; {comparison between two names}
+@!count:name_index:=0; {the number of hits}
+@!j:long_name_index; {index into |mod_text|}
+@!k:byte_index; {index into |byte_mem|}
+@!w:w_range; {segment of |byte_mem|}
+@!p:name_pointer; {current node of the search tree}
+@!q:name_pointer:=0; {another place to resume the search after one
+		      branch is done}
+@!r:name_pointer:=0; {extension found}
+begin p:=rlink(0); {begin search at root of tree}
+while p/=0 loop
+  @<Set \(|c|...@>;
+  if c=less then p:=llink(p);
+  elsif c=greater then p:=rlink(p);
+  else  r:=p; incr(count); q:=rlink(p); p:=llink(p);
+    end if;
+  if p=0 then
+    p:=q; q:=0;
+    end if;
+  end loop;
+if count/=1 then
+  if count=0 then err_print("! Name does not match");
+@.Name does not match@>
+  else err_print("! Ambiguous prefix");
+@.Ambiguous prefix@>
+  end if;
+end if;
+return r; {the result will be 0 if there was no match}
+end prefix_lookup;
+ 
+@* Tokens.
+Replacement texts, which represent \ADA\ code in a compressed format, appear 
+in |tok_mem| as mentioned above. The codes in these texts are called 
+`tokens'; some tokens occupy two consecutive eight-bit byte positions, and 
+the others take just one byte.
+ 
+If $p>0$ points to a replacement text, |tok_start(p)| is the |tok_mem| 
+position of the first eight-bit code of that text. If |text_link(p)=0|,
+this is the replacement text for a macro, otherwise it is the replacement
+text for a module. In the latter case |text_link(p)| is either equal to
+|module_flag|, which means that there is no further text for this module, or
+|text_link(p)| points to a continuation of this replacement text; such links 
+are created when several modules have \ADA\ texts with the same name, and 
+they also tie together all the \ADA\ texts of unnamed modules. The 
+replacement text pointer for the first unnamed module appears in 
+|text_link(0)|, and the most recent such pointer is |last_unnamed|.
+ 
+@<Types...@>=
+module_flag:constant sixteen_bits:=max_texts; {final |link| in module replacement texts}
+@!last_unnamed:text_pointer:=0; {most recent replacement text of unnamed module}
+ 
+@ @<Set init...@>=text_link(0):=0;
+ 
+@ If the first byte of a token is less than |8#200#|, the token occupies a
+single byte. Otherwise we make a sixteen-bit token by combining two 
+consecutive bytes |a| and |b|. If |8#200#<=a<8#250#|, then 
+$(a-\bn{8}{200})\times2^8+b$ points to an identifier; if |8#250#<=a<8#320#|, 
+then $(a-\bn{8}{250})\times2^8+b$ points to a module name; otherwise, i.e., 
+if |8#320#<=a<8#400#|, then $(a-\bn{8}{320})\times2^8+b$ is the number of the 
+module in which the current replacement text appears.
+ 
+Codes less than \bn{8}{200} are 7-bit ASCII codes that represent themselves.
+In particular, a single-character identifier like `|x|' will be a one-byte
+token, while all longer identifiers will occupy two bytes.
+ 
+Some of the 7-bit ASCII codes will not be present, however, so we can
+use them for special purposes. The following symbolic names are used:
+ 
+\yskip\hang |param| denotes insertion of a parameter. This occurs only in
+the replacement texts of parametric macros, outside of single-quoted strings
+in those texts.
+ 
+\hang |begin_comment| denotes \.{@@\{}, which will become \.{--}.
+ 
+\hang |end_comment| denotes \.{@@\}}, which will become a new line.
+ 
+\hang |character_tok| denotes the \.' that encloses an character constant.
+ 
+\hang |ascii_tok| denotes the \.{@@'} that precedes a ASCII code constant.
+@^ASCII code constant@>
+ 
+\hang |output_tok| denotes the \.{@@\~} that precedes an output file-name.
+
+\hang |join| denotes the concatenation of adjacent items with no
+space or line breaks allowed between them (the \.{@@\&} operation of \.{AWEB}).
+ 
+\hang |double_dot| denotes `\.{..}' in \ADA.
+ 
+\hang |verbatim| denotes the \.{@@=} that begins a verbatim \ADA\ string.
+It is also used for the end of the string.
+ 
+\hang |force_line| denotes the \.{@@\\} that forces a new line in the
+\ADA\ output.
+@^ASCII code@>
+ 
+@<Types...@>=
+@!param: constant eight_bits:=0; {ASCII null code will not appear}
+@!verbatim: constant eight_bits:=2; {extended ASCII alpha should not appear}
+@!force_line: constant eight_bits:=3; {extended ASCII beta should not appear}
+@!begin_comment: constant eight_bits:=8#11#; {ASCII tab mark will not appear}
+@!end_comment: constant eight_bits:=8#12#; {ASCII line feed will not appear}
+@!character_tok: constant eight_bits:=8#14#; {ASCII form feed will not appear}
+@!ascii_tok: constant eight_bits:=8#15#; {ASCII carriage return will not appear}
+@!output_tok: constant eight_bits:=8#16#; {ASCII \.{DLE} will not appear}
+@!double_dot: constant eight_bits:=8#40#; {ASCII space will not appear except in strings}
+@!join: constant eight_bits:=8#177#; {ASCII delete will not appear}
+
+@ @<Specification of procedures visible from |data_structures|@>=
+  procedure store_two_bytes(x:sixteen_bits);
+ 
+@ The following procedure is used to enter a two-byte value into |tok_mem| 
+when a replacement text is being generated.
+
+@<Procedures in |data_structures|@>=
+procedure @!store_two_bytes(@!x:sixteen_bits)is
+  {stores high byte, then low byte}
+begin if tok_ptr(z)+2>max_toks then overflow("token");
+      end if;
+tok_mem(z,tok_ptr(z)):=x/8#400#; {this could be done by a shift command}
+tok_mem(z,tok_ptr(z)+1):=x mod 8#400#; {this could be done by a logical and}
+tok_ptr(z):=tok_ptr(z)+2;
+end store_two_bytes;
+ 
+@* Stacks for output.
+Let's make sure that our data structures contain enough information to
+produce the entire \ADA\ program as desired, by working next on the
+algorithms that actually do produce that program.
+ 
+@ The output process uses a stack to keep track of what is going on at
+different ``levels'' as the macros are being expanded.
+Entries on this stack have five parts:
+ 
+\yskip\hang |end_field| is the |tok_mem| location where the replacement
+text of a particular level will end;
+ 
+\hang |byte_field| is the |tok_mem| location from which the next token
+on a particular level will be read;
+ 
+\hang |name_field| points to the name corresponding to a particular level;
+ 
+\hang |repl_field| points to the replacement text currently being read
+at a particular level.
+ 
+\hang |mod_field| is the module number, or zero if this is a macro.
+ 
+\yskip\noindent The current values of these five quantities are referred to
+quite frequently, so they are stored in a separate place instead of in
+the |stack| array. We call the current values |cur_end|, |cur_byte|,
+|cur_name|, |cur_repl|, and |cur_mod|.
+ 
+The global variable |stack_ptr| tells how many levels of output are
+currently in progress. The end of all output occurs when the stack is
+empty, i.e., when |stack_ptr=0|.
+ 
+@<Types...@>=
+subtype mod_range is INTEGER range 0..8#27777#;
+type @!output_state is record
+  @!end_field: sixteen_bits; {ending location of replacement text}
+  @!byte_field: sixteen_bits; {present location within replacement text}
+  @!name_field: name_pointer; {|byte_start| index for text being output}
+  @!repl_field: text_pointer; {|tok_start| index for text being output}
+  @!mod_field: mod_range; {module number or zero if not a module}
+  end record;
+@#
+@!cur_state : output_state; {|cur_end|, |cur_byte|, |cur_name|, |cur_repl|}
+@!stack : array (1..stack_size) of output_state; 
+                                                {info for non-current levels}
+@!stack_ptr: INTEGER range 0..stack_size;
+                            {first unused location in the output state stack}
+@#
+@!cur_end:sixteen_bits renames cur_state.end_field; 
+                                       {current ending location in |tok_mem|}
+@!cur_byte:sixteen_bits renames cur_state.byte_field; 
+                                  {location of next output byte in |tok_mem|}
+@!cur_name:name_pointer renames cur_state.name_field; 
+                                     {pointer to current name being expanded}
+@!cur_repl:text_pointer renames cur_state.repl_field; 
+                                        {pointer to current replacement text}
+@!cur_mod:mod_range renames cur_state.mod_field;
+                                       {current module number being expanded}
+  
+@ It is convenient to keep a global variable |zo| equal to |cur_repl mod zz|.
+ 
+@<Types...@>=
+@!zo:z_range; {the segment of |tok_mem| from which output
+                             is coming}
+ 
+@ Parameters must also be stacked. They are placed in |tok_mem| just above 
+the other replacement texts, and dummy parameter `names' are placed in 
+|byte_start| just after the other names. The variables |text_ptr| and 
+|tok_ptr(z)| essentially serve as parameter stack pointers during the output 
+phase, so there is no need for a separate data structure to handle this 
+problem.
+ 
+@ There is an implicit stack corresponding to meta-comments that are output
+via \.{@@\{} and \.{@@\}}. But this stack need not be represented in detail,
+because we only need to know whether it is empty or not. A global variable
+|brace_level| tells how many items would be on this stack if it were present.
+ 
+@<Types...@>=
+@!brace_level: eight_bits; 
+                          {current depth of $\.{@@\{}\ldots\.{@@\}}$ nesting}
+
+@ To get the output process started, we will perform the following
+initialization steps. We may assume that |text_link(0)| is nonzero, since it
+points to the \ADA\ text in the first unnamed module that generates code; if 
+there are no such modules, there is nothing to output, and an error message 
+will have been generated before we do any of the initialization.
+ 
+@<Initialize the output stacks@>=
+stack_ptr:=1; brace_level:=0; cur_name:=0; cur_repl:=text_link(0);
+zo:=cur_repl mod zz; cur_byte:=tok_start(cur_repl);
+cur_end:=tok_start(cur_repl+zz); cur_mod:=0;
+ 
+@ When the replacement text for name |p| is to be inserted into the output,
+the following subroutine is called to save the old level of output and get
+the new one going.
+
+@<Procedures in |output_phase|@>=
+procedure @!push_level(@!p:name_pointer)is {suspends the current level}
+begin if stack_ptr=stack_size then overflow("stack");
+else  stack(stack_ptr):=cur_state; {save |cur_end|, |cur_byte|, etc.}
+  incr(stack_ptr);
+  cur_name:=p; cur_repl:=equiv(p); zo:=cur_repl mod zz;
+  cur_byte:=tok_start(cur_repl); cur_end:=tok_start(cur_repl+zz);
+  cur_mod:=0;
+  end if;
+end push_level;
+ 
+@ When we come to the end of a replacement text, the |pop_level| subroutine
+does the right thing: It either moves to the continuation of this replacement
+text or returns the state to the most recently stacked level. Part of this
+subroutine, which updates the parameter stack, will be given later when we
+study the parameter stack in more detail.
+ 
+@<Procedures in |output_phase|@>=
+procedure @!pop_level is {do this when |cur_byte| reaches |cur_end|}
+begin if text_link(cur_repl)=0 then {end of macro expansion}
+  if ilk(cur_name)=parametric then
+    @<Remove a parameter from the parameter stack@>;
+  end if;
+elsif text_link(cur_repl)<module_flag then {link to a continuation}
+  cur_repl:=text_link(cur_repl); {we will stay on the same level}
+  zo:=cur_repl mod zz;
+  cur_byte:=tok_start(cur_repl); cur_end:=tok_start(cur_repl+zz);
+  @/ return;
+  end if;
+decr(stack_ptr); {we will go down to the previous level}
+if stack_ptr>0 then
+  cur_state:=stack(stack_ptr); zo:=cur_repl mod zz;
+  end if;
+end pop_level;
+ 
+@ The heart of the output procedure is the |get_output| routine, which 
+produces the next token of output that is not a reference to a macro. This 
+procedure handles all the stacking and unstacking that is necessary. It 
+returns the value |module_number| if the next output begins or ends the 
+replacement text of some module, in which case |cur_val| is that module's 
+number (if beginning) or the negative of that value (if ending). The 
+procedure also returns the value |identifier| if the next output is an 
+identifier of length two or more, in which case |cur_val| points to that 
+identifier name.
+ 
+@<Types...@>=
+@!module_number: constant sixteen_bits:=8#201#; {code returned by |get_output| for module numbers}
+@!identifier: constant sixteen_bits:=8#202#; {code returned by |get_output| for identifiers}
+@#
+@!cur_val:INTEGER; {additional information corresponding to output token}
+ 
+@ If |get_output| finds that no more output remains, it returns the value 
+zero.
+ 
+@<Procedures in |output_phase|@>=
+function @!get_output return sixteen_bits is
+                                   {returns next token after macro expansion}
+@!a:sixteen_bits; {value of current byte}
+@!b:eight_bits; {byte being copied}
+@!bal:sixteen_bits; {excess of \.( versus \.) while copying a parameter}
+@!k:byte_index; {index into |byte_mem|}
+@!w:w_range; {segment of |byte_mem|}
+begin <<restart>> if stack_ptr=0 then return 0; end if;
+if cur_byte=cur_end then
+  cur_val:=-cur_mod; pop_level;
+  if cur_val=0 then goto restart; end if;
+  return module_number;
+  end if;
+a:=tok_mem(zo,cur_byte); incr(cur_byte);
+if a<8#200# then {one-byte token}
+  if a=param then
+      @<Start scanning current macro parameter, |goto restart|@>;
+  else return a;
+  end if;
+end if;
+a:=(a-8#200#)*8#400#+tok_mem(zo,cur_byte); incr(cur_byte);
+if a<8#24000# then {|8#24000#=(8#250#-8#200#)*8#400#|}
+  @<Expand macro |a| and |return@;|, or |goto restart@;| if no output found@>;
+end if;
+if a<8#50000# then {|8#50000#=(8#320#-8#200#)*8#400#|}
+  @<Expand module |a-8#24000#|, |goto restart|@>;
+end if;
+cur_val:=a-8#50000#; cur_mod:=cur_val; return module_number;
+end get_output;
+ 
+@ The user may have forgotten to give any \ADA\ text for a module name,
+or the \ADA\ text may have been associated with a different name by mistake.
+ 
+@<Expand module |a-...@>=
+a:=a-8#24000#;
+if equiv(a)/=0 then push_level(a);
+elsif a/=0 then
+  print_nl("! Not present: <"); print_id(a); print(">"); error;
+@.Not present: <section name>@>
+end if;
+goto restart@;
+ 
+@ @<Expand macro ...@>=
+case ilk(a) is
+when normal => cur_val:=a; return identifier;
+when simple => push_level(a); goto restart;
+when parametric => @<Put a parameter on the parameter stack,
+  or |goto restart| if error occurs@>;
+  push_level(a); goto restart;
+when others => confusion("output");
+end case;@/
+return a@;
+ 
+@ We come now to the interesting part, the job of putting a parameter on
+the parameter stack. First we pop the stack if necessary until getting to
+a level that hasn't ended. Then the next character must be a `\.(';
+and since parentheses are balanced on each level, the entire parameter must
+be present, so we can copy it without difficulty.
+ 
+@<Put a parameter...@>=
+while (cur_byte=cur_end)and(stack_ptr>0) loop pop_level; end loop;
+if (stack_ptr=0)or(tok_mem(zo,cur_byte)/=@'(') then
+  print_nl("! No parameter given for "); print_id(a); error;
+@.No parameter given for macro@>
+  goto restart;
+  end if;
+@<Copy the parameter into |tok_mem|@>;
+equiv(name_ptr):=text_ptr; ilk(name_ptr):=simple; w:=name_ptr mod ww;
+k:=byte_ptr(w);
+if name_ptr>max_names-ww then overflow("name"); end if;
+byte_start(name_ptr+ww):=k; incr(name_ptr);
+if text_ptr>max_texts-zz then overflow("text"); end if;
+text_link(text_ptr):=0; tok_start(text_ptr+zz):=tok_ptr(z);
+incr(text_ptr);
+z:=text_ptr mod zz@;
+ 
+@ The |pop_level| routine undoes the effect of parameter-pushing when
+a parameter macro is finished:
+ 
+@<Remove a parameter...@>=
+decr(name_ptr); decr(text_ptr);
+z:=text_ptr mod zz;
+stat if tok_ptr(z)>max_tok_ptr(z) then max_tok_ptr(z):=tok_ptr(z); end if;
+tats@; {the maximum value of |tok_ptr| occurs just before parameter popping}
+tok_ptr(z):=tok_start(text_ptr)@;
+ 
+@ When a parameter occurs in a replacement text, we treat it as a simple
+macro in position (|name_ptr-1|):
+ 
+@<Start scanning...@>=
+push_level(name_ptr-1); goto restart@;
+ 
+@ Similarly, a |param| token encountered as we copy a parameter is converted
+into a simple macro call for |name_ptr-1|. Some care is needed to handle 
+cases like \\{macro}|(#; print("#)"))|; the \.{\#} token will have been 
+changed to |param| outside of strings, but we still must distinguish `real' 
+parentheses from those in strings.
+ 
+@d app_repl(#)==if tok_ptr(z)=max_toks then overflow("token"); end if;
+  tok_mem(z,tok_ptr(z)):=#; incr(tok_ptr(z))@;
+ 
+@<Copy the parameter...@>=
+bal:=1; incr(cur_byte); {skip the opening `\.('}
+loop  b:=tok_mem(zo,cur_byte); incr(cur_byte);
+  if b=param then store_two_bytes(name_ptr+8#77777#);
+  else  if b>=8#200# then
+      app_repl(b);
+      b:=tok_mem(zo,cur_byte); incr(cur_byte);
+    else   case b is
+      when @'(' => incr(bal);
+      when @')' => decr(bal);
+        exit when bal=0;
+      when character_tok ! ascii_tok =>
+        app_repl(b);
+        b:=tok_mem(zo,cur_byte); incr(cur_byte);
+      when @'"' => repeat app_repl(b);
+        b:=tok_mem(zo,cur_byte); incr(cur_byte);
+        if b=@'"' and tok_mem(zo,cur_byte)=@'"' then
+          app_repl(@'"'); app_repl(@'"');
+          b:=tok_mem(zo,cur_byte+1);
+          cur_byte:=cur_byte+2;
+        end if;
+	until(b=@'"'); {copy string, don't change |bal|}
+      when others => null;
+      end case;
+    end if;
+    app_repl(b);
+    end if;
+  end loop@;
+
+
+@* Producing the output.
+The |get_output| routine above handles most of the complexity of output
+generation, but there are two further considerations that have a nontrivial
+effect on \.{ATANGLE}'s algorithms.
+ 
+First, we want to make sure that the output is broken into lines not
+exceeding |line_length| characters per line, where these breaks occur at
+valid places (e.g., not in the middle of a string or a constant or an
+identifier, not between `\./' and `\.=', not at a `\.{@@\&}' position
+where quantities are being joined together). Therefore we assemble the
+output into a buffer before deciding where the line breaks will appear.
+However, we make very little attempt to make ``logical'' line breaks that
+would enhance the readability of the output; people are supposed to read
+the input of \.{ATANGLE} or the \TeX ed output of \.{AWEAVE}, but not the
+tangled-up output. The only concession to readability is that a break after
+a semicolon will be made if possible, since commonly used ``pretty
+printing'' routines give better results in such cases.
+ 
+The following solution to these problems has been adopted: An array
+|out_buf| contains characters that have been generated but not yet output,
+and there are three pointers into this array. One of these, |out_ptr|, is
+the number of characters currently in the buffer, and we will have
+|1<=out_ptr<=line_length| most of the time. The second is |break_ptr|,
+which is the largest value |<=out_ptr| such that we are definitely entitled
+to end a line by outputting the characters |out_buf(1..(break_ptr-1))|;
+we will always have |break_ptr<=line_length|. Finally, |semi_ptr| is either
+zero or the largest known value of a legal break after a semicolon
+on the current line; we will always have |semi_ptr<=break_ptr|.
+ 
+@<Types...@>=
+subtype out_buffer_index is INTEGER range 0..out_buf_size;
+@!out_buf: buffer_type(out_buffer_index); {assembled characters}
+@!out_ptr: out_buffer_index; {first available place in |out_buf|}
+@!break_ptr: out_buffer_index; {last breaking place in |out_buf|}
+@!semi_ptr: out_buffer_index; {last semicolon breaking place in |out_buf|}
+ 
+@ Besides having those three pointers,
+the output process is in one of several states:
+ 
+\yskip\hang |num_or_id| means that the last item in the buffer is a number or
+identifier, hence a blank space or line break must be inserted if the next
+item is also a number or identifier.
+ 
+\yskip\hang |unbreakable| means that the last item in the buffer was followed
+by the \.{@@\&} operation that inhibits spaces between it and the next item.
+ 
+\yskip\hang |misc| means none of the above.
+ 
+\yskip\noindent
+In all states the last item in the buffer lies between |break_ptr| and 
+|out_ptr-1|, inclusive.
+ 
+Beside the states there is a boolean variable, called |comment_output|,
+which is set true, if the material to be output is part of the meta-comments
+between `\.{@@\{}' and `\.{@@\}}' and therefore has to be preceded by 
+`\.{--}'.
+ 
+@<Types...@>=
+@!misc: constant eight_bits:=0; {state associated with special characters}
+@!num_or_id: constant eight_bits:=1; {state associated with numbers and identifiers}
+@!unbreakable:constant eight_bits:=2; {state associated with \.{@@\&}}
+@#
+@!out_state:eight_bits; {current status of partial output}
+@!comment_output:BOOLEAN; {outputting meta-comment?}
+  
+@ During the output process, |line| will equal the number of the next line
+to be output.
+ 
+@<Initialize the output buffer@>=
+out_state:=misc; out_ptr:=0; break_ptr:=0; semi_ptr:=0; out_buf(0):=0; 
+line:=1; comment_output:=FALSE;
+ 
+@ Here is a routine that is invoked when |out_ptr>line_length|
+or when it is time to flush out the final line. The |flush_buffer| procedure
+often writes out the line up to the current |break_ptr| position, then moves the
+remaining information to the front of |out_buf|. However, it prefers to
+write only up to |semi_ptr|, if the residual line won't be too long.
+ 
+@d check_break==if out_ptr>line_length then flush_buffer; end if
+ 
+@<Procedures in |output_phase|@>=
+procedure @!flush_buffer is {writes one line to output file}
+@!b:out_buffer_index := break_ptr; {value of |break_ptr| upon entry}
+begin
+if comment_output then TEXT_IO.PUT(ada_file,"--"); end if;
+if (semi_ptr/=0)and(out_ptr-semi_ptr<=line_length) then break_ptr:=semi_ptr;
+end if;
+for k in 1..break_ptr loop TEXT_IO.PUT(ada_file,xchr(out_buf(k-1)));
+end loop;
+new_ln(ada_file); incr(line); incr(f_line);
+if line mod 100 = 0 then
+  print(".");
+  if line mod 500 = 0 then print_int(line,1);
+  update_terminal; {progress report}
+  end if;
+end if;
+if break_ptr<out_ptr then
+  if out_buf(break_ptr)=@' ' then
+    incr(break_ptr); {drop space at break}
+    if break_ptr>b then b:=break_ptr;
+    end if;
+  end if;
+  out_buf(0..out_ptr-break_ptr-1):=out_buf(break_ptr..out_ptr-1);
+end if;
+out_ptr:=out_ptr-break_ptr; break_ptr:=b-break_ptr; semi_ptr:=0;
+if out_ptr>line_length then
+  err_print("! Long line must be truncated"); @/ out_ptr:=line_length;
+@.Long line must be truncated@>
+end if;
+end flush_buffer;
+ 
+@ @<Empty the last line from the buffer@>=
+break_ptr:=out_ptr; semi_ptr:=0; flush_buffer;
+if brace_level/=0 then new_ln;
+  print("! Program ended at brace level "); print_int(brace_level,1); error;
+end if;
+@.Program ended at brace level n@>
+ 
+@ Another simple and useful routine appends the decimal equivalent of
+a nonnegative integer to the output buffer.
+ 
+@d app(#)==out_buf(out_ptr):=#; incr(out_ptr) {append a single character}
+ 
+@<Procedures in |output_phase|@>=
+procedure @!send_val(@!v:INTEGER) is {puts |v| into buffer, assumes |v>=0|}
+@!k:out_buffer_index := out_buf_size; {index into |out_buf|}
+@!u:INTEGER := v;
+begin {first we put the digits at the very end of |out_buf|}
+repeat out_buf(k):=u mod 10; u:=u/10; decr(k);
+until(u=0);
+repeat incr(k); app(out_buf(k)+@'0');
+until(k=out_buf_size); {then we append them, most significant first}
+end send_val;
+ 
+@ The output states are kept up to date by the |send_out| procedure, which
+has two parameters: |t| tells the type of information being sent and
+|v| contains the information proper. Some information may also be passed
+in the array |out_contrib|.
+ 
+\yskip\hang If |t=misc| then |v| is a character to be output.
+ 
+\hang If |t=str| then |v| is the length of a string or something like 
+`\.{/=}' in |out_contrib|.
+ 
+\hang If |t=ident| then |v| is the length of an identifier in |out_contrib|.
+ 
+\hang If |t=frac| then |v| is the length of a fraction and/or exponent in
+|out_contrib|.
+ 
+@<Types...@>=
+@!str: constant eight_bits:=1; {|send_out| code for a string}
+@!ident: constant eight_bits:=2; {|send_out| code for an identifier}
+@!frac: constant eight_bits:=3; {|send_out| code for a fraction}
+@#
+@!out_contrib:buffer_type(1..line_length); {a contribution to |out_buf|}
+ 
+@ A slightly subtle point in the following code is that the user may ask
+for a |join| operation (i.e., \.{@@\&}) following whatever is being sent
+out.  We will see later that |join| is implemented in part by calling
+|send_out(frac,0)|.
+ 
+@<Procedures in |output_phase|@>=
+procedure @!send_out(@!t:eight_bits; @!v:sixteen_bits) is
+  {outputs |v| of type |t|}
+begin @<Get the buffer ready for appending the new information@>;
+if t/=misc then for k in 1..v loop app(out_contrib(k)); end loop;
+else app(v);
+end if;
+check_break;
+if (t=misc)and(v=@';') then
+  semi_ptr:=out_ptr; break_ptr:=out_ptr;
+  end if;
+if t>=ident then out_state:=num_or_id; {|t=ident| or |frac|}
+else out_state:=misc; {|t=str| or |misc|}
+end if;
+end send_out;
+ 
+@ @<Get the buffer ready...@>=
+<<restart>> case out_state is
+when num_or_id => if t/=frac then
+  break_ptr:=out_ptr;
+  if t=ident then app(@' '); end if;
+  end if;
+when misc => if t/=frac then break_ptr:=out_ptr; end if;
+when others => null; {this is for |unbreakable| state}
+end case@;
+ 
+@* The big output switch.
+To complete the output process, we need a routine that takes the results
+of |get_output| and feeds them to |send_out| or |send_val|.
+This procedure `|send_the_output|' will be invoked just once, as follows:
+ 
+@<Phase II: Output the contents of the compressed tables@>=
+if text_link(0)=0 then
+  print_nl("! No output was specified."); mark_harmless;
+@.No output was specified@>
+else  print_nl("Writing the output file"); update_terminal;@/
+  @<Initialize the output stacks@>@;
+  @<Initialize the output buffer@>@;
+  send_the_output;@/
+  @<Empty the last line...@>@;
+  print_nl("Done.");
+end if@;
+ 
+@ A many-way switch is used to send the output:
+ 
+@<Procedures in |output_phase|@>=
+procedure @!send_the_output is
+  @!cur_char:eight_bits; {the latest character received}
+  @!k:INTEGER range 0..line_length; {index into |out_contrib|}
+  @!j:byte_index; {index into |byte_mem|}
+  @!w:w_range; {segment of |byte_mem|}
+begin while stack_ptr>0 loop
+  cur_char:=get_output;
+  <<reswitch>> case cur_char is
+  when 0 => @+null; {this case might arise if output ends unexpectedly}
+  @t\4@>@<Cases related to identifiers@>@;
+  @t\4@>@<Cases related to constants, possibly leading to
+    |get_fraction| or |reswitch|@>@;
+  @t\4@>@<Cases like \.{/=} and \.{:=}@>@;
+  when @'"' => @+@<Send a string, |goto reswitch|@>;
+  when @<Other printable characters@> => @+send_out(misc,cur_char);@/
+  @t\4@>@<Cases involving \.{@@\{} and \.{@@\}}@>@;
+  when join => @+send_out(frac,0); out_state:=unbreakable;
+  when verbatim => @+@<Send verbatim string@>;
+  when output_tok => @+@<Get the |file_name| and redirect further output@>;
+  when force_line => @+@<Force a line break@>;
+  when others => new_ln; print("! Can't output ASCII code ");
+                 print_int(cur_char,1); error;
+@.Can't output ASCII code n@>
+  end case;
+  goto continue;
+  <<get_fraction>> @<Special code to finish real constants@>;
+  <<continue>> null;
+  end loop;
+end send_the_output;
+ 
+@ @<Cases like \.{/=}...@>=
+when and_sign => @+out_contrib(1..3):=(@'A',@'N',@'D');
+@^uppercase@>
+  send_out(ident,3);
+when not_sign => @+out_contrib(1..3):=(@'N',@'O',@'T');
+  send_out(ident,3);
+when set_element_sign => @+out_contrib(1..2):=(@'I',@'N');
+  send_out(ident,2);
+when or_sign => @+out_contrib(1..2):=(@'O',@'R'); send_out(ident,2);
+when left_arrow => @+out_contrib(1..2):=(@':',@'='); send_out(str,2);
+when not_equal => @+out_contrib(1..2):=(@'/',@'='); send_out(str,2);
+when less_or_equal => @+out_contrib(1..2):=(@'<',@'='); send_out(str,2);
+when greater_or_equal => @+out_contrib(1..2):=(@'>',@'=');
+  send_out(str,2);
+when equivalence_sign => @+out_contrib(1..2):=(@'=',@'=');
+  send_out(str,2);
+when double_dot => @+out_contrib(1..2):=(@'.',@'.'); send_out(str,2);
+when right_arrow => @+out_contrib(1..2):=(@'=',@'>'); send_out(str,2);
+when box_sign => @+out_contrib(1..2):=(@'<',@'>'); send_out(str,2);
+when left_label_bracket => @+out_contrib(1..2):=(@'<',@'<');
+  send_out(str,2);
+when right_label_bracket => @+out_contrib(1..2):=(@'>',@'>');
+  send_out(str,2);
+when double_star => @+out_contrib(1..2):=(@'*',@'*'); send_out(str,2);
+when character_tok => @+out_contrib(1..3):=(@''',get_output,@''');
+                      send_out(str,3);
+when ascii_tok => if out_state=num_or_id then send_out(misc,@' '); end if;
+                  send_val(get_output); out_state:=num_or_id;
+
+@ Please don't ask how all of the following characters can actually get
+through \.{ATANGLE} outside of strings. It seems that |@'{'|
+cannot actually occur at this point of the program, but it has
+been included just in case \.{ATANGLE} changes.
+ 
+@<Other printable characters@>=
+     @'!' ! @'#' ! @'$' ! @'%' ! @'&' ! @''' ! @'(' ! @')' ! @'*' ! @',' !
+     @'/' ! @':' ! @';' ! @'<' ! @'=' ! @'>' ! @'?' ! @'@@'! @'[' ! @'\' !
+     @']' ! @'^' ! @'_' ! @'`' ! @'{' ! @'|' ! @'+' ! @'-'
+
+@ Single-character identifiers represent themselves, while longer ones
+appear in |byte_mem|. All must be converted to uppercase,
+with underlines removed. Extremely long identifiers must be chopped.
+ 
+@<Cases related to identifiers@>=
+when @'A'..@'Z' => @+out_contrib(1):=cur_char; send_out(ident,1);
+when @'a'..@'z' => @+out_contrib(1):=cur_char-8#40#; send_out(ident,1);
+when identifier => @+k:=0; j:=byte_start(cur_val); w:=cur_val mod ww;
+  while (k<max_id_length)and(j<byte_start(cur_val+ww)) loop
+    incr(k); out_contrib(k):=byte_mem(w,j); incr(j);
+    if out_contrib(k)>=@'a' then out_contrib(k):=out_contrib(k)-8#40#;
+    end if;
+  end loop;
+  send_out(ident,k);
+ 
+@ After sending a string, we need to look ahead at the next character, in order
+to see if there were two consecutive single-quote marks. Afterwards we go to
+|reswitch| to process the next character.
+ 
+@<Send a string...@>=
+k:=1; out_contrib(1):=@'"';
+repeat if k<line_length then incr(k); end if;
+out_contrib(k):=get_output;
+until((out_contrib(k)=@'"')or(stack_ptr=0));
+if k=line_length then err_print("! String too long");
+@.String too long@>
+end if;
+send_out(str,k); cur_char:=get_output;
+if cur_char=@'"' then out_state:=unbreakable; end if;
+goto reswitch@;
+ 
+@ Sending a verbatim string is similar, but we don't have to look ahead.
+ 
+@<Send verbatim string@>=
+k:=0;
+repeat if k<line_length then incr(k); end if;
+out_contrib(k):=get_output;
+until((out_contrib(k)=verbatim)or(stack_ptr=0));
+if k=line_length then err_print("! Verbatim string too long");
+@.Verbatim string too long@>
+end if;
+send_out(str,k-1)@;
+
+@ Getting the new output file name is similar to sending a verbatim string;
+if there is a legal name, the file will be created and the variables
+|file_name| and |fn_length| will be set accordingly and |f_line| is set
+to~1.
+
+@<Types...@>=
+@!file_name:STRING(1..256);
+@!fn_length:INTEGER range 1..256;
+@!f_line:INTEGER;
+
+@ Before we redirect output we will empty the output buffer.
+
+@<Get the |file_name| and...@>=
+@<Force a line break@>;
+k:=0;
+loop
+  cur_char:=get_output;
+  exit when (cur_char=output_tok)or(stack_ptr=0);@/
+  incr(k);
+  file_name(k):=xchr(cur_char);
+end loop;
+if k>0 then
+  TEXT_IO.CLOSE(ada_file);
+  fn_length:=k;
+  if not create_ada_file(file_name(1..k)) then
+    fatal_error("! Could not open file `"&file_name(1..k)&"'.");
+@.Could not open file `x'@>
+  end if;
+  f_line:=1;
+else
+  err_print("! File name should have length > 0");
+@.File name should have length > 0@>
+end if@;
+ 
+@ In the cases related to numeric literals there is some care needed,
+  because of the ``based literal'', which \ADA\ supports; a global
+  variable |scanning_based_number| tells whether there is more to do.
+
+@<Types...@>=
+@!scanning_based_number:BOOLEAN:=FALSE;
+ 
+@ @<Cases related to constants...@>=
+when @'0'..@'9' => scanning_based_number:=FALSE;
+  k:=0;
+  loop if cur_char/=@'_' then
+      incr(k); out_contrib(k):=cur_char; cur_char:=get_output;
+      if cur_char=@'#' then
+        scanning_based_number:= not scanning_based_number;
+      else
+        exit when  ((not scanning_based_number) and
+                    (cur_char not in @'0'..@'9') and (cur_char/=@'_'));
+      end if;
+    else cur_char:=get_output;
+    end if;
+  end loop;
+  send_out(ident,k);
+  k:=0;
+  if cur_char=@'e' then cur_char:=@'E';
+@^uppercase@>
+  end if;
+  if cur_char=@'E' then goto get_fraction;
+  else goto reswitch;
+  end if;
+when @'.' =>  k:=1; out_contrib(1):=@'.'; cur_char:=get_output;
+  if cur_char=@'.' then
+    out_contrib(2):=@'.'; send_out(str,2);
+  elsif cur_char in @'0'..@'9' then goto get_fraction;
+  else  send_out(misc,@'.'); goto reswitch;
+  end if;
+ 
+@ The following code appears at label `|get_fraction|', when we want to
+scan to the end of a real constant. The first |k| characters of a fraction
+have already been placed in |out_contrib|, and |cur_char| is the next character.
+ 
+@<Special code...@>=
+repeat if k<line_length then incr(k); end if;
+out_contrib(k):=cur_char; cur_char:=get_output;
+if (out_contrib(k)=@'E')and((cur_char=@'+')or(cur_char=@'-')) then
+@^uppercase@>
+  if k<line_length then incr(k); end if;
+  out_contrib(k):=cur_char; cur_char:=get_output;
+elsif cur_char=@'e' then cur_char:=@'E';
+end if;
+until((cur_char/=@'E')and(cur_char not in @'0'..@'9'));
+if k=line_length then err_print("! Fraction too long"); end if;
+@.Fraction too long@>
+send_out(frac,k); goto reswitch@;
+ 
+@ Here the variable |comment_output| is set corresponding to the value of
+|brace_level|; further after each comment a line break is inserted.
+
+@<Cases involving \.{@@\{} and \.{@@\}}@>=
+when begin_comment => @<Force a line break@>;
+                      incr(brace_level);
+		      comment_output:=TRUE;
+when end_comment => if brace_level>0 then
+    decr(brace_level);
+    if brace_level=0 then @<Force a line break@>; comment_output:=FALSE;
+    end if;
+  else err_print("! Extra @@}");
+@.Extra \AT!\}@>
+  end if;
+when module_number => semi_ptr:=0;
+  out_contrib(1..2):=(@'-',@'-'); send_out(str,2);
+  while cur_char=module_number loop
+    out_state:=unbreakable;
+    send_out(misc,@'{');
+    out_state:=unbreakable;
+    if cur_val<0 then
+      send_out(misc,@':'); out_state:=unbreakable; send_val(-cur_val);
+    else  send_val(cur_val); out_state:=unbreakable; send_out(misc,@':');
+    end if;
+    out_state:=unbreakable; send_out(misc,@'}');
+    cur_char:=get_output;
+  end loop;
+  @<Force a line break@>;
+  goto reswitch;
+ 
+@ @<Force a line break@>=
+send_out(str,0); {normalize the buffer}
+while out_ptr>0 loop
+  if out_ptr<=line_length then break_ptr:=out_ptr; end if;
+  flush_buffer;
+  end loop;
+out_state:=misc@;
+ 
+@ @<Procedures in |output_phase|@>=
+procedure @!phase_ii is
+begin
+  @<Phase II...@>;
+end phase_ii;
+
+
+@* Introduction to the input phase.
+We have now seen that \.{ATANGLE} will be able to output the full
+\ADA\ program, if we can only get that program into the byte memory in
+the proper format. The input process is something like the output process
+in reverse, since we compress the text as we read it in and we expand it
+as we write it out.
+ 
+There are three main input routines. The most interesting is the one that 
+gets the next token of an \ADA\ text; the other two are used to scan rapidly
+past \TeX\ text in the \.{AWEB} source code. One of the latter routines will
+jump to the next token that starts with `\.{@@}', and the other skips to the 
+end of an \ADA\ comment.
+ 
+@ But first we need to consider the low-level routine |get_line|
+that takes care of merging |change_file| into |web_file|. The |get_line|
+procedure also updates the line numbers for error messages.
+ 
+@<Types...@>=
+@!line:INTEGER; {the number of the current line in the current file}
+@!other_line:INTEGER; {the number of the current line in the input file that
+  is not currently being read}
+@!temp_line:INTEGER; {used when interchanging |line| with |other_line|}
+@!limit:buffer_index; {the last character position occupied in the buffer}
+@!loc:buffer_index; {the next character position to be read from the buffer}
+@!input_has_ended: BOOLEAN; {if |TRUE|, there is no more input}
+@!changing: BOOLEAN; {if |TRUE|, the current line is from |change_file|}
+ 
+@ As we change |changing| from |TRUE| to |FALSE| and back again, we must
+remember to swap the values of |line| and |other_line| so that the 
+|err_print| routine will be sure to report the correct line number.
+ 
+@d change_changing==
+  changing := not changing;
+  temp_line:=other_line; other_line:=line; line:=temp_line@;
+    {|line @t$\null\BA\null$@> other_line|}
+ 
+@ When |changing| is |FALSE|, the next line of |change_file| is kept in
+|change_buffer(0..change_limit)|, for purposes of comparison with the next
+line of |web_file|. After the change file has been completely input, we
+set |change_limit:=0|, so that no further matches will be made.
+ 
+@<Types...@>=
+@!change_buffer:buffer_type(buffer_index);
+@!change_limit:buffer_index; {the last position occupied in |change_buffer|}
+ 
+@ Here's a simple function that checks if the two buffers are different.
+ 
+@<Procedures in |input_phase|@>=
+function @!lines_dont_match return BOOLEAN is
+begin 
+if change_limit/=limit then return TRUE;
+end if;
+if limit>0 and then
+  change_buffer(0..limit-1)/=buffer(0..limit-1) then return TRUE;
+else return FALSE;
+end if;
+end lines_dont_match;
+ 
+@ Procedure |prime_the_change_buffer| sets |change_buffer| in preparation
+for the next matching operation. Since blank lines in the change file are
+not used for matching, we have |(change_limit=0)and not changing| if and
+only if the change file is exhausted. This procedure is called only
+when |changing| is true; hence error messages will be reported correctly.
+ 
+@<Procedures in |input_phase|@>=
+procedure @!prime_the_change_buffer is
+begin change_limit:=0; {this value will be used if the change file ends}
+@<Skip over comment lines in the change file; |return@;| if end of file@>;
+@<Skip to the next nonblank line; |return@;| if end of file@>;
+@<Move |buffer| and |limit| to |change_buffer| and |change_limit|@>;
+end prime_the_change_buffer;
+ 
+@ While looking for a line that begins with \.{@@x} in the change file,
+we allow lines that begin with \.{@@}, as long as they don't begin with
+\.{@@y} or \.{@@z} (which would probably indicate that the change file is
+fouled up).
+ 
+@<Skip over comment lines in the change file...@>=
+loop  incr(line);
+  if not input_ln(change_file) then return; end if;
+  if limit<2 then goto continue; end if;
+  if buffer(0)/=@'@@' then goto continue; end if;
+  if buffer(1) in @'X'..@'Z' then
+    buffer(1):=buffer(1)+@'z'-@'Z'; {lowercasify}
+  end if;
+  exit when buffer(1)=@'x';
+  if buffer(1) in @'y'..@'z' then
+    loc:=2; err_print("! Where is the matching @@x?");
+@.Where is the match...@>
+    end if;
+<<continue>> null; 
+end loop@;
+ 
+@ Here we are looking at lines following the \.{@@x}.
+ 
+@<Skip to the next nonblank line...@>=
+repeat incr(line);
+  if not input_ln(change_file) then
+    err_print("! Change file ended after @@x");@/
+@.Change file ended...@>
+    return;
+    end if;
+until(limit>0)@;
+   
+@ @<Move |buffer| and |limit| to |change_buffer| and |change_limit|@>=
+change_limit:=limit;
+if limit>0 then change_buffer(0..limit-1):=buffer(0..limit-1);
+end if@;
+ 
+@ The following procedure is used to see if the next change entry should
+go into effect; it is called only when |changing| is false.
+The idea is to test whether or not the current
+contents of |buffer| matches the current contents of |change_buffer|.
+If not, there's nothing more to do; but if so, a change is called for:
+All of the text down to the \.{@@y} is supposed to match. An error
+message is issued if any discrepancy is found. Then the procedure
+prepares to read the next line from |change_file|.
+ 
+@<Procedures in |input_phase|@>=
+procedure @!check_change is {switches to |change_file| if the buffers match}
+@!n:INTEGER:=0; {the number of discrepancies found}
+begin if lines_dont_match then return; end if;
+loop  change_changing; {now it's |TRUE|}
+  incr(line);
+  if not input_ln(change_file) then
+    err_print("! Change file ended before @@y"); @/
+@.Change file ended...@>
+    change_limit:=0;  change_changing; {|FALSE| again}
+    return;
+    end if;
+  @<If the current line starts with \.{@@y},
+    report any discrepancies and |return@;|@>;
+  @<Move |buffer| and |limit|...@>;
+  change_changing; {now it's |FALSE|}
+  incr(line);
+  if not input_ln(web_file) then
+    err_print("! AWEB file ended during a change"); @/
+@.AWEB file ended...@>
+    input_has_ended:=TRUE; return;
+    end if;
+  if lines_dont_match then incr(n); end if;
+  end loop;
+end check_change;
+ 
+@ @<If the current line starts with \.{@@y}...@>=
+if (limit>1) and then buffer(0)=@'@@' then
+  if buffer(1) in @'X'..@'Z' then
+    buffer(1):=buffer(1)+@'z'-@'Z'; {lowercasify}
+  end if;
+  if (buffer(1)=@'x')or(buffer(1)=@'z') then
+    loc:=2; err_print("! Where is the matching @@y?");
+@.Where is the match...@>
+  elsif buffer(1)=@'y' then
+    if n>0 then
+      loc:=2; new_ln;
+      print("! Hmm... ");
+      print_int(n,1);
+      print(" of the preceding lines failed to match");
+@.Hmm... n of the preceding...@>
+      error;
+    end if;
+    return;
+  end if;
+end if@;
+ 
+@ @<Initialize the input system@>=
+line:=0; other_line:=0;@/
+changing:=TRUE; prime_the_change_buffer; change_changing;@/
+limit:=0; loc:=1; buffer(0):=@' '; input_has_ended:=FALSE@;
+ 
+@ The |get_line| procedure is called when |loc>limit|; it puts the next
+line of merged input into the buffer and updates the other variables
+appropriately. A space is placed at the right end of the line.
+ 
+@<Procedures in |input_phase|@>=
+procedure @!get_line is {inputs the next line}
+begin <<restart>> if changing then
+  @<Read from |change_file| and maybe turn off |changing|@>;
+end if;
+if not changing then
+  @<Read from |web_file| and maybe turn on |changing|@>;
+  if changing then goto restart; end if;
+end if;
+loc:=0; buffer(limit):=@' ';
+end get_line;
+ 
+@ @<Read from |web_file|...@>=
+incr(line);
+if not input_ln(web_file) then input_has_ended:=TRUE;
+elsif (limit=change_limit) and then
+      ((buffer(0)=change_buffer(0)) and then
+      (change_limit>0)) then check_change;
+end if@;
+ 
+@ @<Read from |change_file|...@>=
+incr(line);
+if not input_ln(change_file) then
+  err_print("! Change file ended without @@z"); @/
+@.Change file ended...@>
+  buffer(0..1):=(@'@@',@'z'); limit:=2;
+end if;
+if (limit>1) and then (buffer(0)=@'@@') then {check if the change has ended}
+  if buffer(1) in @'X'..@'Z' then
+    buffer(1):=buffer(1)+@'z'-@'Z'; {lowercasify}
+  end if;
+  if buffer(1) in @'x'..@'y' then
+    loc:=2; err_print("! Where is the matching @@z?");
+@.Where is the match...@>
+  elsif buffer(1)=@'z' then
+    prime_the_change_buffer; change_changing;
+  end if;
+end if@;
+
+ 
+@ At the end of the program, we will tell the user if the change file
+had a line that didn't match any relevant line in |web_file|.
+ 
+@<Check that all changes have been read@>=
+if change_limit/=0 then {|changing| is false}
+  buffer(0..change_limit):=change_buffer(0..change_limit);
+  limit:=change_limit; changing:=TRUE; line:=other_line; loc:=change_limit;
+  err_print("! Change file entry did not match");
+@.Change file entry did not match@>
+end if@;
+ 
+@ Important milestones are reached during the input phase when certain
+control codes are sensed.
+ 
+Control codes in \.{AWEB} begin with `\.{@@}', and the next character
+identifies the code. Some of these are of interest only to \.{AWEAVE},
+so \.{ATANGLE} ignores them; the others are converted by \.{ATANGLE} into
+internal code numbers by the |control_code| function below. The ordering
+of these internal code numbers has been chosen to simplify the program logic;
+larger numbers are given to the control codes that denote more significant
+milestones.
+
+@<Types...@>=
+@!ignore: constant eight_bits:=0; {control code of no interest to \.{ATANGLE}}
+@!control_text: constant eight_bits:=8#203#; {control code for `\.{@@t}', `\.{@@\^}', etc.}
+@!format:constant eight_bits:=8#204#; {control code for `\.{@@f}'}
+@!definition:constant eight_bits:=8#205#; {control code for `\.{@@d}'}
+@!begin_ada:constant eight_bits:=8#206#; {control code for `\.{@@a}'}
+@!module_name:constant eight_bits:=8#207#; {control code for `\.{@@<}'}
+@!new_module:constant eight_bits:=8#210#; {control code for `\.{@@\ }' and `\.{@@*}'}
+ 
+@ @<Procedures in |input_phase|@>=
+function @!control_code(@!c:ASCII_code) return eight_bits is
+                                                   {convert |c| after \.{@@}}
+begin case c is
+when @'@@'           => @+return @'@@'; {`quoted' at sign}
+when @'''            => @+return ascii_tok; {precedes ASCII code constant}
+when @'~'            => @+return output_tok; {precedes output file-name}
+when @' ' ! tab_mark => @+return new_module; {beginning of a new module}
+when @'*'            => @+print("*");
+                        print_int(module_count+1,1);
+                        update_terminal; {print a progress report}
+                        return new_module; {beginning of a new module}
+when @'D' ! @'d'     => @+return definition; {macro definition}
+when @'F' ! @'f'     => @+return format; {format definition}
+when @'{'            => @+return begin_comment; {begin-comment delimiter}
+when @'}'            => @+return end_comment; {end-comment delimiter}
+when @'A' ! @'a'     => @+return begin_ada; {\ADA\ text in unnamed module}
+when @'T' ! @'t' ! @'^' ! @'i' ! @'I' ! @'b' ! @'B' ! @'r' ! @'R' !
+     @'p' ! @'P' ! @'s' ! @'S' !
+     @'.' ! @':'     => @+return control_text; {control text to be ignored}
+when @'&'            => @+return join; {concatenate two tokens}
+when @'<'            => @+return module_name; {beginning of a module name}
+when @'='            => @+return verbatim; {beginning of \ADA\ verbatim mode}
+when @'\'            => @+return force_line; {force a new line in \ADA\ output}
+when others          => @+return ignore; {ignore all other cases}
+end case;
+end control_code;
+ 
+@ The |skip_ahead| procedure reads through the input at fairly high speed
+until finding the next non-ignorable control code, which it returns.
+ 
+@<Procedures in |input_phase|@>=
+function @!skip_ahead return eight_bits is {skip to next control code}
+@!c:eight_bits; {control code found}
+begin loop if loc>limit then
+    get_line;
+    if input_has_ended then
+      return new_module;
+      end if;
+    end if;
+  buffer(limit+1):=@'@@';
+  while buffer(loc)/=@'@@' loop incr(loc); end loop;
+  if loc<=limit then
+    loc:=loc+2; c:=control_code(buffer(loc-1));
+    if (c/=ignore)or(buffer(loc-1)=@'>') then return c; 
+    end if;
+  end if;
+end loop;
+end skip_ahead;
+ 
+@ The |skip_comment| procedure reads through the input at somewhat high speed
+until finding the first unmatched right brace or until coming to the end
+of the file. It ignores characters following `\.\\' characters, since all
+braces that aren't nested are supposed to be hidden in that way. For
+example, consider the process of skipping the first comment below,
+where the string containing the right brace has been typed as \.{`\\.\\\}'}
+in the \.{AWEB} file.
+ 
+@<Procedures in |input_phase|@>=
+procedure @!skip_comment is {skips to next unmatched `\.\}'}
+@!bal:eight_bits:=0; {excess of left braces}
+@!c:ASCII_code; {current character}
+begin 
+loop  if loc>limit then
+    get_line;
+    if input_has_ended then
+      err_print("! Input ended in mid-comment"); @/
+@.Input ended in mid-comment@>
+      return;
+    end if;
+  end if;
+  c:=buffer(loc); incr(loc);@/
+  @<Do special things when |c="@@", "\", "{", "}"|; |return@;| at end@>;
+  end loop;
+end skip_comment;
+ 
+@ @<Do special things when |c="@@"...@>=
+if c=@'@@' then
+  c:=buffer(loc);
+  if (c/=@' ')and(c/=tab_mark)and(c/=@'*')and(c/=@'z')and(c/=@'Z') then
+     incr(loc);
+  else  err_print("! Section ended in mid-comment"); @/
+@.Section ended in mid-comment@>
+    decr(loc); return;
+  end if;
+elsif (c=@'\')and(buffer(loc)/=@'@@') then incr(loc);
+elsif c=@'{' then incr(bal);
+elsif c=@'}' then
+  if bal=0 then return; end if;
+  decr(bal);
+end if@;
+ 
+@* Inputting the next token.
+As stated above, \.{ATANGLE}'s most interesting input procedure is the
+|get_next| routine that inputs the next token. However, the procedure
+isn't especially difficult.
+ 
+In most cases the tokens output by |get_next| have the form used in
+replacement texts, except that two-byte tokens are not produced.
+An identifier that isn't one letter long is represented by the
+output `|identifier|', and in such a case the global variables
+|id_first| and |id_loc| will have been set to the appropriate values
+needed by the |id_lookup| procedure. 
+Control codes produce the corresponding output of the |control_code|
+function above; and if that code is |module_name|, the value of |cur_module|
+will point to the |byte_start| entry for that module name.
+ 
+Another global variable, |scanning_based_number|, is |TRUE| during the time
+that letters should be treated as if they were digits; |scanning_character|
+is set |TRUE| if the input \.'$x$\.', where $x$ is a character, or the
+ASCII code controlcode `\.{@@'} is encoutered.
+ 
+@<Types...@>=
+@!cur_module: name_pointer; {name of module just scanned}
+@!scanning_character: BOOLEAN:=FALSE; {are we scanning a character literal?}
+ 
+@ At the top level, |get_next| is a multi-way switch based on the next
+character in the input buffer. A |new_module| code is inserted at the
+very end of the input file.
+ 
+@<Procedures in |input_phase|@>=
+function @!get_next return eight_bits is {produces the next input token}
+@!c:eight_bits; {the current character}
+@!d:eight_bits; {the next character}
+@!k:long_name_index; {index into |mod_text|}
+begin <<restart>> if loc>limit then
+  get_line;
+  if input_has_ended then
+    return new_module; 
+  elsif scanning_based_number then
+    err_print("! Improper based number, # sign missing"); @/
+@.Improper based number...@>
+    scanning_based_number:=FALSE;
+  end if;
+end if;
+c:=buffer(loc); incr(loc);
+if scanning_based_number then
+  if c=@'#' then scanning_based_number:=FALSE; end if;
+  return c;
+elsif scanning_character then
+  if c=@'@@' then
+    if buffer(loc)=@'@@' then
+      incr(loc);
+    else err_print("! You should double @@ signs in character literals");
+@.You should double \AT! signs@>
+    end if;
+  end if;
+  incr(loc); scanning_character:=FALSE; return c;
+end if; 
+case c is
+when @'#' => if (loc>1) and then (buffer(loc-2) in @'0'..@'9') then
+	       scanning_based_number:=TRUE;
+             end if; return @'#';
+when @'A'..@'Z' ! @'a'..@'z' => @+@<Get an identifier@>;
+when @'@@'=> @+@<Get control code and possible module name@>;
+@/@t\4@>@<Compress two-symbol combinations like `\.{:=}'@>@;
+when @' ' ! tab_mark => @+goto restart; {ignore spaces and tabs}
+when @'{' => @+skip_comment; goto restart;
+when @''' => @+@<If this is the beginning of an character token then set
+	       |scanning_character| to |TRUE| and
+	       |return character_tok|; otherwise do nothing@>;
+when others => @+null;
+end case;
+return c;
+end get_next;
+ 
+@ 
+@d compress(#)==if loc<=limit then c:=#; incr(loc); end if@;
+ 
+@<Compress two-symbol...@>=
+when @'.' => if buffer(loc)=@'.' then compress(double_dot); end if;
+when @':' => if buffer(loc)=@'=' then compress(left_arrow); end if;
+when @'=' => if buffer(loc)=@'=' then compress(equivalence_sign);
+	     elsif buffer(loc)=@'>' then compress(right_arrow);
+	     end if;
+when @'>' => if buffer(loc)=@'=' then compress(greater_or_equal);
+	     elsif buffer(loc)=@'>' then compress(right_label_bracket);
+	     end if;
+when @'<' => if buffer(loc)=@'=' then compress(less_or_equal);
+	     elsif buffer(loc)=@'<' then compress(left_label_bracket);
+	     elsif buffer(loc)=@'>' then compress(box_sign);
+	     end if;
+when @'/' => if buffer(loc)=@'=' then compress(not_equal); end if;
+when @'*' => if buffer(loc)=@'*' then compress(double_star); end if;
+ 
+@ We have to look at the preceding character to make sure this isn't part
+of a real constant, before trying to find an identifier starting with
+`\.e' or `\.E'.
+ 
+@<Get an identifier@>=
+if (((c=@'e')or(c=@'E'))and(loc>1)) and then
+  ((buffer(loc-2) in @'0'..@'9') or buffer(loc-2)=@'#') then c:=0;
+end if;
+if c/=0 then
+  decr(loc); id_first:=loc;
+  repeat incr(loc); d:=buffer(loc);
+  until(((d<@'0')or((d>@'9')and(d<@'A'))or((d>@'Z')and(d<@'a'))or
+	     (d>@'z')) and (d/=@'_'));
+  if loc>id_first+1 then
+    id_loc:=loc;
+    return identifier;
+  end if; 
+else return @'E'; {exponent of a real constant}
+end if@;
+ 
+@ After an \.{@@} sign has been scanned, the next character tells us
+whether there is more work to do.
+ 
+@<Get control code and possible module name@>=
+c:=control_code(buffer(loc)); incr(loc);
+if c=ignore then goto restart;
+elsif c=module_name then
+  @<Scan the module name and make |cur_module| point to it@>;
+elsif c=control_text then
+  repeat c:=skip_ahead;
+  until(c/=@'@@');
+  if buffer(loc-1)/=@'>' then
+    err_print("! Improper @@ within control text");
+@.Improper \AT! within control text@>
+  end if;
+  goto restart;
+elsif c=ascii_tok then
+  if (buffer(loc+1)=@''') or else
+     (buffer(loc..loc+2)=(@'@@',@'@@',@''')) then
+    scanning_character:=TRUE;
+  else err_print("! Improper ASCII-code sequence, ' sign mising");
+@.Improper ASCII-code sequence...@>
+  end if;
+end if@;
+ 
+@ @<Scan the module name...@>=
+@<Put module name into |mod_text(1..k)|@>;
+if (k>3) and then (mod_text(k-2..k)=(@'.',@'.',@'.')) then
+  cur_module:=prefix_lookup(k-3);
+else cur_module:=mod_lookup(k);
+end if@;
+ 
+@ Module names are placed into the |mod_text| array with consecutive spaces,
+tabs, and carriage-returns replaced by single spaces. There will be no
+spaces at the beginning or the end. (We set |mod_text(0):=@' '| to facilitate
+this, since the |mod_lookup| routine uses |mod_text(1)| as the first
+character of the name.)
+ 
+@<Set init...@>=mod_text(0):=@' ';
+ 
+@ @<Put module name...@>=
+k:=0;
+loop  if loc>limit then
+    get_line;
+    if input_has_ended then
+      err_print("! Input ended in section name"); @/
+@.Input ended in section name@>
+      exit;
+    end if;
+  end if;
+  d:=buffer(loc);
+  @<If end of name, |exit@;|@>;
+  incr(loc); if k<longest_name-1 then incr(k); end if;
+  if (d=@' ')or(d=tab_mark) then
+    d:=@' '; if mod_text(k-1)=@' ' then decr(k); end if;
+  end if;
+  mod_text(k):=d;
+end loop;
+@<Check for overlong name@>;
+if (mod_text(k)=@' ')and(k>0) then decr(k); end if@;
+ 
+@ @<If end of name,...@>=
+if d=@'@@' then
+  d:=buffer(loc+1);
+  if d=@'>' then
+    loc:=loc+2; exit;
+  elsif (d=@' ')or(d=tab_mark)or(d=@'*') then
+    err_print("! Section name didn't end"); @/ exit;
+@.Section name didn't end@>
+  end if;
+  incr(k); mod_text(k):=@'@@'; incr(loc); {now |d=buffer(loc)| again}
+end if@;
+ 
+@ @<Check for overlong name@>=
+if k>=longest_name-2 then
+  print_nl("! Section name too long: ");
+@.Section name too long@>
+  for j in INTEGER range 1..25 loop print(xchr(mod_text(j))); end loop;
+  print("..."); mark_harmless;
+end if@;
+ 
+@ @<If this is the beginning...@>=
+if (buffer(loc+1)=@''') or else
+    (buffer(loc..loc+2)=(@'@@',@'@@',@''')) then
+  scanning_character:=TRUE;
+  return character_tok;
+end if@;
+
+@* Scanning a macro definition.
+The rules for generating the replacement texts corresponding to simple
+macros, parametric macros, and \ADA\ texts of a module are almost
+identical, so a single procedure is used for all three cases. The
+differences are that
+ 
+\yskip\item{a)} The sign |#| denotes a parameter only when it appears
+outside of strings in a parametric macro; otherwise it stands for the
+ASCII character |#|. 
+ 
+\item{b)}Module names are not allowed in simple macros or parametric macros;
+in fact, the appearance of a module name terminates such macros and denotes
+the name of the current module.
+ 
+\item{c)}The symbols \.{@@d} and \.{@@f} and \.{@@a} are not allowed after
+module names, while they terminate macro definitions.
+ 
+@ Therefore there is a procedure |scan_repl| whose parameter |t| specifies
+either |simple| or |parametric| or |module_name|. After |scan_repl| has
+acted, |cur_repl_text| will point to the replacement text just generated, and
+|next_control| will contain the control code that terminated the activity.
+
+@<Types...@>=
+@!cur_repl_text:text_pointer; {replacement text formed by |scan_repl|}
+@!next_control:sixteen_bits;
+ 
+@ @<Procedures in |input_phase|@>=
+procedure @!scan_repl(@!t:eight_bits)is {creates a replacement text}
+@!a:sixteen_bits; {the current token}
+@!b:ASCII_code; {a character from the buffer}
+@!bal:eight_bits:=0; {left parentheses minus right parentheses}
+begin 
+loop  <<continue>> a:=get_next;
+  case a is
+  when @'(' => @+incr(bal);
+  when @')' => @+if bal=0 then @+err_print("! Extra )");
+@.Extra )@>
+    @+else@+ decr(bal);
+    end if;
+  when @'"' => @+@<Copy a string from the buffer to |tok_mem|@>;
+  when character_tok ! ascii_tok => @+app_repl(a); a:=get_next;
+  when @'#' => @+if t=parametric then @+ a:=param; end if; @/
+  @t\4@>@<In cases that |a| is a non-ASCII token (|identifier|,
+  |module_name|, etc.), either process it and change |a| to a byte
+  that should be stored, or |goto continue| if |a| should be ignored,
+  or |exit when a| signals the end of this replacement text@>@;
+  when others => @+null;
+  end case;
+  app_repl(a); {store |a| in |tok_mem|}
+  end loop;
+next_control:=a;@/
+@<Make sure the parentheses balance@>;
+if text_ptr>max_texts-zz then overflow("text");end if;
+cur_repl_text:=text_ptr; tok_start(text_ptr+zz):=tok_ptr(z);
+incr(text_ptr);
+if z=zz-1 then z:=0; else incr(z); end if;
+end scan_repl;
+ 
+@ @<Make sure the parentheses balance@>=
+if bal>0 then
+  if bal=1 then err_print("! Missing )");
+  else new_ln; print("! Missing "); print_int(bal,1); print(" )'s"); error;
+  end if;
+@.Missing n )@>
+  while bal>0 loop
+    app_repl(@')'); decr(bal);
+    end loop;
+end if@;
+ 
+@ @<In cases that |a| is...@>=
+when identifier => @+a:=id_lookup(normal); app_repl((a/8#400#)+8#200#);
+  a:=a mod 8#400#;
+when module_name => exit when t/=module_name;@/
+    app_repl((cur_module/8#400#)+8#250#);
+    a:=cur_module mod 8#400#;
+when verbatim => @+@<Copy verbatim string from the buffer to |tok_mem|@>;
+when output_tok => @+@<Copy output file-name from the buffer to |tok_mem|@>;
+when definition ! format ! begin_ada => exit when t/=module_name;@/
+  err_print("! @@"&xchr(buffer(loc-1))&
+@.\AT!a is ignored in ADA text@>
+@.\AT!d is ignored in ADA text@>
+@.\AT!f is ignored in ADA text@>
+      " is ignored in ADA text"); @/ goto continue;
+when new_module => @+exit;
+ 
+@ @<Copy a string...@>=
+b:=@'"';
+loop  
+  app_repl(b);
+  if b=@'@@' then 
+    if buffer(loc)=@'@@' then incr(loc); {store only one \.{@@}}
+    else err_print("! You should double @@ signs in strings");
+@.You should double \AT! signs@>
+    end if;
+  end if;
+  if loc=limit then
+    err_print("! String didn't end"); @/
+@.String didn't end@>
+    buffer(loc..loc+1):=(@'"',0);
+  end if;
+  b:=buffer(loc); incr(loc);
+  if b=@'"' then
+    exit when buffer(loc)/=@'"';@/
+    incr(loc); app_repl(@'"');
+  end if;
+end loop@; {now |a| holds the final |@'"'| that will be stored}
+ 
+@ @<Copy verbatim string...@>=
+app_repl(verbatim);
+buffer(limit+1):=@'@@';
+while buffer(loc)/=@'@@' loop
+  app_repl(buffer(loc));
+  incr(loc);
+  if (loc<limit) and then (buffer(loc..loc+1)=(@'@@',@'@@')) then
+      app_repl(@'@@');
+      loc:=loc+2;
+  end if;
+end loop;
+if loc>=limit then err_print("! Verbatim string didn't end");
+  if loc>=buf_size-1 then loc:=buf_size-2; end if;
+@.Verbatim string didn't end@>
+elsif buffer(loc+1)/=@'>' then 
+  err_print("! You should double @@ signs in verbatim strings");
+@.You should double \AT! signs@>
+end if;
+loc:=loc+2@; {another |verbatim| byte will be stored, since |a=verbatim|}
+ 
+@ @<Copy output file-name...@>=
+app_repl(output_tok);
+buffer(limit+1):=@'@@';
+while buffer(loc)/=@'@@' loop
+  app_repl(buffer(loc));
+  incr(loc);
+  if (loc<limit) and then (buffer(loc..loc+1)=(@'@@',@'@@')) then
+      app_repl(@'@@');
+      loc:=loc+2;
+  end if;
+end loop;
+if loc>=limit then err_print("! Output file name didn't end");
+@.Output file name didn't end@>
+elsif buffer(loc+1)/=@'>' then 
+  err_print("! You should double @@ signs in output file-names");
+@.You should double \AT! signs@>
+end if;
+loc:=loc+2@; {another |output_tok| byte will be stored, since |a=output_tok|}
+ 
+@ The following procedure is used to define a simple or parametric macro,
+just after the `\.{==}' of its definition has been scanned.
+ 
+@<Procedures in |input_phase|@>=
+procedure @!define_macro(@!t:eight_bits)is
+@!p:name_pointer; {the identifier being defined}
+begin p:=id_lookup(t); scan_repl(t);@/
+equiv(p):=cur_repl_text; text_link(cur_repl_text):=0;
+end define_macro;
+ 
+@* Scanning a module.
+The |scan_module| procedure starts when `\.{@@\ }' or `\.{@@*}' has been
+sensed in the input, and it proceeds until the end of that module.  It
+uses |module_count| to keep track of the current module number; with luck,
+\.{AWEAVE} and \.{ATANGLE} will both assign the same numbers to modules.
+ 
+@<Types...@>=
+@!module_count:mod_range; {the current module number}
+ 
+@ The top level of |scan_module| is trivial.
+
+@<Procedures in |input_phase|@>=
+procedure @!scan_module is
+@!p:name_pointer; {module name for the current module}
+begin incr(module_count);@/
+@<Scan the definition part of the current module@>;@/
+@<Scan the \ADA\ part of the current module@>;
+end scan_module;
+ 
+@ @<Scan the definition part...@>=
+next_control:=0;
+loop <<continue>> while next_control<=format loop
+    next_control:=skip_ahead;
+    if next_control=module_name then
+      {we want to scan the module name too}
+      loc:=loc-2; next_control:=get_next;
+    end if;
+  end loop;
+  exit when next_control/=definition;@/
+  next_control:=get_next; {get identifier name}
+  if next_control/=identifier then
+    err_print("! Definition flushed, must start with "&
+@.Definition flushed...@>
+      "identifier of length > 1"); @/ goto continue;
+  end if;
+  next_control:=get_next; {get token after the identifier}
+  if next_control=equivalence_sign then
+    define_macro(simple); goto continue;
+  else @<If the next text is `|(#)==|', call |define_macro|
+    and |goto continue|@>;
+  end if;
+  err_print("! Definition flushed since it starts badly");
+@.Definition flushed...@>
+end loop@;
+ 
+@ @<If the next text is `|(#)==|'...@>=
+if next_control=@'(' then
+  next_control:=get_next;
+  if next_control=@'#' then
+    next_control:=get_next;
+    if next_control=@')' then
+      next_control:=get_next;
+      if next_control=@'=' then
+	err_print("! Use == for macros"); @/
+@.Use == for macros@>
+        next_control:=equivalence_sign;
+      end if;
+      if next_control=equivalence_sign then
+        define_macro(parametric); goto continue;
+      end if;
+    end if;
+  end if;
+end if@;
+ 
+@ @<Scan the \ADA...@>=
+case next_control is
+when begin_ada => p:=0;
+when module_name => p:=cur_module;@/
+  @<Check that |=| or |==| follows this module name, otherwise |return@;|@>;
+when others => return;
+end case;
+@<Insert the module number into |tok_mem|@>;
+scan_repl(module_name); {now |cur_repl_text| points to the replacement text}
+@<Update the data structure so that the replacement text is accessible@>@;
+ 
+@ @<Check that |=|...@>=
+repeat next_control:=get_next;
+until(next_control/=@'+'); {allow optional `\.{+=}'}
+if (next_control/=@'=')and(next_control/=equivalence_sign) then
+  err_print("! ADA text flushed, = sign is missing");
+@.ADA text flushed...@>
+  repeat next_control:=skip_ahead;
+  until(next_control=new_module);
+  return;
+end if@;
+ 
+@ @<Insert the module number...@>=
+store_two_bytes(8#150000#+module_count)@; {|8#150000#=8#320#*8#400#|}
+ 
+@ @<Update the data...@>=
+if p=0 then {unnamed module}
+  text_link(last_unnamed):=cur_repl_text; last_unnamed:=cur_repl_text;
+elsif equiv(p)=0 then equiv(p):=cur_repl_text; {first module of this name}
+else  p:=equiv(p);
+  while text_link(p)<module_flag loop p:=text_link(p); {find end of list}
+  end loop;
+  text_link(p):=cur_repl_text;
+end if;
+text_link(cur_repl_text):=module_flag@;
+  {mark this replacement text as a nonmacro}
+
+@ @<Procedures in |input_phase|@>=
+procedure @!phase_i is
+begin
+@<Initialize the input system@>;
+print_ln(banner); {print a ``banner line''}
+@<Phase I: Read all the user's text and compress it into |tok_mem|@>;
+end phase_i;
+
+@* The main program.
+We have defined plenty of procedures, and it is time to put the last
+pieces of the puzzle in place. Here is where \.{ATANGLE} starts, and where
+it ends.
+@^system dependencies@>
+
+@d web_input_file_name=="input.aweb"
+@d change_input_file_name=="input.ach"
+@d ada_output_file_name=="web_output.a"
+@<Types...@>=
+@!opened:BOOLEAN:=FALSE; {was previous |open_a_file| succesfull?}
+
+@
+@a@~tangle.a@>
+with Ada.Command_Line; use Ada.Command_Line;
+with TEXT_IO,int_number_io;
+with data_structures,input_output,input_phase,output_phase;
+use  data_structures,input_output,input_phase,output_phase;
+procedure @!ATANGLE is
+ ac : INTEGER := 0;
+ begin
+  print_ln("Trying to open input file.");
+  ac := Argument_Count;
+  if ac < 1 then
+    fatal_error("No file on command line");
+  end if;
+  open_a_file(web_file,TEXT_IO.IN_FILE,Argument(1),opened);
+  if not opened then
+    fatal_error("AWEB file not open");
+@.AWEB file not open@>
+  end if;
+  opened := FALSE;
+  if ac >=2 then
+    open_a_file(change_file,TEXT_IO.IN_FILE,Argument(2),opened);
+  end if;
+  if not opened then
+    new_ln; print_ln("! No change file.");
+@.No change file.@>
+  end if;
+  open_a_file(ada_file,TEXT_IO.OUT_FILE,ada_output_file_name,opened);
+  if (not opened) and then
+     (not create_ada_file(ada_output_file_name)) then
+    fatal_error("ADA file not open");
+@.ADA file not open@>
+  end if;
+  fn_length:=TEXT_IO.NAME(ada_file)'LAST;
+  file_name(1..fn_length):=TEXT_IO.NAME(ada_file);
+  f_line:=1;
+  phase_i;
+stat for zo in z_range loop max_tok_ptr(zo):=tok_ptr(zo); end loop; tats@;@/
+  phase_ii;
+raise end_of_ATANGLE;
+exception
+when @!@!end_of_ATANGLE =>
+stat @<Print statistics about memory usage@>; tats@;@/
+@t\4\4@>@;{here files should be closed if the operating system requires it}
+@<Print the job |history|@>;
+end ATANGLE;
+ 
+@ @<Phase I:...@>=
+phase_one:=TRUE;
+module_count:=0;
+repeat next_control:=skip_ahead;
+until(next_control=new_module);
+while not input_has_ended loop scan_module; end loop;
+@<Check that all changes have been read@>;
+phase_one:=FALSE@;
+ 
+@ @<Print statistics about memory usage@>=
+print_nl("Memory usage statistics:"); new_ln;
+print_int(name_ptr,1); print(" names, "); print_int(text_ptr,1);
+print_ln(" replacement texts;");
+print_int(byte_ptr(0),1);
+for wo in 1..ww-1 loop print("+"); print_int(byte_ptr(wo),1);
+end loop;
+print(" bytes, "); print_int(max_tok_ptr(0),1);
+for zo in 1..zz-1 loop print("+"); print_int(max_tok_ptr(zo),1);
+end loop;
+print(" tokens.")@;
+ 
+@ Some implementations may wish to pass the |history| value to the
+operating system so that it can be used to govern whether or not other
+programs are started. Here we simply report the history to the user.
+@^system dependencies@>
+ 
+@<Print the job |history|@>=
+case history is
+when spotless => @+print_nl("(No errors were found.)");
+when harmless_message => @+print_nl("(Did you see the warning message above?)");
+when error_message => @+print_nl("(Pardon me, but I think I spotted something wrong.)");
+when fatal_message => @+print_nl("(That was a fatal error, my friend.)");
+end case; {there are no other cases}
+new_ln@;
+ 
+@* System-dependent changes.
+This module should be replaced, if necessary, by changes to the program
+that are necessary to make \.{ATANGLE} work at a particular installation.
+It is usually best to design your change file so that all changes to
+previous modules preserve the module numbering; then everybody's version
+will be consistent with the printed program. More extensive changes,
+which introduce new modules, can be inserted here; then only the index
+itself will get a new module number.
+@^system dependencies@>
+ 
+@* Index.
+Here is a cross-reference table for the \.{ATANGLE} processor.
+All modules in which an identifier is
+used are listed with that identifier, except that reserved words are
+indexed only when they appear in format definitions, and the appearances
+of identifiers in module names are not indexed.
+Underlined entries of subprograms and packages correspond to sections where
+this entity is specified, whereas entries in italic type correspond to
+the section where the entity's body is stated.
+For any other identifier underlined entries correspond to where the
+identifier was declared. Error messages and
+a few other things like ``ASCII code'' are indexed here too.
+ 
+ 
+ 
+ 

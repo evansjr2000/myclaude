@@ -1,0 +1,47 @@
+WITH INPUT_OUTPUT;USE INPUT_OUTPUT;PACKAGE BODY DATA_STRUCTURES IS
+--{48:}
+PROCEDURE PRINT_ID(P:NAME_POINTER)IS W:W_RANGE;
+BEGIN IF P>=NAME_PTR THEN TEXT_IO.PUT("IMPOSSIBLE");ELSE W:=P MOD WW;
+FOR K IN BYTE_START(P)..BYTE_START(P+WW)-1 LOOP TEXT_IO.PUT(XCHR(
+BYTE_MEM(W,K)));END LOOP;END IF;END PRINT_ID;--{:48}{74:}
+PROCEDURE STORE_TWO_BYTES(X:SIXTEEN_BITS)IS BEGIN IF TOK_PTR(Z)+2>
+MAX_TOKS THEN TEXT_IO.NEW_LINE;
+TEXT_IO.PUT("! Sorry, "&"token"&" capacity exceeded");ERROR;
+HISTORY:=FATAL_MESSAGE;RAISE END_OF_ATANGLE;END IF;
+TOK_MEM(Z,TOK_PTR(Z)):=X/8#400#;TOK_MEM(Z,TOK_PTR(Z)+1):=X MOD 8#400#;
+TOK_PTR(Z):=TOK_PTR(Z)+2;END STORE_TWO_BYTES;--{:74}
+BEGIN--{15:}
+XCHR(8#40#):=' ';XCHR(8#41#):='!';XCHR(8#42#):='"';XCHR(8#43#):='#';
+XCHR(8#44#):='$';XCHR(8#45#):='%';XCHR(8#46#):='&';XCHR(8#47#):=''';
+XCHR(8#50#):='(';XCHR(8#51#):=')';XCHR(8#52#):='*';XCHR(8#53#):='+';
+XCHR(8#54#):=',';XCHR(8#55#):='-';XCHR(8#56#):='.';XCHR(8#57#):='/';
+XCHR(8#60#):='0';XCHR(8#61#):='1';XCHR(8#62#):='2';XCHR(8#63#):='3';
+XCHR(8#64#):='4';XCHR(8#65#):='5';XCHR(8#66#):='6';XCHR(8#67#):='7';
+XCHR(8#70#):='8';XCHR(8#71#):='9';XCHR(8#72#):=':';XCHR(8#73#):=';';
+XCHR(8#74#):='<';XCHR(8#75#):='=';XCHR(8#76#):='>';XCHR(8#77#):='?';
+XCHR(8#100#):='@';XCHR(8#101#):='A';XCHR(8#102#):='B';XCHR(8#103#):='C';
+XCHR(8#104#):='D';XCHR(8#105#):='E';XCHR(8#106#):='F';XCHR(8#107#):='G';
+XCHR(8#110#):='H';XCHR(8#111#):='I';XCHR(8#112#):='J';XCHR(8#113#):='K';
+XCHR(8#114#):='L';XCHR(8#115#):='M';XCHR(8#116#):='N';XCHR(8#117#):='O';
+XCHR(8#120#):='P';XCHR(8#121#):='Q';XCHR(8#122#):='R';XCHR(8#123#):='S';
+XCHR(8#124#):='T';XCHR(8#125#):='U';XCHR(8#126#):='V';XCHR(8#127#):='W';
+XCHR(8#130#):='X';XCHR(8#131#):='Y';XCHR(8#132#):='Z';XCHR(8#133#):='[';
+XCHR(8#134#):='\';XCHR(8#135#):=']';XCHR(8#136#):='^';XCHR(8#137#):='_';
+XCHR(8#140#):='`';XCHR(8#141#):='a';XCHR(8#142#):='b';XCHR(8#143#):='c';
+XCHR(8#144#):='d';XCHR(8#145#):='e';XCHR(8#146#):='f';XCHR(8#147#):='g';
+XCHR(8#150#):='h';XCHR(8#151#):='i';XCHR(8#152#):='j';XCHR(8#153#):='k';
+XCHR(8#154#):='l';XCHR(8#155#):='m';XCHR(8#156#):='n';XCHR(8#157#):='o';
+XCHR(8#160#):='p';XCHR(8#161#):='q';XCHR(8#162#):='r';XCHR(8#163#):='s';
+XCHR(8#164#):='t';XCHR(8#165#):='u';XCHR(8#166#):='v';XCHR(8#167#):='w';
+XCHR(8#170#):='x';XCHR(8#171#):='y';XCHR(8#172#):='z';XCHR(8#173#):='{';
+XCHR(8#174#):='|';XCHR(8#175#):='}';XCHR(8#176#):='~';XCHR(0):=' ';
+XCHR(8#177#):=' ';--{:15}{17:}
+XCHR(1..8#37#):=(OTHERS=>' ');--{:17}{18:}
+XORD(TEXT_CHAR):=(OTHERS=>8#40#);
+FOR I IN 1..8#176# LOOP XORD(XCHR(I)):=I;END LOOP;--{:18}{41:}
+BYTE_START(0..WW):=(OTHERS=>0);--{:41}{43:}
+TOK_START(0..ZZ):=(OTHERS=>0);--{:43}{46:}
+RLINK(0):=0;EQUIV(0):=0;--{:46}{71:}
+TEXT_LINK(0):=0;--{:71}{142:}
+MOD_TEXT(0):=32;--{:142}
+END DATA_STRUCTURES;--{:3}{4:}
