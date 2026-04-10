@@ -1,0 +1,5 @@
+1. Add the commands ``make'', ``file'', emacs to the Dockerfile.
+
+2.  Add the latest version of Postgress Database to the Dockerfile, and make sure it mounts a local
+file for database persistence, and make sure it initializes correctly when first invoked.
+
