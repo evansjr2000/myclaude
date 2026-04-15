@@ -15,10 +15,14 @@ $${\vbox{
 }}$$
 
 \medskip\noindent
-Twelve events are reported for each swimmer:
-50, 100, 200, and 500~Freestyle; 50 and 100~Butterfly;
-50 and 100~Backstroke; 50 and 100~Breaststroke; and 100 and 200~Individual
-Medley.  Each time record includes the swim date and motivational standard
+Thirty-one events are reported for each swimmer.
+Short-course yard (SCY) events: 50, 100, 200, 500, 1000, and 1650~Freestyle;
+50 and 100~Butterfly; 50 and 100~Backstroke; 50 and 100~Breaststroke;
+and 100 and 200~Individual Medley.
+Long-course meter (LCM) events: 50, 100, 200, 400, 800, and 1500~Freestyle;
+50, 100, and 200~Butterfly; 50, 100, and 200~Backstroke;
+50, 100, and 200~Breaststroke; and 200 and 400~Individual Medley.
+Each time record includes the swim date and motivational standard
 attained (B, BB, A, \dots).  Data is fetched live from the USA~Swimming
 data hub, which is powered by the Sisense analytics platform.
 
@@ -100,11 +104,13 @@ output is:
 #include <curl/curl.h>
 
 @ The Sisense bearer token authenticates us against the analytics
-instance that backs \.{data.usaswimming.org}.  |EVENTS| lists the
-twelve SCY event codes we query.
+instance that backs \.{data.usaswimming.org}.  |EVENTS| lists all
+event codes we query: twelve short-course yard (SCY) events plus
+two additional SCY distance events (1000~FR and 1650~FR) and seventeen
+long-course meter (LCM) events, for a total of thirty-one.
 
 @<Global constants@>=
-#define NUM_EVENTS 12
+#define NUM_EVENTS 31
 #define MAX_TIMES  200
 
 static const char SISENSE_TOKEN[] =
@@ -119,10 +125,13 @@ static const char SISENSE_API[] =
     "https://usaswimming.sisense.com/api/datasources";
 
 static const char *EVENTS[NUM_EVENTS] = {
+    /* Short-course yard (SCY) events */
     "50 FR SCY",
     "100 FR SCY",
     "200 FR SCY",
     "500 FR SCY",
+    "1000 FR SCY",
+    "1650 FR SCY",
     "50 FL SCY",
     "100 FL SCY",
     "50 BK SCY",
@@ -130,7 +139,25 @@ static const char *EVENTS[NUM_EVENTS] = {
     "50 BR SCY",
     "100 BR SCY",
     "100 IM SCY",
-    "200 IM SCY"
+    "200 IM SCY",
+    /* Long-course meter (LCM) events */
+    "50 FR LCM",
+    "100 FR LCM",
+    "200 FR LCM",
+    "400 FR LCM",
+    "800 FR LCM",
+    "1500 FR LCM",
+    "50 FL LCM",
+    "100 FL LCM",
+    "200 FL LCM",
+    "50 BK LCM",
+    "100 BK LCM",
+    "200 BK LCM",
+    "50 BR LCM",
+    "100 BR LCM",
+    "200 BR LCM",
+    "200 IM LCM",
+    "400 IM LCM"
 };
 
 @ The program accepts two optional flags on the command line.
@@ -148,10 +175,10 @@ Six keywords are recognised:
 Keywords may be combined, e.g.\ \.{-o stella,fastest} or \.{-o kalea,csv}.
 When no swimmer keyword is specified all four swimmers are shown.
 
-The \.{-e} flag takes one or more comma-separated SCY event codes
-(e.g.\ \.{-e "100 FR SCY,50 FL SCY"}) and restricts output to those events
-only.  The flag may also be repeated (e.g.\ \.{-e "100 FR SCY" -e "50 FL SCY"}).
-When \.{-e} is omitted all twelve events are reported.
+The \.{-e} flag takes one or more comma-separated event codes
+(e.g.\ \.{-e "100 FR SCY,50 FL LCM"}) and restricts output to those events
+only.  The flag may also be repeated (e.g.\ \.{-e "100 FR SCY" -e "50 FL LCM"}).
+When \.{-e} is omitted all thirty-one events are reported.
 
 If no options are given at all the program prints a usage message and exits.
 
@@ -643,11 +670,18 @@ static void print_usage(const char *prog)
         "       fastest     print only the single fastest time per event\n"
         "       csv         emit CSV output (header + one line per time)\n"
         "\n"
-        "  -e event,...    restrict output to one or more SCY event codes;\n"
+        "  -e event,...    restrict output to one or more event codes;\n"
         "                  comma-separated, or repeat -e for each event.\n"
-        "       Valid codes: 50 FR SCY, 100 FR SCY, 200 FR SCY, 500 FR SCY,\n"
-        "                    50 FL SCY, 100 FL SCY, 50 BK SCY, 100 BK SCY,\n"
-        "                    50 BR SCY, 100 BR SCY, 100 IM SCY, 200 IM SCY\n"
+        "       SCY codes:  50 FR SCY, 100 FR SCY, 200 FR SCY, 500 FR SCY,\n"
+        "                   1000 FR SCY, 1650 FR SCY,\n"
+        "                   50 FL SCY, 100 FL SCY, 50 BK SCY, 100 BK SCY,\n"
+        "                   50 BR SCY, 100 BR SCY, 100 IM SCY, 200 IM SCY\n"
+        "       LCM codes:  50 FR LCM, 100 FR LCM, 200 FR LCM, 400 FR LCM,\n"
+        "                   800 FR LCM, 1500 FR LCM,\n"
+        "                   50 FL LCM, 100 FL LCM, 200 FL LCM,\n"
+        "                   50 BK LCM, 100 BK LCM, 200 BK LCM,\n"
+        "                   50 BR LCM, 100 BR LCM, 200 BR LCM,\n"
+        "                   200 IM LCM, 400 IM LCM\n"
         "\n"
         "Examples:\n"
         "  %s -o stella,fastest\n"
@@ -661,7 +695,7 @@ static void print_usage(const char *prog)
 @ We initialise the global \.{libcurl} state, parse the optional
 \.{-o} and \.{-e} flags, then for each swimmer (subject to swimmer-selection
 bits) resolve her |PersonKey| and iterate over events.  If one or more
-\.{-e} codes were given only those events are fetched; otherwise all twelve
+\.{-e} codes were given only those events are fetched; otherwise all thirty-one
 are processed.  In CSV mode a single header line is printed before the first
 data row.  If no options at all are supplied, the usage message is printed
 and the program exits with status~1.

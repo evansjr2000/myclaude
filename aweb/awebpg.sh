@@ -5,7 +5,7 @@
 #   ./aweb.sh aweave file.aweb [changefile]
 #   ./aweb.sh shell              # interactive shell
 
-IMAGE_NAME="evansjr/aweb"
+IMAGE_NAME="evansjr/awebpg"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Build image if it doesn't exist
@@ -22,6 +22,7 @@ case "$1" in
         ;;
     shell)
         docker run --rm -it -v "$(pwd):/work" "$IMAGE_NAME"
+
         ;;
     build)
         docker build -t "$IMAGE_NAME" "$SCRIPT_DIR"
