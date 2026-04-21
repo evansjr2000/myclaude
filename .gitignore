@@ -2,6 +2,7 @@
 *.log
 *.*~
 *.o
+*~
 uigen/
 stella-times
 stella-times.idx
