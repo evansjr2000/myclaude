@@ -4,6 +4,7 @@
 *.o
 *~
 uigen/
+pg/pgdata/
 stella-times
 stella-times.idx
 stella-times.c

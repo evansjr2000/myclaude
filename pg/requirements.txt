@@ -2,6 +2,6 @@
 1.  Add the latest version of Postgress Database to the Dockerfile, and make sure the image it creates mounts a local
 file for database persistence, and make sure it initializes correctly when first invoked.
 
-3.  Create a shell script to launch the docker image on a host computer.  After launching the Postgres image should running in the background and be available via its standard port.
+3.  Create a shell script to launch the docker image on a host computer.  After launching the Postgres image sshould running in the background and be available on localhost: via its standard port.
 
 
