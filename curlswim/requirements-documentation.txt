@@ -22,3 +22,11 @@ Operational Scenarios: Step-by-step "narratives" of how a user would interact wi
 Summary of Impacts: How the new system will change the organization, such as staffing or training needs.
 
 Analysis: Trade-offs considered and why the chosen approach was selected.
+
+3. Write a software System Requirements Specification following the IEEE standard in TeX format using the
+principles outlined in the famous 1886 paper "A Rationale Design Process: How and Why to Fake It".
+
+4. Write a software Design Document following the IEEE standard in TeX format using the
+principles outlined in the famous 1886 paper "A Rationale Design Process: How and Why to Fake It".
+
+
