@@ -1,0 +1,465 @@
+% swim-times-conops.tex
+% Concept of Operations for the swim-times program
+% IEEE Std 1362-1998 structure
+% Compiled with: pdflatex swim-times-conops.tex
+
+\documentclass[12pt]{article}
+
+\usepackage{geometry}
+\geometry{letterpaper, margin=1in}
+
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+
+% CAST blue
+\definecolor{castblue}{RGB}{0,48,135}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small College Area Swim Team}
+\fancyhead[R]{\small ConOps: swim-times}
+\fancyfoot[C]{\thepage}
+
+\titleformat{\section}{\large\bfseries\color{castblue}}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+
+\newcommand{\code}[1]{\texttt{#1}}
+
+\begin{document}
+
+% -----------------------------------------------------------------
+% Title block
+% -----------------------------------------------------------------
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\Huge\bfseries\color{castblue} Concept of Operations\\[0.5em]}
+  {\Large swim-times: Automated Swimmer-Times Retrieval System}\\[2em]
+  {\large College Area Swim Team (CAST)}\\[0.5em]
+  {\normalsize Prepared for: CAST Coaching Staff and Meet Directors}\\[0.5em]
+  {\normalsize Prepared by: CAST Technology Working Group}\\[2em]
+  \begin{tabular}{ll}
+    Document identifier: & CAST-CONOPS-001                  \\
+    Revision:            & 1.0                               \\
+    Date:                & April 21, 2026                    \\
+    Status:              & Released                          \\
+    Governing standard:  & IEEE Std 1362-1998 (ConOps Guide) \\
+  \end{tabular}
+  \vfill
+  {\small\textit{This document is prepared in accordance with the principles of
+  rational documentation articulated in D.\,L.\,Parnas and P.\,C.\,Clements,
+  ``A Rational Design Process: How and Why to Fake It,''
+  \textit{IEEE Transactions on Software Engineering}, vol.\,SE-12, no.\,2,
+  pp.\,251--257, February 1986.}}
+\end{titlepage}
+
+% -----------------------------------------------------------------
+% Table of Contents
+% -----------------------------------------------------------------
+\tableofcontents
+\clearpage
+
+% =================================================================
+\section{Scope}
+% =================================================================
+
+\subsection{System identification}
+
+This document is the Concept of Operations (ConOps) for the
+\textbf{swim-times} program, a compiled C utility that retrieves
+competitive swim times from the USA~Swimming data hub and presents
+them as formatted text or comma-separated-value (CSV) output.
+The program is implemented as a CWEB literate program whose
+canonical source is \code{swim2/stella-times.w}.
+
+\subsection{Document purpose}
+
+This ConOps establishes the operational rationale, usage model,
+and stakeholder expectations for swim-times so that developers,
+coaches, and meet directors share a common understanding of what
+the system does and why it is built the way it is.
+It is the primary reference for any subsequent requirements
+specification or design document.
+
+\subsection{System overview}
+
+swim-times accepts command-line options that identify one or more
+swimmers (Stella Julianna Evans, Kalea Rose Benavente, Kenneth Ray
+Evans, and Keith Santiago Evans) and one or more USA~Swimming event
+codes (e.g., \code{100 FR SCY}, \code{200 IM LCM}).  For each
+selected swimmer--event pair it queries the live USA~Swimming
+Sisense analytics back-end, retrieves all recorded times, sorts
+them fastest-first, and prints either a human-readable table or a
+CSV stream suitable for downstream processing.
+
+% =================================================================
+\section{Referenced Documents}
+% =================================================================
+
+\begin{enumerate}[label={[\arabic*]}]
+  \item IEEE Std 1362-1998, \textit{IEEE Guide for Information Technology---
+        System Definition---Concept of Operations (ConOps) Document}.
+        IEEE Computer Society, 1998.
+
+  \item D.\,L.\,Parnas and P.\,C.\,Clements, ``A Rational Design Process:
+        How and Why to Fake It,''
+        \textit{IEEE Transactions on Software Engineering},
+        vol.\,SE-12, no.\,2, pp.\,251--257, February 1986.
+
+  \item D.\,E.\,Knuth, ``Literate Programming,''
+        \textit{The Computer Journal}, vol.\,27, no.\,2,
+        pp.\,97--111, 1984.
+
+  \item D.\,E.\,Knuth, \textit{The \TeX{}book}.
+        Addison-Wesley, 1984.
+
+  \item USA~Swimming, \textit{Individual Times Search},
+        \texttt{https://data.usaswimming.org/datahub/usas/individualsearch}.
+        Accessed 2026.
+
+  \item Sisense Ltd., \textit{JAQL API Reference},
+        \texttt{https://docs.sisense.com/main/SisenseLinux/jaql.htm}.
+        Accessed 2026.
+
+  \item \code{swim2/stella-times.w} --- CWEB literate program source
+        (canonical source of record for the swim-times implementation).
+
+  \item \code{swim/motivational-time-standards.pdf} --- USA~Swimming
+        motivational time standards (B, BB, A, \ldots) used in
+        the companion swim-times PDF report.
+
+  \item \code{swim/sdi-agc-time-standards.pdf} --- San Diego-Imperial
+        Age-Group Championship qualifying times.
+\end{enumerate}
+
+% =================================================================
+\section{Current System / Situation (As-Is)}
+% =================================================================
+
+\subsection{Background}
+
+CAST coaches and parents currently monitor swimmer progress by
+visiting the USA~Swimming data hub at
+\texttt{data.usaswimming.org}, entering each swimmer's name, and
+manually reading and transcribing the resulting HTML tables.
+Times are then typed into a Pandoc Markdown source file
+(\code{swim/swim-times.md}) and compiled to PDF.
+
+\subsection{Current problems}
+
+\begin{description}[style=nextline]
+  \item[Manual transcription errors.]
+        Copying times by hand from a web browser introduces
+        typographical mistakes; there is no automated verification
+        that the entered time matches what USA~Swimming recorded.
+
+  \item[Stale data.]
+        The manual workflow is updated intermittently.  After any
+        sanctioned meet new times may sit in the USA~Swimming
+        database for days before the PDF is regenerated.
+
+  \item[Scalability.]
+        The team now tracks four swimmers across thirty-one events
+        each, yielding up to 124 lookup--copy--paste operations per
+        full refresh.
+
+  \item[Swimcloud unreliability.]
+        The alternative consumer site \texttt{swimcloud.com} is
+        known to contain errors and is therefore excluded from the
+        approved workflow.
+\end{description}
+
+\subsection{Operational environment}
+
+The current workflow runs on a macOS workstation equipped with
+\code{pandoc} and the \code{xelatex} PDF engine.  No persistent
+server infrastructure exists; all work is ad hoc and human-driven.
+
+% =================================================================
+\section{Justification for Change}
+% =================================================================
+
+\subsection{Deficiencies addressed}
+
+The swim-times program eliminates all four problems identified above:
+
+\begin{enumerate}
+  \item Live data is fetched directly from the authoritative
+        USA~Swimming Sisense back-end, removing the human
+        copy-paste step entirely.
+  \item Times are always current because each invocation queries
+        the live API; no stale cache is involved.
+  \item Four swimmers and thirty-one events can be refreshed in a
+        single command, reducing a multi-hour manual task to a few
+        seconds of CPU time.
+  \item Swimcloud is bypassed; the only source consulted is
+        \texttt{data.usaswimming.org}.
+\end{enumerate}
+
+\subsection{Strategic alignment}
+
+Automating time retrieval supports CAST's goal of making accurate,
+up-to-date performance data available to coaches immediately after
+every meet.  CSV output additionally enables integration with
+spreadsheets, charting tools, and the team's existing Pandoc-based
+PDF generation pipeline.
+
+% =================================================================
+\section{Proposed System (To-Be)}
+% =================================================================
+
+\subsection{System description}
+
+swim-times is a single-binary command-line utility compiled from
+the CWEB literate program \code{stella-times.w}.  It requires no
+daemon, no database, and no network service beyond HTTPS access to
+\texttt{usaswimming.sisense.com}.
+
+\subsection{High-level capabilities}
+
+\begin{description}[style=nextline]
+  \item[Swimmer selection (\code{-o} flag).]
+        The operator specifies one or more swimmer keywords
+        (\code{stella}, \code{kalea}, \code{kenny}, \code{keith})
+        to restrict output.  When no swimmer keyword is given all
+        four swimmers are processed.
+
+  \item[Event filtering (\code{-e} flag).]
+        One or more USA~Swimming event codes restrict output to
+        specific events.  The flag may be repeated or the codes
+        may be comma-separated.  When \code{-e} is omitted all
+        thirty-one events (fourteen SCY, seventeen LCM) are fetched.
+
+  \item[Output modes.]
+        \code{fastest} emits only the single fastest recorded time
+        per event.  \code{csv} emits a CSV stream with a header
+        row, suitable for import into spreadsheet software or the
+        Pandoc PDF pipeline.
+
+  \item[Live authoritative data.]
+        All times are fetched from the USA~Swimming Sisense
+        ElastiCube via authenticated JAQL API calls; no local cache
+        is consulted.
+
+  \item[Motivational standard annotation.]
+        Each retrieved time includes the USA~Swimming motivational
+        standard attained (B, BB, A, \ldots, or ``Slower Than B'')
+        as recorded by USA~Swimming.
+\end{description}
+
+\subsection{Operational environment}
+
+swim-times runs on any POSIX-compatible system with:
+
+\begin{itemize}
+  \item A C99 compiler (\code{gcc} or \code{clang}).
+  \item \code{libcurl} with TLS support (for HTTPS to Sisense).
+  \item CWEB (\code{ctangle}/\code{cweave}) if the literate source
+        must be retangled or reweaved.
+  \item \code{pdftex} if the typeset documentation PDF is desired.
+\end{itemize}
+
+\subsection{Interfaces}
+
+\begin{description}[style=nextline]
+  \item[Input.]
+        Command-line arguments (\code{-o}, \code{-e}).
+
+  \item[Network.]
+        HTTPS POST to
+        \texttt{https://usaswimming.sisense.com/api/datasources/}
+        with a static bearer token embedded in the binary.
+
+  \item[Standard output.]
+        Formatted plain-text tables or CSV, depending on options.
+
+  \item[Standard error.]
+        Diagnostic messages only; no data is written to stderr.
+\end{description}
+
+% =================================================================
+\section{Operational Scenarios}
+% =================================================================
+
+The following scenarios illustrate the primary use cases.
+
+\subsection{Scenario 1 --- Post-meet fastest-times update}
+
+\textit{Context:} It is the evening after a Saturday SCY meet.
+A coach wants to check whether any of the four tracked swimmers
+set new personal bests.
+
+\begin{enumerate}
+  \item Coach opens a terminal.
+  \item Coach runs:
+        \begin{center}
+          \code{./swim-times -o stella,kalea,kenny,keith -o fastest}
+        \end{center}
+  \item swim-times resolves each swimmer's PersonKey from the
+        USA~Swimming Persons table.
+  \item For each swimmer, all thirty-one events are queried and
+        the fastest single time is printed.
+  \item Total elapsed time is typically under two minutes for all
+        four swimmers.
+  \item Coach reads the terminal output and identifies any new bests.
+\end{enumerate}
+
+\subsection{Scenario 2 --- CSV export for PDF report}
+
+\textit{Context:} A parent wants to regenerate the landscape PDF
+report (\code{swim/swim-times.pdf}) for Stella with current times.
+
+\begin{enumerate}
+  \item Parent runs:
+        \begin{center}
+          \code{./swim-times -o stella,csv > stella-latest.csv}
+        \end{center}
+  \item swim-times emits a CSV header followed by one row per
+        recorded time for each of the thirty-one events.
+  \item Parent (or a script) reads \code{stella-latest.csv}
+        and updates \code{swim/swim-times.md}.
+  \item Parent runs:
+        \begin{center}
+          \code{pandoc swim-times.md -o swim-times.pdf
+                --pdf-engine=xelatex}
+        \end{center}
+  \item The updated PDF is ready.
+\end{enumerate}
+
+\subsection{Scenario 3 --- Single-event qualification check}
+
+\textit{Context:} Kalea's coach wants to verify her current
+100 Backstroke SCY time ahead of a championship entry deadline.
+
+\begin{enumerate}
+  \item Coach runs:
+        \begin{center}
+          \code{./swim-times -o kalea,fastest -e "100 BK SCY"}
+        \end{center}
+  \item swim-times resolves Kalea's PersonKey, queries the
+        100~BK SCY event only, and prints the fastest time,
+        date, meet, and motivational standard.
+  \item Coach compares the printed time against the SDI~AGC
+        qualifying standard (from
+        \code{swim/sdi-agc-time-standards.pdf}) to determine
+        eligibility.
+\end{enumerate}
+
+\subsection{Scenario 4 --- Full event history for coaching analysis}
+
+\textit{Context:} Kenneth's coach wants to see his complete
+200~Freestyle SCY progression to evaluate training effectiveness.
+
+\begin{enumerate}
+  \item Coach runs:
+        \begin{center}
+          \code{./swim-times -o kenny -e "200 FR SCY"}
+        \end{center}
+  \item swim-times retrieves all recorded 200~FR~SCY times for
+        Kenneth, sorts them fastest-first, and prints a table
+        showing time, date, standard, and meet name.
+  \item Coach reviews the progression, noting improvement trends
+        and peak performance periods.
+\end{enumerate}
+
+% =================================================================
+\section{Summary of Impacts}
+% =================================================================
+
+\subsection{Staffing and workflow}
+
+No dedicated operator is required.  Any team member with access
+to the compiled binary and a network connection can invoke
+swim-times.  The manual transcription step is eliminated,
+reducing the time required for a full four-swimmer refresh from
+approximately one to two hours to under five minutes.
+
+\subsection{Training}
+
+Users need only understand the two flags, \code{-o} and \code{-e},
+and the swimmer and event keywords.  The built-in usage message
+(printed when no arguments are supplied) provides sufficient
+reference material for new users.  No formal training programme
+is required.
+
+\subsection{Infrastructure}
+
+No new servers, databases, or persistent services are required.
+The binary must be recompiled if the Sisense bearer token rotates
+or if USA~Swimming changes its JAQL endpoint URLs.
+These are maintenance events, not operational events.
+
+\subsection{Security}
+
+The Sisense bearer token is embedded at compile time.  Because
+USA~Swimming's data hub serves only public competitive records,
+the token grants read-only access to non-sensitive data.
+Token rotation requires a source edit and recompile; no runtime
+credential injection is provided.
+
+\subsection{Compatibility}
+
+The existing Pandoc-based PDF pipeline (\code{swim/swim-times.md})
+is unchanged.  swim-times augments rather than replaces it,
+supplying live data that a human or script pastes into the Markdown
+source.  Future work may automate that final step as well.
+
+% =================================================================
+\section{Analysis of Alternatives}
+% =================================================================
+
+\subsection{Alternatives considered}
+
+\begin{description}[style=nextline]
+  \item[Web scraping via \code{curl}/HTML parsing.]
+        Directly scraping the HTML rendered by
+        \texttt{data.usaswimming.org} was considered.  It was
+        rejected because the site renders content via JavaScript
+        after an initial page load; a plain \code{curl} request
+        returns an empty data table, making reliable extraction
+        fragile and brittle.
+
+  \item[Swimcloud API.]
+        Swimcloud (\texttt{www.swimcloud.com}) aggregates
+        USA~Swimming data but has known inaccuracies.  It was
+        rejected in favour of the authoritative USA~Swimming source.
+
+  \item[Full JSON parsing library (e.g., \code{cJSON}, \code{jansson}).]
+        A third-party JSON parser would have provided a more robust
+        response-processing layer.  It was rejected because the
+        Sisense JAQL response format is stable and well-understood,
+        and adding a library dependency would complicate the build
+        for no operational gain.
+
+  \item[Python or shell script.]
+        A Python script using \code{requests} was prototyped.
+        It was set aside in favour of a compiled C program to
+        (a)~match the literate programming aesthetic of the
+        CWEB toolchain already used in this project and
+        (b)~avoid requiring a Python interpreter on the build host.
+\end{description}
+
+\subsection{Rationale for chosen approach}
+
+The chosen design---a CWEB literate C program using libcurl and
+string-scanning---satisfies all operational requirements with
+minimal external dependencies and produces a self-documenting
+artefact (the typeset \code{stella-times.pdf}) that serves
+simultaneously as executable software and readable reference
+documentation.  This directly embodies the Parnas--Clements
+principle: the documentation and the implementation are the
+same source file, presented in the order most useful to the
+reader rather than the order dictated by the compiler.
+
+\vfill
+\begin{center}
+  \small\textit{End of document CAST-CONOPS-001 Rev.\,1.0}
+\end{center}
+
+\end{document}
