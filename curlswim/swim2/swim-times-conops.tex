@@ -76,7 +76,7 @@ This document is the Concept of Operations (ConOps) for the
 competitive swim times from the USA~Swimming data hub and presents
 them as formatted text or comma-separated-value (CSV) output.
 The program is implemented as a CWEB literate program whose
-canonical source is \code{swim2/stella-times.w}.
+canonical source is \code{swim2/swim-times.w}.
 
 \subsection{Document purpose}
 
@@ -127,7 +127,7 @@ CSV stream suitable for downstream processing.
         \texttt{https://docs.sisense.com/main/SisenseLinux/jaql.htm}.
         Accessed 2026.
 
-  \item \code{swim2/stella-times.w} --- CWEB literate program source
+  \item \code{swim2/swim-times.w} --- CWEB literate program source
         (canonical source of record for the swim-times implementation).
 
   \item \code{swim/motivational-time-standards.pdf} --- USA~Swimming
@@ -217,7 +217,7 @@ PDF generation pipeline.
 \subsection{System description}
 
 swim-times is a single-binary command-line utility compiled from
-the CWEB literate program \code{stella-times.w}.  It requires no
+the CWEB literate program \code{swim-times.w}.  It requires no
 daemon, no database, and no network service beyond HTTPS access to
 \texttt{usaswimming.sisense.com}.
 
@@ -450,7 +450,7 @@ source.  Future work may automate that final step as well.
 The chosen design---a CWEB literate C program using libcurl and
 string-scanning---satisfies all operational requirements with
 minimal external dependencies and produces a self-documenting
-artefact (the typeset \code{stella-times.pdf}) that serves
+artefact (the typeset \code{swim-times.pdf}) that serves
 simultaneously as executable software and readable reference
 documentation.  This directly embodies the Parnas--Clements
 principle: the documentation and the implementation are the

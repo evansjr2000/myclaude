@@ -59,9 +59,9 @@ by named chunk references rather than the order in which they appear in
 the document.  The result is a plain
 \.{.c} file that a standard C~compiler can process without any knowledge
 of literate programming.  In this project, running
-$$\.{ctangle stella-times.w}$$
-produces \.{stella-times.c}, which is then compiled with \.{cc} and
-linked against \.{libcurl} to create the \.{stella-times} executable.
+$$\.{ctangle swim-times.w}$$
+produces \.{swim-times.c}, which is then compiled with \.{cc} and
+linked against \.{libcurl} to create the \.{swim-times} executable.
 The generated \.{.c} file should be treated as a build artefact: the
 \.{.w} file is the true source of record.
 
@@ -73,8 +73,8 @@ bold keywords, italic identifiers, and cross-references, and numbers every
 named chunk so the reader can follow the program's logical structure
 independently of its physical layout.  An index of identifiers and a table
 of contents are generated automatically.  Running
-$$\.{cweave stella-times.w}$$
-produces \.{stella-times.tex}; running \.{pdftex} on that file yields the
+$$\.{cweave swim-times.w}$$
+produces \.{swim-times.tex}; running \.{pdftex} on that file yields the
 typeset documentation you are reading now.
 
 @ {\bf Compilation.}  After tangling with \.{ctangle}:

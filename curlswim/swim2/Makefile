@@ -1,8 +1,8 @@
 CWEB     = ../cweb.sh
-PROGRAM  = stella-times
-SOURCE   = stella-times.w
-C_SRC    = stella-times.c
-TEX_SRC  = stella-times.tex
+PROGRAM  = swim-times
+SOURCE   = swim-times.w
+C_SRC    = swim-times.c
+TEX_SRC  = swim-times.tex
 
 CC       = cc
 CFLAGS   = -O2 -Wall

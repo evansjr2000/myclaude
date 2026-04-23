@@ -1,0 +1,454 @@
+% swim-times-sdd.tex
+% Software Design Document for the swim-times program
+% IEEE Std 1016-2009 structure
+% Compiled with: pdflatex swim-times-sdd.tex
+
+\documentclass[12pt]{article}
+
+\usepackage{geometry}
+\geometry{letterpaper, margin=1in}
+
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+\usepackage{listings}
+
+\definecolor{castblue}{RGB}{0,48,135}
+\definecolor{lightgray}{gray}{0.95}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{lightgray},
+  frame=single,
+  framesep=4pt,
+  rulecolor=\color{lightgray},
+  breaklines=true,
+  showstringspaces=false,
+  language=C,
+  keywordstyle=\bfseries\color{castblue},
+  commentstyle=\itshape\color{gray},
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small College Area Swim Team}
+\fancyhead[R]{\small SDD: swim-times}
+\fancyfoot[C]{\thepage}
+
+\titleformat{\section}{\large\bfseries\color{castblue}}{\thesection}{0.5em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\req}[1]{\textbf{#1}}
+
+\begin{document}
+
+% -----------------------------------------------------------------
+% Title block
+% -----------------------------------------------------------------
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\Huge\bfseries\color{castblue} Software Design Document\\[0.5em]}
+  {\Large swim-times: Automated Swimmer-Times Retrieval System}\\[2em]
+  {\large College Area Swim Team (CAST)}\\[0.5em]
+  {\normalsize Prepared for: CAST Coaching Staff and Maintainers}\\[0.5em]
+  {\normalsize Prepared by: CAST Technology Working Group}\\[2em]
+  \begin{tabular}{ll}
+    Document identifier: & CAST-SDD-001                                \\
+    Revision:            & 1.0                                         \\
+    Date:                & April 22, 2026                              \\
+    Status:              & Released                                    \\
+    Governing standard:  & IEEE Std 1016-2009 (Software Design Descriptions) \\
+  \end{tabular}
+  \vfill
+  {\small\textit{This document is prepared in accordance with the principles
+  of rational documentation articulated in D.\,L.\,Parnas and P.\,C.\,Clements,
+  ``A Rational Design Process: How and Why to Fake It,''
+  \textit{IEEE Transactions on Software Engineering}, vol.\,SE-12, no.\,2,
+  pp.\,251--257, February 1986.}}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+% =================================================================
+\section{Introduction}
+% =================================================================
+
+\subsection{Purpose}
+
+This Software Design Document (SDD) describes the architecture
+and detailed design of the \textbf{swim-times} program.  It
+satisfies the design-description function of IEEE~Std~1016-2009
+by presenting a set of design views, each tailored to a specific
+stakeholder concern.  Together with the Concept of Operations
+(CAST-CONOPS-001) and the Software Requirements Specification
+(CAST-SRS-001), this document forms the complete development
+baseline for swim-times.
+
+\subsection{Scope}
+
+This SDD covers all code that is tangled out of the literate
+program \code{swim2/swim-times.w}.  It does not cover the
+build system, deployment, or the companion Pandoc-based PDF
+report (\code{swim/swim-times.md}); those are described
+elsewhere.
+
+\subsection{Relationship to the Parnas--Clements model}
+
+Per Parnas and Clements (1986), this document presents the
+design as if it had been derived top-down from requirements,
+even though in practice the program evolved through exploratory
+prototyping against an undocumented third-party API.  Each
+design decision is presented in the form a reader would find
+most useful, with the rationale recorded so that future changes
+can be evaluated against the original intent.
+
+% =================================================================
+\section{Design Stakeholders and Concerns}
+% =================================================================
+
+\begin{center}
+\begin{longtable}{p{3.5cm}p{3.5cm}p{6cm}}
+  \toprule
+  \textbf{Stakeholder} & \textbf{Concern} & \textbf{Addressed by view} \\
+  \midrule\endhead
+  Maintainers     & Module decomposition  & Composition view (\S4.2)        \\
+  Maintainers     & Data structures       & Information view (\S4.4)        \\
+  Maintainers     & Algorithmic detail    & Algorithm view (\S4.7)          \\
+  Coaches/parents & Behaviour at runtime  & Interaction view (\S4.6)        \\
+  Integrators     & External interfaces   & Context view (\S4.1) and Interface view (\S4.5) \\
+  Auditors        & Security boundaries   & Resource view (\S4.8)           \\
+  Reviewers       & Design rationale      & Design rationale (\S5)          \\
+  \bottomrule
+\end{longtable}
+\end{center}
+
+% =================================================================
+\section{Design Approach}
+% =================================================================
+
+\subsection{Architectural style}
+
+swim-times is a single-process, single-threaded
+\emph{pipes-and-filters} architecture realised within one address
+space: command-line options flow into an option-parsing stage,
+which feeds a swimmer-resolution stage, which feeds a per-event
+fetch-parse-sort stage, whose output is serialised by a
+formatter to standard output.  Each stage is a CWEB chunk
+(or small group of chunks) with a single responsibility.
+
+\subsection{Key design decisions}
+
+\begin{description}[style=nextline]
+  \item[D-1: CWEB literate source.]
+        The canonical source is \code{swim-times.w};
+        \code{swim-times.c} is a build artefact.  This satisfies
+        \req{REQ-D-02} and \req{REQ-A-04}.
+
+  \item[D-2: 24-line chunk discipline.]
+        No CWEB chunk exceeds twenty-four lines.  Larger logical
+        units are decomposed into named sub-chunks.  This satisfies
+        \req{REQ-D-03} and improves readability for the typeset
+        documentation.
+
+  \item[D-3: String-scanning JSON parser.]
+        A purpose-built scanner (\code{scan\_string},
+        \code{scan\_long}) is used in place of a third-party
+        JSON library.  This satisfies \req{REQ-D-04} and is
+        adequate because the Sisense JAQL response shape is
+        stable and well-understood.
+
+  \item[D-4: Static bearer token.]
+        The Sisense bearer token is a compile-time constant.
+        Token rotation is a maintenance event, not a runtime
+        operation; this matches \req{REQ-A-02}.
+
+  \item[D-5: Insertion sort.]
+        Per-event row counts rarely exceed a few dozen, so
+        $O(n^2)$ insertion sort is used in preference to a more
+        complex algorithm.  Simpler code, fewer failure modes.
+\end{description}
+
+% =================================================================
+\section{Design Views}
+% =================================================================
+
+% --------------------------- 4.1 ---------------------------------
+\subsection{Context view}
+
+\paragraph{External actors.}
+\begin{itemize}
+  \item \textbf{Operator} --- a coach, parent, or maintainer
+        invoking the binary from a shell.
+  \item \textbf{Sisense JAQL endpoint} --- the upstream HTTPS
+        service at \texttt{usaswimming.sisense.com}.
+  \item \textbf{Standard output / standard error} --- the
+        downstream sinks that receive table or CSV output and
+        diagnostics, respectively.
+\end{itemize}
+
+\paragraph{Trust boundary.}
+The only trusted external system is the Sisense endpoint, which
+serves only public competitive records.  No user-supplied data
+crosses a trust boundary; command-line arguments are consumed
+internally.
+
+% --------------------------- 4.2 ---------------------------------
+\subsection{Composition view}
+
+The program is decomposed into the following top-level CWEB
+chunks (the order in which they appear in the tangled output):
+
+\begin{center}
+\begin{longtable}{ll}
+  \toprule
+  \textbf{Chunk} & \textbf{Responsibility} \\
+  \midrule\endhead
+  \code{Includes}                 & Standard headers and \code{<curl/curl.h>}       \\
+  \code{Global constants}         & Numeric limits, Sisense token, event table     \\
+  \code{Option flags}             & \code{OPT\_*} bitmasks and global option state \\
+  \code{Type definitions}         & \code{Buffer} and \code{TimeRow} structs       \\
+  \code{HTTP utilities}           & \code{write\_cb}, \code{post\_json}            \\
+  \code{JSON scanner}             & \code{scan\_string}, \code{scan\_long}         \\
+  \code{Person lookup}            & \code{lookup\_person\_key}                     \\
+  \code{Times fetch}              & \code{insertion\_sort}, \code{format\_date},
+                                    \code{fetch\_times}                            \\
+  \code{Main function}            & Option parsing, swimmer table, \code{main}     \\
+  \bottomrule
+\end{longtable}
+\end{center}
+
+Each top-level chunk is itself a composition of named sub-chunks
+to honour the 24-line discipline (D-2).  For example,
+\code{post\_json} expands to \code{Initialize curl handle} +
+\code{Issue HTTP request and return}; \code{fetch\_times} expands
+to five sub-chunks corresponding to URL build, body build, fetch,
+parse, and print.
+
+% --------------------------- 4.3 ---------------------------------
+\subsection{Dependency view}
+
+\begin{center}
+\begin{tabular}{ll}
+  \toprule
+  \textbf{Caller}       & \textbf{Callee}                              \\
+  \midrule
+  \code{main}           & \code{parse\_opts\_str}, \code{parse\_events\_str}, \code{print\_usage} \\
+  \code{main}           & \code{lookup\_person\_key}, \code{fetch\_times} \\
+  \code{lookup\_person\_key} & \code{post\_json}, \code{scan\_string}, \code{scan\_long} \\
+  \code{fetch\_times}   & \code{post\_json}, \code{scan\_string},
+                          \code{insertion\_sort}, \code{format\_date}   \\
+  \code{post\_json}     & \code{libcurl} easy interface                  \\
+  \code{post\_json}     & \code{write\_cb} (callback)                    \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+The dependency graph is acyclic; the only external dependency
+is \code{libcurl}.
+
+% --------------------------- 4.4 ---------------------------------
+\subsection{Information view (data structures)}
+
+\paragraph{\code{Buffer}.}
+A growable heap buffer used to accumulate libcurl response chunks.
+Always null-terminated so it can be treated as a C string.
+
+\begin{lstlisting}
+typedef struct {
+    char  *data;
+    size_t size;
+} Buffer;
+\end{lstlisting}
+
+\paragraph{\code{TimeRow}.}
+One swim-time record.  \code{sort\_key} is the Sisense numeric
+sort key parsed as a \code{double}; the remaining fields are
+fixed-size character arrays sized to comfortably exceed the
+longest values observed in production data.
+
+\begin{lstlisting}
+typedef struct {
+    double sort_key;
+    char   time[32];
+    char   date[16];
+    char   standard[48];
+    char   meet[256];
+} TimeRow;
+\end{lstlisting}
+
+\paragraph{\code{Swimmer}.}
+A static configuration record describing how to identify each
+tracked swimmer in the Sisense Persons table.
+
+\begin{lstlisting}
+typedef struct {
+    const char *search_query;
+    const char *match_substr;
+    int         flag;
+} Swimmer;
+\end{lstlisting}
+
+\paragraph{Global state.}
+Three module-level variables hold parsed command-line state:
+
+\begin{itemize}
+  \item \code{g\_opts} --- bitmask of \code{OPT\_*} flags.
+  \item \code{g\_events[NUM\_EVENTS][32]} --- user-requested
+        event codes.
+  \item \code{g\_nevents} --- count of valid entries in
+        \code{g\_events}.
+\end{itemize}
+
+% --------------------------- 4.5 ---------------------------------
+\subsection{Interface view}
+
+\paragraph{Command-line interface.}
+\begin{itemize}
+  \item \code{-o keyword[,keyword\ldots]} --- swimmer and output options.
+  \item \code{-e event[,event\ldots]} --- restrict to event codes;
+        repeatable.
+\end{itemize}
+
+\paragraph{HTTP interface.}
+Two POST endpoints are consumed:
+\begin{itemize}
+  \item \texttt{.../aPublicIAAaPersonIAAaSearch/jaql}
+        --- person search.
+  \item \texttt{.../aUSAIAAaSwimmingIAAaTimesIAAaElasticube/jaql}
+        --- times query.
+\end{itemize}
+
+Both carry the headers \code{Content-Type: application/json} and
+\code{Authorization: Bearer \{SISENSE\_TOKEN\}}.
+
+\paragraph{Standard output.}
+Either a CSV stream (header line followed by data lines) or a
+plain-text table (per-event heading, column header, separator,
+data rows, blank line).
+
+% --------------------------- 4.6 ---------------------------------
+\subsection{Interaction view}
+
+A typical invocation flows through the following sequence:
+
+\begin{enumerate}
+  \item \code{main} parses \code{-o} / \code{-e} via \code{getopt}.
+  \item \code{main} initialises libcurl (\code{curl\_global\_init}).
+  \item For each entry in \code{SWIMMERS} not masked out by
+        \code{g\_opts}:
+        \begin{enumerate}
+          \item \code{lookup\_person\_key} issues one POST and
+                returns a heap-allocated \code{PersonKey} string.
+          \item For each requested event (or all default events),
+                \code{fetch\_times} issues one POST, parses the
+                response into a \code{TimeRow} array, sorts it,
+                and prints it.
+        \end{enumerate}
+  \item \code{main} calls \code{curl\_global\_cleanup} and exits.
+\end{enumerate}
+
+% --------------------------- 4.7 ---------------------------------
+\subsection{Algorithm view}
+
+\paragraph{JSON scanning.}
+\code{scan\_string} locates the next occurrence of the literal
+\code{"key"}, advances past the colon and any whitespace, expects
+a double-quote, and copies bytes until the matching closing quote
+into the output buffer.  \code{scan\_long} is the integer
+counterpart, using \code{strtol} on the digits following the colon.
+Both functions advance an in/out position pointer so that
+sequential scans walk forward through the response without rescan.
+
+\paragraph{Sort.}
+\code{insertion\_sort} performs an in-place ascending sort of a
+\code{TimeRow} array by \code{sort\_key}.  Chosen over heap or
+quick sort because $n$ rarely exceeds 50 and insertion sort has
+no recursion, no auxiliary memory, and trivial correctness.
+
+\paragraph{Date reformat.}
+\code{format\_date} converts \code{YYYYMMDD} (eight bytes) to
+\code{YYYY-MM-DD} (ten bytes plus terminator) by direct byte
+copy and hyphen insertion---no \code{sscanf} round-trip required.
+
+% --------------------------- 4.8 ---------------------------------
+\subsection{Resource view}
+
+\paragraph{Memory.}
+Per-event peak memory is bounded by
+$\code{MAX\_TIMES} \times \mathtt{sizeof}(\code{TimeRow})$
+(approximately 70~KiB per event), plus the response buffer
+(typically 30--80~KiB).  Buffers are freed at end of each
+\code{fetch\_times} call; no long-lived heap state accumulates
+across events.
+
+\paragraph{Network.}
+Each invocation issues at most $4 + (4 \times 31) = 128$ HTTPS
+POSTs.  All connections are short-lived; libcurl manages connection
+reuse internally where the easy-interface allows.
+
+\paragraph{Credentials.}
+The Sisense bearer token is a static const string in the binary.
+Token rotation requires editing \code{swim-times.w} and
+recompiling.  No filesystem-level credential storage is used.
+
+% =================================================================
+\section{Design Rationale}
+% =================================================================
+
+\subsection{Why CWEB?}
+
+CWEB satisfies \req{REQ-A-04} (self-documentation) directly: the
+typeset \code{swim-times.pdf} is the program's reference
+documentation.  Equivalent C-with-comments would have required
+maintaining design prose in a separate document, with the
+inevitable drift between code and documentation that the
+Parnas--Clements paper warns against.
+
+\subsection{Why no JSON library?}
+
+Adding \code{cJSON} or \code{jansson} would introduce a build
+dependency and would obscure the small, focused parsing logic
+that actually serves the program.  The Sisense response shape is
+stable and the scanner has fewer than fifty lines of code; the
+cost of a custom scanner is therefore lower than the cost of a
+third-party dependency.
+
+\subsection{Why static bearer token?}
+
+The token is read-only against a public dataset; embedding it
+matches the actual security posture (low) and avoids the
+operational complexity of credential injection.  When USA~Swimming
+rotates the token (an event observed only twice in the past two
+years), the maintainer recompiles and redeploys.
+
+\subsection{Why insertion sort?}
+
+\req{D-5} addresses this directly.  The complexity argument is
+not just about wall-clock time---it is about reading the code:
+twelve lines of insertion sort can be verified by eye, whereas a
+heap sort cannot.  For $n < 100$ the wall-clock difference is
+imperceptible.
+
+\subsection{Why one binary, not two?}
+
+A separate person-search utility was considered but rejected.
+The two queries (person search, times query) are always issued
+together, and splitting them would force the caller to thread
+the \code{PersonKey} through the shell, complicating every
+invocation for no gain.
+
+\vfill
+\begin{center}
+  \small\textit{End of document CAST-SDD-001 Rev.\,1.0}
+\end{center}
+
+\end{document}
