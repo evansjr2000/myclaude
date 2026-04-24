@@ -56,7 +56,14 @@ case "${1:-start}" in
         ;;
     psql)
         shift
-        docker exec -it "$CONTAINER_NAME" psql -U postgres "$@"
+        # Allocate a TTY only when stdin and stdout actually are one;
+        # otherwise (popen pipes, here-docs, redirected scripts) -t fails
+        # with "the input device is not a TTY".
+        if [ -t 0 ] && [ -t 1 ]; then
+            docker exec -it "$CONTAINER_NAME" psql -U postgres "$@"
+        else
+            docker exec -i  "$CONTAINER_NAME" psql -U postgres "$@"
+        fi
         ;;
     build)
         build_image

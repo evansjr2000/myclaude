@@ -218,17 +218,21 @@ PDF generation pipeline.
 
 swim-times is a single-binary command-line utility compiled from
 the CWEB literate program \code{swim-times.w}.  It requires no
-daemon, no database, and no network service beyond HTTPS access to
-\texttt{usaswimming.sisense.com}.
+daemon and no network service beyond HTTPS access to
+\texttt{usaswimming.sisense.com}.  An optional local Postgres
+database (\texttt{swim-times}) may be used to persist results and
+to serve subsequent queries offline.
 
 \subsection{High-level capabilities}
 
 \begin{description}[style=nextline]
   \item[Swimmer selection (\code{-o} flag).]
         The operator specifies one or more swimmer keywords
-        (\code{stella}, \code{kalea}, \code{kenny}, \code{keith})
-        to restrict output.  When no swimmer keyword is given all
-        four swimmers are processed.
+        (\code{stella}, \code{kalea}, \code{kenny}, \code{keith},
+        \code{ledecky10}) to restrict output.  When no swimmer
+        keyword is given all five swimmers are processed.
+        \code{ledecky10} retrieves Katie Ledecky's swims as a
+        9- and 10-year-old (17~March~2006--16~March~2008).
 
   \item[Event filtering (\code{-e} flag).]
         One or more USA~Swimming event codes restrict output to
@@ -242,10 +246,22 @@ daemon, no database, and no network service beyond HTTPS access to
         row, suitable for import into spreadsheet software or the
         Pandoc PDF pipeline.
 
+  \item[Database persistence (\code{store} keyword).]
+        Each retrieved row is also streamed into the local
+        Postgres database \texttt{swim-times} via a child
+        \texttt{psql} process and a single \texttt{COPY \dots\
+        FROM~STDIN} transaction.  Combine with \code{csv} to also
+        echo the rows to standard output.
+
+  \item[Offline retrieval (\code{offline} keyword).]
+        All network calls are skipped; rows are read from the local
+        Postgres \texttt{swim-times} database (populated previously
+        by \code{store}) and printed in the same table or CSV form.
+
   \item[Live authoritative data.]
-        All times are fetched from the USA~Swimming Sisense
-        ElastiCube via authenticated JAQL API calls; no local cache
-        is consulted.
+        Online runs fetch from the USA~Swimming Sisense ElastiCube
+        via authenticated JAQL API calls; no local cache is
+        consulted unless \code{offline} is selected.
 
   \item[Motivational standard annotation.]
         Each retrieved time includes the USA~Swimming motivational
@@ -263,6 +279,12 @@ swim-times runs on any POSIX-compatible system with:
   \item CWEB (\code{ctangle}/\code{cweave}) if the literate source
         must be retangled or reweaved.
   \item \code{pdftex} if the typeset documentation PDF is desired.
+  \item \texttt{psql} on \texttt{\$PATH} (or the
+        \texttt{SWIM\_TIMES\_PSQL} environment variable pointing at
+        an equivalent client) when the \code{store} or \code{offline}
+        keywords are used.  The local Postgres container is started
+        by \texttt{pg.sh start} and the \texttt{swim-times} database
+        is created by applying \texttt{schema.sql}.
 \end{itemize}
 
 \subsection{Interfaces}
@@ -275,6 +297,19 @@ swim-times runs on any POSIX-compatible system with:
         HTTPS POST to
         \texttt{https://usaswimming.sisense.com/api/datasources/}
         with a static bearer token embedded in the binary.
+        Skipped under \code{offline}.
+
+  \item[Database.]
+        Optional local Postgres reached via a child \texttt{psql}
+        process: \texttt{COPY swim\_times \dots\ FROM~STDIN} for
+        \code{store}, \texttt{SELECT \dots\ FROM swim\_times} for
+        \code{offline}.  By project convention the host is not
+        assumed to have a \texttt{psql} binary on \texttt{\$PATH};
+        all access goes through the \texttt{pg.sh} wrapper, which
+        runs \texttt{psql} inside the Postgres container via
+        \texttt{docker exec}.  Connection parameters come from
+        \texttt{SWIM\_TIMES\_PSQL} (default
+        \texttt{../../pg/pg.sh psql}).
 
   \item[Standard output.]
         Formatted plain-text tables or CSV, depending on options.
@@ -368,6 +403,50 @@ report (\code{swim/swim-times.pdf}) for Stella with current times.
         and peak performance periods.
 \end{enumerate}
 
+\subsection{Scenario 5 --- Cache-and-replay (store then offline)}
+
+\textit{Context:} A team analyst wants a snapshot of all
+swimmers' SCY times that they can re-query repeatedly without
+hitting the USA~Swimming API.
+
+\begin{enumerate}
+  \item Analyst starts the local Postgres container and applies
+        the schema once:
+        \begin{center}
+          \code{../../pg/pg.sh start} \hskip 1em
+          \code{./test-db.sh}
+        \end{center}
+  \item Analyst captures live data into the database:
+        \begin{center}
+          \code{./swim-times -o stella,csv,store}
+        \end{center}
+        Each row is both printed and inserted into
+        \texttt{swim\_times}.
+  \item Later, the analyst replays the snapshot offline:
+        \begin{center}
+          \code{./swim-times -o stella,offline,fastest}
+        \end{center}
+        No HTTP request is made; rows are read from Postgres and
+        printed in the same form as an online run.
+\end{enumerate}
+
+\subsection{Scenario 6 --- Historical comparison (Ledecky 9--10)}
+
+\textit{Context:} A parent wants to compare Stella's 9-and-under
+SCY times with Katie Ledecky's swims at the same age.
+
+\begin{enumerate}
+  \item Parent runs:
+        \begin{center}
+          \code{./swim-times -o ledecky10,fastest -e "100 FR SCY"}
+        \end{center}
+  \item swim-times resolves Katie Ledecky's PersonKey, fetches
+        all 100~FR~SCY times, filters them to her ninth-through-
+        tenth-birthday window, and prints the fastest.
+  \item Parent compares against Stella's current best obtained by
+        \code{./swim-times -o stella,fastest -e "100 FR SCY"}.
+\end{enumerate}
+
 % =================================================================
 \section{Summary of Impacts}
 % =================================================================
@@ -390,10 +469,14 @@ is required.
 
 \subsection{Infrastructure}
 
-No new servers, databases, or persistent services are required.
-The binary must be recompiled if the Sisense bearer token rotates
-or if USA~Swimming changes its JAQL endpoint URLs.
-These are maintenance events, not operational events.
+No remote infrastructure is required.  An optional local Postgres
+instance (run as a Docker container managed by the
+\texttt{pg.sh} wrapper script) provides persistence and offline
+replay; absence of that container simply disables the
+\code{store} and \code{offline} keywords without affecting any
+other capability.  The binary must be recompiled if the Sisense
+bearer token rotates or if USA~Swimming changes its JAQL endpoint
+URLs.  These are maintenance events, not operational events.
 
 \subsection{Security}
 

@@ -219,7 +219,7 @@ project repository.
 
 \subsection{Test sub-processes}
 
-Testing is decomposed into four sub-processes, executed in order
+Testing is decomposed into five sub-processes, executed in order
 by \code{test-swim-times.sh}:
 
 \begin{description}[style=nextline]
@@ -238,6 +238,19 @@ by \code{test-swim-times.sh}:
         JAQL requests against the Sisense back-end.  Skipped
         cleanly when network is unreachable or the operator sets
         \code{SWIM\_TIMES\_SKIP\_NETWORK=1}.
+  \item[Database persistence sub-process.]
+        \req{REQ-F-70} \dots\ \req{REQ-F-73} exercise the
+        \code{store} write path and the \code{offline} read path
+        against a local Postgres container.  All access goes
+        through \texttt{pg.sh psql} (\req{REQ-I-13}), which runs
+        \texttt{psql} inside the container via
+        \texttt{docker exec}; the host need not have a
+        \texttt{psql} client installed.  The companion helper
+        \code{test-db.sh} starts the container via \texttt{pg.sh},
+        applies \texttt{schema.sql}, and prints a summary of
+        \texttt{swim\_times}.  Tests are skipped cleanly when
+        \texttt{pg.sh psql} cannot reach the \texttt{swim-times}
+        database.
 \end{description}
 
 \subsection{Test design techniques}
@@ -269,16 +282,21 @@ by \code{test-swim-times.sh}:
         \code{curl} and TeX~Live~2025.
   \item Network: outbound HTTPS to
         \texttt{usaswimming.sisense.com}.
-  \item No databases, message brokers, or auxiliary services are
-        required.
+  \item Optional Postgres container managed by the project's
+        \texttt{pg.sh} wrapper script (Docker required); only
+        the database persistence tests depend on it.  In its
+        absence those tests skip and the run still gates on the
+        remaining suites.
 \end{itemize}
 
 \subsection{Test data}
 
-The four production swimmer records and the thirty-one production
-event codes serve as test data.  No synthetic data is required
-because the system under test is read-only against a live
-read-only API.
+The five production swimmer records and the thirty-one
+production event codes serve as test data for the online
+suites.  The database persistence suite uses whatever rows the
+\code{store} sub-test inserts in the same run; no fixture file
+is checked in.  No synthetic Sisense data is required because
+the system under test is read-only against a live read-only API.
 
 \subsection{Item pass/fail criteria}
 
@@ -377,8 +395,10 @@ T = Test, A = Analysis).
   \req{REQ-F-03}    & D & Empty-invocation test: \code{rc=1} and \code{Usage:} on stderr \\
   \req{REQ-F-04}    & D & Unknown-flag test: \code{rc=2} and \code{Usage:} on stderr  \\
   \req{REQ-F-10}    & D & \code{-o stella} restricts output to one swimmer            \\
-  \req{REQ-F-11}    & D & \code{-e ...} with no swimmer keyword yields four \code{Swimmer:} lines \\
+  \req{REQ-F-11}    & D & \code{-e ...} with no swimmer keyword yields five \code{Swimmer:} lines \\
   \req{REQ-F-12}    & D & \code{stella} keyword resolves to a row containing ``Evans'' \\
+  \req{REQ-F-13}    & D & \code{ledecky10} resolves to a row containing ``Katie Genevieve Ledecky'' \\
+  \req{REQ-F-14}    & T & All \code{ledecky10} dates fall in [2006-03-17, 2008-03-16]  \\
   \req{REQ-F-20}    & D & Single-event \code{-e} yields exactly one event section    \\
   \req{REQ-F-21}    & D & No \code{-e} yields 31 event sections                      \\
   \req{REQ-F-22}    & D & Event-list count honoured (subset of \req{REQ-F-20})        \\
@@ -394,16 +414,25 @@ T = Test, A = Analysis).
   \req{REQ-F-52}    & D & Empty-event probe yields \code{(no times found)} (else SKIP) \\
   \req{REQ-F-60}    & I & Lookup-failure path inspected in \code{lookup\_person\_key} \\
   \req{REQ-F-61}    & I & Per-event failure-then-continue inspected in \code{fetch\_times} \\
+  \req{REQ-F-70}    & T & \code{store,csv} run inserts $\geq$1 row into \texttt{swim\_times} and prints CSV (DB-gated) \\
+  \req{REQ-F-71}    & T & \code{offline,csv} run reads $\geq$1 previously stored row (DB-gated) \\
+  \req{REQ-F-72}    & T & \code{offline} run completes with \texttt{SWIM\_TIMES\_SKIP\_NETWORK=1} (DB-gated) \\
+  \req{REQ-F-73}    & T & Repeated \code{store} run leaves \texttt{count(*)} unchanged (DB-gated) \\
+  \req{REQ-F-74}    & I & Missing-\texttt{psql} warning path inspected in \code{db\_open} \\
   \req{REQ-I-01}    & I & No \code{stdin} read in source                              \\
   \req{REQ-I-10}    & A & \code{otool}/\code{ldd} confirms libcurl link               \\
   \req{REQ-I-11}    & I & Header strings \code{Content-Type} and \code{Authorization} present in source \\
+  \req{REQ-I-12}    & I & \code{db\_psql\_command} reads \texttt{SWIM\_TIMES\_PSQL}; binary linkage excludes \texttt{libpq} \\
+  \req{REQ-I-13}    & I & \code{db\_psql\_command} default is \texttt{../../pg/pg.sh psql}; no host \texttt{psql} on \texttt{\$PATH} required \\
   \req{REQ-I-20}    & A & \code{https://usaswimming.sisense.com} substring present, no \code{http://} \\
-  \req{REQ-P-01}    & D & Sample timing extrapolated to 128 requests $<$ 300 s        \\
+  \req{REQ-P-01}    & D & Sample timing extrapolated to 160 requests $<$ 300 s        \\
   \req{REQ-P-02}    & D & Single query measured $<$ 10 s                              \\
+  \req{REQ-P-03}    & D & Offline single query measured $<$ 2 s (DB-gated, manual)    \\
   \req{REQ-D-01}    & A & Compile under \code{-O2 -Wall} produces no warnings         \\
   \req{REQ-D-02}    & I & \code{swim-times.c} regenerable from \code{swim-times.w}    \\
   \req{REQ-D-03}    & A & CWEB chunk line-count audit (awk pass)                     \\
   \req{REQ-D-04}    & A & Binary dependency list contains only \{libc, libcurl, TLS\} \\
+  \req{REQ-D-10}    & I & \texttt{schema.sql} declares \texttt{swim\_times} with the UNIQUE constraint per \req{REQ-F-73} \\
   \req{REQ-A-01}    & T & Two consecutive runs produce byte-identical output         \\
   \req{REQ-A-02}    & I & Token and URL declared as named constants                   \\
   \req{REQ-A-03}    & D & Build on a second POSIX host (manual; quarterly)           \\

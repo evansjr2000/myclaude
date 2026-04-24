@@ -252,12 +252,22 @@ The program has two user classes:
         named swimmers.
   \item[\req{REQ-F-11}] When no swimmer keyword is supplied to
         \code{-o} but at least one event is supplied to \code{-e},
-        the program shall process all four swimmers.
+        the program shall process all five swimmers.
   \item[\req{REQ-F-12}] The set of selectable swimmers shall be
         exactly: Stella Julianna Evans (\code{stella}),
         Kalea Rose Benavente (\code{kalea}),
         Kenneth Ray Evans (\code{kenny}),
-        and Keith Santiago Evans (\code{keith}).
+        Keith Santiago Evans (\code{keith}),
+        and Katie Genevieve Ledecky (\code{ledecky10}).
+  \item[\req{REQ-F-13}] When the \code{ledecky10} keyword is
+        supplied, the program shall resolve Katie Ledecky's
+        \code{PersonKey} via the same person-search path used for
+        the other swimmers.
+  \item[\req{REQ-F-14}] When the \code{ledecky10} keyword is
+        supplied, the program shall restrict output to swims whose
+        date falls in the inclusive ISO range
+        \code{2006-03-17} through \code{2008-03-16}
+        (Katie Ledecky's ninth and tenth years).
 \end{description}
 
 \subsubsection{Event selection}
@@ -334,6 +344,35 @@ The program has two user classes:
         continue with the next event without aborting.
 \end{description}
 
+\subsubsection{Database persistence}
+
+\begin{description}[style=nextline]
+  \item[\req{REQ-F-70}] When the \code{store} keyword is supplied,
+        the program shall stream every emitted row into the local
+        Postgres database \texttt{swim-times} via a single
+        \texttt{COPY swim\_times \dots\ FROM~STDIN} transaction
+        spawned through a child \texttt{psql} process.
+        \code{store} composes with \code{csv}: stdout still
+        receives the CSV stream while the rows are persisted.
+  \item[\req{REQ-F-71}] When the \code{offline} keyword is
+        supplied, the program shall read swim rows from the local
+        Postgres \texttt{swim-times} database and emit them in the
+        same table or CSV form as the online path, without
+        touching the network.
+  \item[\req{REQ-F-72}] Under \code{offline}, the program shall
+        not initialise libcurl and shall not issue any HTTP
+        request.
+  \item[\req{REQ-F-73}] The \texttt{swim\_times} schema shall
+        enforce a UNIQUE constraint on
+        \code{(swimmer, event, swim\_time, swim\_date, meet)} so
+        that re-running a \code{store} invocation does not
+        introduce duplicate rows.
+  \item[\req{REQ-F-74}] If \texttt{psql} cannot be spawned for
+        \code{store}, the program shall print a single warning to
+        standard error and continue with the run, without
+        persisting any rows.
+\end{description}
+
 \subsection{External interface requirements}
 
 \subsubsection{User interfaces}
@@ -353,6 +392,20 @@ The program has two user classes:
         \code{Content-Type: application/json} and
         \code{Authorization: Bearer \{token\}} on every JAQL
         request.
+  \item[\req{REQ-I-12}] The program shall reach Postgres only
+        through a child \texttt{psql} process spawned via
+        \texttt{popen(3)}.  The shell prefix shall be taken from
+        the \texttt{SWIM\_TIMES\_PSQL} environment variable when
+        set, otherwise the default \texttt{../../pg/pg.sh psql}
+        (the \texttt{pg.sh} wrapper resolved relative to the
+        \texttt{swim2/} working directory).  No direct
+        \texttt{libpq} dependency shall be linked into the binary.
+  \item[\req{REQ-I-13}] The program shall not assume that a host
+        \texttt{psql} client is installed on \texttt{\$PATH}.  All
+        Postgres access (both \code{store} writes and \code{offline}
+        reads) shall go through the \texttt{pg.sh} wrapper, which
+        runs \texttt{psql} inside the Postgres container via
+        \texttt{docker exec}.
 \end{description}
 
 \subsubsection{Communication interfaces}
@@ -365,13 +418,17 @@ The program has two user classes:
 \subsection{Performance requirements}
 
 \begin{description}[style=nextline]
-  \item[\req{REQ-P-01}] A full refresh of all four swimmers
+  \item[\req{REQ-P-01}] A full refresh of all five swimmers
         across all thirty-one default events
-        ($4 \times (1 + 31) = 128$ HTTP requests) shall complete
+        ($5 \times (1 + 31) = 160$ HTTP requests) shall complete
         within five minutes on a residential broadband connection.
   \item[\req{REQ-P-02}] A single-swimmer single-event query
         (\code{-o stella -e "100 FR SCY"}) shall complete within
         ten seconds under normal Sisense response time.
+  \item[\req{REQ-P-03}] An offline single-swimmer single-event
+        query (\code{-o stella,offline -e "100 FR SCY"}) shall
+        complete within two seconds against a local Postgres
+        instance carrying typical row counts.
 \end{description}
 
 \subsection{Design constraints}
@@ -388,6 +445,12 @@ The program has two user classes:
   \item[\req{REQ-D-04}] No third-party dependency other than
         \code{libcurl} and the standard C library shall be linked
         into the binary.
+  \item[\req{REQ-D-10}] The Postgres schema for persisted swim
+        rows shall be defined in \texttt{schema.sql} adjacent to
+        the source.  The table \texttt{swim\_times} shall expose
+        the seven application columns listed in REQ-F-32 plus an
+        identity primary key and a \texttt{fetched\_at} timestamp,
+        and shall declare a UNIQUE constraint per REQ-F-73.
 \end{description}
 
 \subsection{Software system attributes}
@@ -440,16 +503,18 @@ documented separately in the swim-times Verification Plan.
   \textbf{Requirement} & \textbf{Method} \\
   \midrule\endhead
   REQ-F-01 \ldots REQ-F-04 & Demonstration \\
-  REQ-F-10 \ldots REQ-F-12 & Demonstration \\
+  REQ-F-10 \ldots REQ-F-14 & Demonstration \\
   REQ-F-20 \ldots REQ-F-22 & Demonstration \\
   REQ-F-30 \ldots REQ-F-33 & Inspection + Demonstration \\
   REQ-F-40 \ldots REQ-F-42 & Test \\
   REQ-F-50 \ldots REQ-F-52 & Demonstration \\
   REQ-F-60 \ldots REQ-F-61 & Demonstration \\
+  REQ-F-70 \ldots REQ-F-74 & Test (DB-gated) \\
   REQ-I-01 \ldots REQ-I-20 & Inspection \\
-  REQ-P-01, REQ-P-02       & Demonstration (timed) \\
+  REQ-P-01, REQ-P-02, REQ-P-03 & Demonstration (timed) \\
   REQ-D-01, REQ-D-02, REQ-D-04 & Inspection \\
   REQ-D-03                 & Analysis (CWEB chunk line-count audit) \\
+  REQ-D-10                 & Inspection of \texttt{schema.sql} \\
   REQ-A-01                 & Test \\
   REQ-A-02, REQ-A-04       & Inspection \\
   REQ-A-03                 & Demonstration (build on second POSIX host) \\
