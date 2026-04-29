@@ -252,14 +252,21 @@ The program has two user classes:
         named swimmers.
   \item[\req{REQ-F-11}] When no swimmer keyword is supplied to
         \code{-o} but at least one event is supplied to \code{-e},
-        the program shall process all five swimmers.
+        the program shall process every entry in
+        \texttt{SWIMMERS[]}: the four Evans/Benavente swimmers plus
+        the three age-windowed Ledecky entries
+        (\code{ledecky10}, \code{ledecky12}, \code{ledecky14}),
+        for seven entries in total.
   \item[\req{REQ-F-12}] The set of selectable swimmers shall be
         exactly: Stella Julianna Evans (\code{stella}),
         Kalea Rose Benavente (\code{kalea}),
         Kenneth Ray Evans (\code{kenny}),
         Keith Santiago Evans (\code{keith}),
-        and Katie Genevieve Ledecky (\code{ledecky10}).
-  \item[\req{REQ-F-13}] When the \code{ledecky10} keyword is
+        and Katie Genevieve Ledecky (selected via \code{ledecky10},
+        \code{ledecky12}, or \code{ledecky14} for the appropriate
+        age window).
+  \item[\req{REQ-F-13}] When any of the \code{ledecky10},
+        \code{ledecky12}, or \code{ledecky14} keywords is
         supplied, the program shall resolve Katie Ledecky's
         \code{PersonKey} via the same person-search path used for
         the other swimmers.
@@ -268,6 +275,16 @@ The program has two user classes:
         date falls in the inclusive ISO range
         \code{2006-03-17} through \code{2008-03-16}
         (Katie Ledecky's ninth and tenth years).
+  \item[\req{REQ-F-15}] When the \code{ledecky12} keyword is
+        supplied, the program shall restrict output to swims whose
+        date falls in the inclusive ISO range
+        \code{2008-03-17} through \code{2010-03-16}
+        (Katie Ledecky's eleventh and twelfth years).
+  \item[\req{REQ-F-16}] When the \code{ledecky14} keyword is
+        supplied, the program shall restrict output to swims whose
+        date falls in the inclusive ISO range
+        \code{2010-03-17} through \code{2012-03-16}
+        (Katie Ledecky's thirteenth and fourteenth years).
 \end{description}
 
 \subsubsection{Event selection}
@@ -348,10 +365,10 @@ The program has two user classes:
 
 \begin{description}[style=nextline]
   \item[\req{REQ-F-70}] When the \code{store} keyword is supplied,
-        the program shall stream every emitted row into the local
-        Postgres database \texttt{swim-times} via a single
-        \texttt{COPY swim\_times \dots\ FROM~STDIN} transaction
-        spawned through a child \texttt{psql} process.
+        the program shall write every emitted row to the local
+        Postgres database \texttt{swim-times} programmatically via
+        the \texttt{libpq} client library, using a prepared
+        \texttt{INSERT \dots\ ON~CONFLICT~DO~NOTHING} per row.
         \code{store} composes with \code{csv}: stdout still
         receives the CSV stream while the rows are persisted.
   \item[\req{REQ-F-71}] When the \code{offline} keyword is
@@ -367,10 +384,19 @@ The program has two user classes:
         \code{(swimmer, event, swim\_time, swim\_date, meet)} so
         that re-running a \code{store} invocation does not
         introduce duplicate rows.
-  \item[\req{REQ-F-74}] If \texttt{psql} cannot be spawned for
-        \code{store}, the program shall print a single warning to
-        standard error and continue with the run, without
-        persisting any rows.
+  \item[\req{REQ-F-74}] If the libpq connection cannot be
+        established for \code{store}, the program shall print a
+        single warning to standard error and continue with the
+        run, without persisting any rows.  Under \code{offline} a
+        connection failure is fatal and exits with status~1.
+  \item[\req{REQ-F-75}] When \code{store} is rerun against a
+        \texttt{swim\_times} table that already contains the rows
+        being inserted, the program shall recover gracefully: each
+        duplicate row shall be silently absorbed by the
+        \texttt{ON~CONFLICT~DO~NOTHING} clause without aborting
+        the transaction, the process shall exit~0, and no
+        diagnostic shall be written to standard error.
+        (This realises requirement~\#4 of \texttt{requirements4.txt}.)
 \end{description}
 
 \subsection{External interface requirements}
@@ -392,20 +418,15 @@ The program has two user classes:
         \code{Content-Type: application/json} and
         \code{Authorization: Bearer \{token\}} on every JAQL
         request.
-  \item[\req{REQ-I-12}] The program shall reach Postgres only
-        through a child \texttt{psql} process spawned via
-        \texttt{popen(3)}.  The shell prefix shall be taken from
-        the \texttt{SWIM\_TIMES\_PSQL} environment variable when
-        set, otherwise the default \texttt{../../pg/pg.sh psql}
-        (the \texttt{pg.sh} wrapper resolved relative to the
-        \texttt{swim2/} working directory).  No direct
-        \texttt{libpq} dependency shall be linked into the binary.
-  \item[\req{REQ-I-13}] The program shall not assume that a host
-        \texttt{psql} client is installed on \texttt{\$PATH}.  All
-        Postgres access (both \code{store} writes and \code{offline}
-        reads) shall go through the \texttt{pg.sh} wrapper, which
-        runs \texttt{psql} inside the Postgres container via
-        \texttt{docker exec}.
+  \item[\req{REQ-I-12}] The program shall reach Postgres
+        \emph{programmatically} through the \texttt{libpq} client
+        library --- never by spawning \texttt{psql} or any other
+        external script (this realises requirement~\#3 of
+        \texttt{requirements4.txt}).  The connection string shall
+        be taken from the \texttt{SWIM\_TIMES\_PGCONNINFO}
+        environment variable when set, otherwise the default
+        keyword string \texttt{dbname=swim-times user=postgres
+        host=localhost port=5432}.
 \end{description}
 
 \subsubsection{Communication interfaces}
@@ -418,10 +439,13 @@ The program has two user classes:
 \subsection{Performance requirements}
 
 \begin{description}[style=nextline]
-  \item[\req{REQ-P-01}] A full refresh of all five swimmers
-        across all thirty-one default events
-        ($5 \times (1 + 31) = 160$ HTTP requests) shall complete
-        within five minutes on a residential broadband connection.
+  \item[\req{REQ-P-01}] A full refresh of all seven
+        \texttt{SWIMMERS[]} entries across all thirty-one default
+        events ($7 \times (1 + 31) = 224$ HTTP requests, including
+        the three Ledecky age-window entries that share an
+        underlying person but each issue their own person-search
+        and event queries) shall complete within five minutes on a
+        residential broadband connection.
   \item[\req{REQ-P-02}] A single-swimmer single-event query
         (\code{-o stella -e "100 FR SCY"}) shall complete within
         ten seconds under normal Sisense response time.
@@ -443,8 +467,11 @@ The program has two user classes:
         shall exceed twenty-four lines, in keeping with the
         existing literate-programming style of the codebase.
   \item[\req{REQ-D-04}] No third-party dependency other than
-        \code{libcurl} and the standard C library shall be linked
-        into the binary.
+        \code{libcurl}, \code{libpq} (the Postgres C client
+        library, added by requirements4.txt~\#3), and the standard
+        C library shall be linked into the binary.  Transitive
+        TLS, compression, and authentication libraries pulled in
+        by \code{libcurl} or \code{libpq} are also permitted.
   \item[\req{REQ-D-10}] The Postgres schema for persisted swim
         rows shall be defined in \texttt{schema.sql} adjacent to
         the source.  The table \texttt{swim\_times} shall expose
@@ -503,13 +530,13 @@ documented separately in the swim-times Verification Plan.
   \textbf{Requirement} & \textbf{Method} \\
   \midrule\endhead
   REQ-F-01 \ldots REQ-F-04 & Demonstration \\
-  REQ-F-10 \ldots REQ-F-14 & Demonstration \\
+  REQ-F-10 \ldots REQ-F-16 & Demonstration \\
   REQ-F-20 \ldots REQ-F-22 & Demonstration \\
   REQ-F-30 \ldots REQ-F-33 & Inspection + Demonstration \\
   REQ-F-40 \ldots REQ-F-42 & Test \\
   REQ-F-50 \ldots REQ-F-52 & Demonstration \\
   REQ-F-60 \ldots REQ-F-61 & Demonstration \\
-  REQ-F-70 \ldots REQ-F-74 & Test (DB-gated) \\
+  REQ-F-70 \ldots REQ-F-75 & Test (DB-gated) \\
   REQ-I-01 \ldots REQ-I-20 & Inspection \\
   REQ-P-01, REQ-P-02, REQ-P-03 & Demonstration (timed) \\
   REQ-D-01, REQ-D-02, REQ-D-04 & Inspection \\

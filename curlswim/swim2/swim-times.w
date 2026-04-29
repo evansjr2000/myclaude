@@ -105,6 +105,7 @@ output is:
 #include <unistd.h>
 #include <signal.h>
 #include <curl/curl.h>
+#include <libpq-fe.h>
 
 @ The Sisense bearer token authenticates us against the analytics
 instance that backs \.{data.usaswimming.org}.  |EVENTS| lists all
@@ -179,10 +180,12 @@ Nine keywords are recognised:
 \item{$\bullet$} \.{kenny} --- output only Kenneth Ray Evans' events.
 \item{$\bullet$} \.{keith} --- output only Keith Santiago Evans' events.
 \item{$\bullet$} \.{ledecky10} --- output only Katie Ledecky's times as a 9- or 10-year-old.
+\item{$\bullet$} \.{ledecky12} --- output only Katie Ledecky's times as an 11- or 12-year-old.
+\item{$\bullet$} \.{ledecky14} --- output only Katie Ledecky's times as a 13- or 14-year-old.
 \item{$\bullet$} \.{fastest} --- print only the single fastest time per event.
 \item{$\bullet$} \.{csv} --- emit CSV lines (swimmer name on every line) instead of a table.
 \item{$\bullet$} \.{store} --- write each row to the local Postgres
-    database \.{swim-times} via \.{psql}; combine with \.{csv} to also
+    database \.{swim-times} via \.{libpq}; combine with \.{csv} to also
     print to the terminal.
 \item{$\bullet$} \.{offline} --- skip all network calls; read times from
     the local Postgres \.{swim-times} database instead.
@@ -208,6 +211,8 @@ If no options are given at all the program prints a usage message and exits.
 #define OPT_LEDECKY10 (1<<6)  /* restrict to Katie Ledecky 9-10 yr times  */
 #define OPT_STORE     (1<<7)  /* also persist rows to Postgres            */
 #define OPT_OFFLINE   (1<<8)  /* read from Postgres, skip network         */
+#define OPT_LEDECKY12 (1<<9)  /* restrict to Katie Ledecky 11-12 yr times */
+#define OPT_LEDECKY14 (1<<10) /* restrict to Katie Ledecky 13-14 yr times */
 
 static int  g_opts    = 0;  /* output-selection flags; 0 = show everything */
 static char g_events[NUM_EVENTS][32]; /* event codes requested via \.{-e}  */
@@ -381,79 +386,121 @@ static int scan_long(const char *key, const char **pos, long *out)
     return 1;
 }
 
-@* Database pipe.
+@* Database connection.
 
 @ The \.{store} option streams rows into the local Postgres database
-\.{swim-times} via a child \.{psql} process.  We do not link \.{libpq}:
-the binary stays a curl-only client and the pipe is opened with
-\.{popen}.  The \.{offline} option likewise spawns \.{psql} for reads.
-By project convention the host is not assumed to have a \.{psql}
-binary on \.{\$PATH}; instead all access goes through the \.{pg.sh}
-wrapper, which runs \.{psql} inside the Postgres container via
-\.{docker exec}.  The shell command used is taken from the
-|SWIM_TIMES_PSQL| environment variable when set, otherwise it defaults
-to \.{../../pg/pg.sh psql} (the path of \.{pg.sh} relative to the
-\.{swim2/} working directory).  Both modes assume the schema in
-\.{schema.sql} has been applied and that \.{pg.sh start} has been run.
+\.{swim-times}; the \.{offline} option reads previously-stored rows
+back.  Both reach Postgres \emph{programmatically} via the standard
+client library \.{libpq} --- no \.{psql} child process or wrapper
+script is involved (this is requirement~\#3 of \.{requirements4.txt}:
+``Access the Postgres database programmatically, not through scripts'').
+A connection string can be supplied via the |SWIM_TIMES_PGCONNINFO|
+environment variable; if unset the program connects to a local
+container with the keyword string
+\.{dbname=swim-times user=postgres host=localhost port=5432}.
+Per-row inserts use \.{INSERT \dots\ ON CONFLICT \dots\ DO NOTHING}
+keyed on the unique tuple
+\.{(swimmer, event, swim\_time, swim\_date, meet)} so a duplicate
+silently no-ops without aborting the surrounding work
+(requirement~\#4: ``check for duplicates before adding \dots\ and
+recover appropriately'').
 
 @<Database pipe@>=
-@<Resolve psql command@>
-@<Open and close DB pipe@>
-@<Emit one CSV field@>
+@<Resolve connection string@>
+@<Open and close DB connection@>
+@<Insert one row@>
 
-@ |db_psql_command| returns the shell prefix used to launch \.{psql}.
-Override at runtime with |SWIM_TIMES_PSQL|.
+@ |db_conn_string| returns the libpq connection string.  Override
+at runtime with |SWIM_TIMES_PGCONNINFO|.
 
-@<Resolve psql command@>=
-static const char *db_psql_command(void)
+@<Resolve connection string@>=
+static const char *db_conn_string(void)
 {
-    const char *e = getenv("SWIM_TIMES_PSQL");
-    return (e && *e) ? e : "../../pg/pg.sh psql";
+    const char *e = getenv("SWIM_TIMES_PGCONNINFO");
+    return (e && *e)
+        ? e
+        : "dbname=swim-times user=postgres host=localhost port=5432";
 }
 
-@ |db_open| starts a single \.{COPY ... FROM STDIN} transaction
-into which all rows are streamed.  |db_close| flushes the pipe and
-ends the COPY.  A failure to spawn \.{psql} is reported once and the
-program continues without storing.
+@ |db_open| opens a libpq connection and prepares the parameterised
+\.{INSERT \dots\ ON CONFLICT DO NOTHING} statement that all
+\code{store} writes use.  |db_close| releases the connection.  Both
+are idempotent.  The \.{ON CONFLICT} clause keys on the same unique
+constraint declared by \.{schema.sql}, so a duplicate row is a
+no-op rather than an error.
 
-@<Open and close DB pipe@>=
-static FILE *db_pipe = NULL;
+@<Open and close DB connection@>=
+static PGconn *db_conn = NULL;
+#define DB_INSERT_STMT "swim_times_insert_v1"
+@<Open DB connection@>
+@<Close DB connection@>
 
+@ Connection establishment.  A failure is non-fatal here: the caller
+chooses whether to abort.  In \code{store} mode the program continues
+without persisting; in \code{offline} mode the caller bails out.
+
+@<Open DB connection@>=
 static int db_open(void)
 {
-    /* Ignore SIGPIPE so a missing or crashed psql does not kill us. */
-    signal(SIGPIPE, SIG_IGN);
-    char cmd[1024];
-    snprintf(cmd, sizeof cmd,
-        "%s -d swim-times -v ON_ERROR_STOP=1 -c "
-        "\"COPY swim_times "
-        "(swimmer,event,swim_time,swim_date,standard,meet,sort_key) "
-        "FROM STDIN WITH (FORMAT csv)\"",
-        db_psql_command());
-    db_pipe = popen(cmd, "w");
-    if (!db_pipe)
-        fputs("Warning: could not spawn psql; -o store disabled\n", stderr);
-    return db_pipe != NULL;
+    db_conn = PQconnectdb(db_conn_string());
+    if (PQstatus(db_conn) != CONNECTION_OK) {
+        fprintf(stderr,
+            "Warning: libpq connection failed: %s",
+            PQerrorMessage(db_conn));
+        PQfinish(db_conn); db_conn = NULL;
+        return 0;
+    }
+    @<Prepare insert statement@>
+    return 1;
 }
 
+@ Tear-down.
+
+@<Close DB connection@>=
 static void db_close(void)
 {
-    if (db_pipe) { pclose(db_pipe); db_pipe = NULL; }
+    if (db_conn) { PQfinish(db_conn); db_conn = NULL; }
 }
 
-@ |csv_emit_field| writes a single CSV field with embedded double
-quotes doubled per RFC~4180.  Used by the DB-pipe emitter so that
-meet names containing quotes are accepted by Postgres \.{COPY}.
+@ The prepared insert.  Date and float casts let us pass every
+parameter as a text string; libpq does the parsing.
 
-@<Emit one CSV field@>=
-static void csv_emit_field(FILE *f, const char *s)
+@<Prepare insert statement@>=
+PGresult *r = PQprepare(db_conn, DB_INSERT_STMT,
+    "INSERT INTO swim_times "
+    "(swimmer,event,swim_time,swim_date,standard,meet,sort_key) "
+    "VALUES ($1,$2,$3,$4::date,$5,$6,$7::float8) "
+    "ON CONFLICT (swimmer,event,swim_time,swim_date,meet) "
+    "DO NOTHING", 7, NULL);
+if (PQresultStatus(r) != PGRES_COMMAND_OK) {
+    fprintf(stderr, "Warning: prepare failed: %s",
+        PQerrorMessage(db_conn));
+    PQclear(r); PQfinish(db_conn); db_conn = NULL;
+    return 0;
+}
+PQclear(r);
+
+@ |db_insert_row| executes the prepared statement once for one
+\code{TimeRow}.  A duplicate hits the \.{ON CONFLICT DO NOTHING}
+branch and is silently absorbed; any other failure logs a warning
+but does not abort the run.
+
+@<Insert one row@>=
+static void db_insert_row(const char *swimmer, const char *event,
+                          const TimeRow *r)
 {
-    fputc('"', f);
-    while (*s) {
-        if (*s == '"') fputc('"', f);
-        fputc(*s++, f);
-    }
-    fputc('"', f);
+    if (!db_conn) return;
+    char sk[64];
+    snprintf(sk, sizeof sk, "%g", r->sort_key);
+    const char *vals[7] = {
+        swimmer, event, r->time, r->date, r->standard, r->meet, sk
+    };
+    PGresult *res = PQexecPrepared(db_conn, DB_INSERT_STMT,
+                                   7, vals, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+        fprintf(stderr, "Warning: insert failed: %s",
+            PQerrorMessage(db_conn));
+    PQclear(res);
 }
 
 @* Person lookup. |lookup_person_key| posts a search for |search_query| and scans
@@ -771,7 +818,7 @@ the table.
 insertion_sort(rows, nrows);
 int lim = (opts & OPT_FASTEST) ? (nrows > 0 ? 1 : 0) : nrows;
 if (opts & OPT_CSV)                  { @<Emit rows as CSV@>   }
-if ((opts & OPT_STORE) && db_pipe)   { @<Emit rows to DB@>    }
+if ((opts & OPT_STORE) && db_conn)   { @<Emit rows to DB@>    }
 if (!(opts & OPT_CSV))               { @<Emit rows as table@> }
 
 @ The CSV form on standard output is the same six-column layout
@@ -783,25 +830,15 @@ for (int i = 0; i < lim; i++)
            swimmer_name ? swimmer_name : "", event_code,
            rows[i].time, rows[i].date, rows[i].standard, rows[i].meet);
 
-@ The DB form writes seven columns to match the |swim_times| schema
-(adds the numeric |sort_key| column).  Embedded quotes are doubled
-by |csv_emit_field|.
+@ The DB form delegates each row to |db_insert_row|.  Per-row inserts
+let \.{ON CONFLICT DO NOTHING} swallow duplicates one at a time
+without aborting the surrounding work --- the bulk \.{COPY} path
+would have rolled back the whole batch on the first collision.
 
 @<Emit rows to DB@>=
-for (int i = 0; i < lim; i++) {
-    csv_emit_field(db_pipe, swimmer_name ? swimmer_name : "");
-    fputc(',', db_pipe);
-    csv_emit_field(db_pipe, event_code);
-    fputc(',', db_pipe);
-    csv_emit_field(db_pipe, rows[i].time);
-    fputc(',', db_pipe);
-    fputs(rows[i].date, db_pipe);
-    fputc(',', db_pipe);
-    csv_emit_field(db_pipe, rows[i].standard);
-    fputc(',', db_pipe);
-    csv_emit_field(db_pipe, rows[i].meet);
-    fprintf(db_pipe, ",%g\n", rows[i].sort_key);
-}
+for (int i = 0; i < lim; i++)
+    db_insert_row(swimmer_name ? swimmer_name : "",
+                  event_code, &rows[i]);
 
 @ The table form is the human-readable per-event block printed when
 \.{csv} is not requested.
@@ -821,113 +858,101 @@ putchar('\n');
 
 @* Offline fetch.
 
-@ |offline_fetch| is the read counterpart to the DB pipe: it spawns
-a \.{psql} child process, reads pipe-separated rows from its standard
-output, and feeds them into the same |TimeRow| array consumed by the
-shared sort/emit chunk.  No network is touched.  The function takes a
-|Swimmer| pointer so it can use both |match_substr| (for an
-\.{ILIKE} clause that maps the user keyword to whichever full name
-the database happens to hold) and the optional age window
+@ |offline_fetch| is the read counterpart to the insert path: it
+issues a parameterised \.{SELECT} via \.{libpq} on the shared
+|db_conn| and feeds each tuple into the same |TimeRow| array
+consumed by the shared sort/emit chunk.  No network is touched and
+no child process is spawned.  The function takes a |Swimmer|
+pointer so it can use both |match_substr| (for an \.{ILIKE} clause
+that maps the user keyword to whichever full name the database
+happens to hold) and the optional age window
 (|date_min|, |date_max|).
 
 @<Offline fetch@>=
-@<Offline split helper@>
 @<Define offline\_fetch@>
 
-@ |offline_split| chops a single \.{psql} output line on the pipe
-character, returning pointers into the buffer (which it modifies in
-place).  Up to |nmax| fields are recognised.
-
-@<Offline split helper@>=
-static int offline_split(char *line, char *fields[], int nmax)
-{
-    int n = 0;
-    fields[n++] = line;
-    char *q = line;
-    while (*q && n < nmax) {
-        if (*q == '|') { *q = '\0'; fields[n++] = q + 1; }
-        q++;
-    }
-    return n;
-}
-
-@ The fetch function is decomposed into four sub-chunks so each
+@ The fetch function is decomposed into three sub-chunks so each
 stays inside the twenty-four line limit.
 
 @<Define offline\_fetch@>=
 static void offline_fetch(const Swimmer *sw, const char *event_code, int opts)
 {
-    @<Build offline psql command@>
-    @<Read offline rows@>
+    @<Build offline query params@>
+    @<Read offline rows from libpq@>
     @<Sort and emit rows@>
 }
 
-@ The query is built with single-quoted SQL string literals.
-Dollar-quoting is avoided here because the command is handed to
-\.{/bin/sh -c}, which would otherwise expand a bare \.{\$\$} to the
-shell's PID.  The set of swimmer and event identifiers used in this
-project contains no apostrophes, so single-quoting is safe.  The
-output format is pipe-separated, tuples-only.
+@ The query uses two positional parameters: the \.{ILIKE} pattern
+(\.{\%match\_substr\%}) and the event code.  libpq quotes them
+safely so no shell-quoting hazards apply.
 
-@<Build offline psql command@>=
-char cmd[2048];
-snprintf(cmd, sizeof cmd,
-    "%s -d swim-times -t -A -F'|' -c "
-    "\"SELECT swimmer, swim_time, "
+@<Build offline query params@>=
+char like_pat[256];
+snprintf(like_pat, sizeof like_pat, "%%%s%%", sw->match_substr);
+const char *params[2] = { like_pat, event_code };
+const char *q =
+    "SELECT swimmer, swim_time, "
     "to_char(swim_date,'YYYY-MM-DD'), "
     "standard, meet, sort_key FROM swim_times "
-    "WHERE swimmer ILIKE '%%%s%%' AND event = '%s' "
-    "ORDER BY sort_key\"",
-    db_psql_command(), sw->match_substr, event_code);
+    "WHERE swimmer ILIKE $1 AND event = $2 "
+    "ORDER BY sort_key";
 
-@ The pipe is opened, each line is parsed into a |TimeRow|, and
-the buffer for the eventually-printed |swimmer_name| is captured
-from the first row.  The age window is honoured here so that an
+@ The query is executed, the result is iterated, and each tuple is
+copied into a |TimeRow|.  The age window is honoured here so that an
 offline query that ignores the filter (e.g.\ a wider DB range) still
 produces age-appropriate output.
 
-@<Read offline rows@>=
+@<Read offline rows from libpq@>=
 char swimmer_buf[256] = "";
 const char *swimmer_name = swimmer_buf;
 TimeRow rows[MAX_TIMES];
 int nrows = 0;
 
-FILE *p = popen(cmd, "r");
-if (!p) {
-    fputs("Error: could not spawn psql for offline read\n", stderr);
+if (!db_conn) {
+    fputs("Error: no DB connection for offline read\n", stderr);
     return;
 }
-char line[2048];
-while (fgets(line, sizeof line, p) && nrows < MAX_TIMES) {
-    @<Parse one offline row@>
+PGresult *res = PQexecParams(db_conn, q, 2, NULL, params,
+                             NULL, NULL, 0);
+if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+    fprintf(stderr, "Error: offline query failed: %s",
+        PQerrorMessage(db_conn));
+    PQclear(res);
+    return;
 }
-pclose(p);
+int total = PQntuples(res);
+for (int i = 0; i < total && nrows < MAX_TIMES; i++) {
+    @<Copy one libpq row@>
+}
+PQclear(res);
 
-@ A single \.{psql} pipe-separated row carries six fields: swimmer
-name, time, date, standard, meet, sort key.  Trailing newline is
-stripped before splitting.  Rows that fall outside the swimmer's
-optional age window are skipped without incrementing |nrows|.
+@ Each tuple carries six columns matching the \.{SELECT} list:
+swimmer name, time, date, standard, meet, sort key.  Rows that
+fall outside the swimmer's optional age window are skipped without
+incrementing |nrows|.
 
-@<Parse one offline row@>=
-size_t L = strlen(line);
-if (L && line[L-1] == '\n') line[--L] = '\0';
-char *fields[6];
-if (offline_split(line, fields, 6) < 6) continue;
-if (sw->date_min && strcmp(fields[2], sw->date_min) < 0) continue;
-if (sw->date_max && strcmp(fields[2], sw->date_max) > 0) continue;
+@<Copy one libpq row@>=
+const char *f0 = PQgetvalue(res, i, 0);
+const char *f1 = PQgetvalue(res, i, 1);
+const char *f2 = PQgetvalue(res, i, 2);
+const char *f3 = PQgetvalue(res, i, 3);
+const char *f4 = PQgetvalue(res, i, 4);
+const char *f5 = PQgetvalue(res, i, 5);
+if (sw->date_min && strcmp(f2, sw->date_min) < 0) continue;
+if (sw->date_max && strcmp(f2, sw->date_max) > 0) continue;
 if (!*swimmer_buf) {
-    strncpy(swimmer_buf, fields[0], sizeof swimmer_buf - 1);
+    strncpy(swimmer_buf, f0, sizeof swimmer_buf - 1);
     swimmer_buf[sizeof swimmer_buf - 1] = '\0';
 }
-strncpy(rows[nrows].time,     fields[1], sizeof rows[nrows].time - 1);
+strncpy(rows[nrows].time, f1, sizeof rows[nrows].time - 1);
 rows[nrows].time[sizeof rows[nrows].time - 1] = '\0';
-strncpy(rows[nrows].date,     fields[2], sizeof rows[nrows].date - 1);
+strncpy(rows[nrows].date, f2, sizeof rows[nrows].date - 1);
 rows[nrows].date[sizeof rows[nrows].date - 1] = '\0';
-strncpy(rows[nrows].standard, fields[3], sizeof rows[nrows].standard - 1);
+strncpy(rows[nrows].standard, f3, sizeof rows[nrows].standard - 1);
 rows[nrows].standard[sizeof rows[nrows].standard - 1] = '\0';
-strncpy(rows[nrows].meet,     fields[4], sizeof rows[nrows].meet - 1);
+strncpy(rows[nrows].meet, f4, sizeof rows[nrows].meet - 1);
 rows[nrows].meet[sizeof rows[nrows].meet - 1] = '\0';
-rows[nrows].sort_key = strtod(fields[5], NULL);
+rows[nrows].sort_key = strtod(f5, NULL);
 nrows++;
 
 @* Main program.
@@ -949,7 +974,11 @@ Kenneth's entry uses ``kenneth ray'' and Keith's uses ``keith santiago''
 to avoid false matches on the common surname ``Evans''.
 Katie Ledecky was born 17~March~1997, so the window
 \.{2006-03-17} through \.{2008-03-16} captures every swim from her
-ninth birthday up to (but not including) her eleventh.
+ninth birthday up to (but not including) her eleventh.  The same
+construction yields \.{2008-03-17} through \.{2010-03-16} for the
+11- and 12-year-old window (\.{ledecky12}) and \.{2010-03-17}
+through \.{2012-03-16} for the 13- and 14-year-old window
+(\.{ledecky14}).
 
 @<Main function@>=
 static const Swimmer SWIMMERS[] = {
@@ -958,7 +987,11 @@ static const Swimmer SWIMMERS[] = {
     { "Ray Evans",       "kenneth ray",    OPT_KENNY,     NULL, NULL },
     { "Santiago Evans",  "keith santiago", OPT_KEITH,     NULL, NULL },
     { "Ledecky",         "katie",          OPT_LEDECKY10,
-      "2006-03-17", "2008-03-16" }
+      "2006-03-17", "2008-03-16" },
+    { "Ledecky",         "katie",          OPT_LEDECKY12,
+      "2008-03-17", "2010-03-16" },
+    { "Ledecky",         "katie",          OPT_LEDECKY14,
+      "2010-03-17", "2012-03-16" }
 };
 #define NUM_SWIMMERS ((int)(sizeof SWIMMERS / sizeof SWIMMERS[0]))
 
@@ -980,6 +1013,8 @@ static void parse_opts_str(const char *s)
         else if (strcmp(tok, "kenny")     == 0) g_opts |= OPT_KENNY;
         else if (strcmp(tok, "keith")     == 0) g_opts |= OPT_KEITH;
         else if (strcmp(tok, "ledecky10") == 0) g_opts |= OPT_LEDECKY10;
+        else if (strcmp(tok, "ledecky12") == 0) g_opts |= OPT_LEDECKY12;
+        else if (strcmp(tok, "ledecky14") == 0) g_opts |= OPT_LEDECKY14;
         else if (strcmp(tok, "fastest")   == 0) g_opts |= OPT_FASTEST;
         else if (strcmp(tok, "csv")       == 0) g_opts |= OPT_CSV;
         else if (strcmp(tok, "store")     == 0) g_opts |= OPT_STORE;
@@ -1040,9 +1075,11 @@ fprintf(stderr,
     "       kenny       restrict output to Kenneth Ray Evans\n"
     "       keith       restrict output to Keith Santiago Evans\n"
     "       ledecky10   Katie Ledecky's 9- and 10-year-old times\n"
+    "       ledecky12   Katie Ledecky's 11- and 12-year-old times\n"
+    "       ledecky14   Katie Ledecky's 13- and 14-year-old times\n"
     "       fastest     print only the single fastest time per event\n"
     "       csv         emit CSV output (header + one line per time)\n"
-    "       store       persist each row to Postgres swim-times via psql\n"
+    "       store       persist each row to Postgres swim-times via libpq\n"
     "       offline     read times from the Postgres swim-times DB\n"
     "                   instead of querying USA Swimming over the network\n\n",
     prog);
@@ -1131,7 +1168,13 @@ if (!(g_opts & OPT_OFFLINE))
 if (g_opts & OPT_CSV)
     printf("\"Swimmer\",\"Event\",\"Time\",\"Date\",\"Standard\",\"Meet\"\n");
 
-if (g_opts & OPT_STORE) db_open();
+if (g_opts & (OPT_STORE | OPT_OFFLINE)) {
+    int ok = db_open();
+    if (!ok && (g_opts & OPT_OFFLINE)) {
+        fputs("Error: offline mode requires a DB connection\n", stderr);
+        return 1;
+    }
+}
 
 @ Each swimmer is visited in turn.  The swimmer-filter mask is applied
 before the expensive |PersonKey| lookup.  The DB pipe (if any) is
@@ -1139,7 +1182,7 @@ flushed and closed before \.{libcurl} is torn down.
 
 @<Fetch and print swimmer times@>=
 int swimmer_mask = OPT_STELLA | OPT_KALEA | OPT_KENNY | OPT_KEITH
-                 | OPT_LEDECKY10;
+                 | OPT_LEDECKY10 | OPT_LEDECKY12 | OPT_LEDECKY14;
 
 for (int s = 0; s < NUM_SWIMMERS; s++) {
     @<Process one swimmer@>

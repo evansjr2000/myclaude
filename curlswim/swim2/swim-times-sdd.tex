@@ -212,19 +212,19 @@ chunks (the order in which they appear in the tangled output):
   \toprule
   \textbf{Chunk} & \textbf{Responsibility} \\
   \midrule\endhead
-  \code{Includes}                 & Standard headers and \code{<curl/curl.h>}       \\
+  \code{Includes}                 & Standard headers, \code{<curl/curl.h>}, \code{<libpq-fe.h>} \\
   \code{Global constants}         & Numeric limits, Sisense token, event table     \\
   \code{Option flags}             & \code{OPT\_*} bitmasks and global option state \\
   \code{Type definitions}         & \code{Buffer}, \code{TimeRow}, \code{Swimmer}
                                     structs                                          \\
   \code{HTTP utilities}           & \code{write\_cb}, \code{post\_json}            \\
   \code{JSON scanner}             & \code{scan\_string}, \code{scan\_long}         \\
-  \code{Database pipe}            & \code{db\_psql\_command}, \code{db\_open},
-                                    \code{db\_close}, \code{csv\_emit\_field}        \\
+  \code{Database connection}      & \code{db\_conn\_string}, \code{db\_open},
+                                    \code{db\_close}, \code{db\_insert\_row}        \\
   \code{Person lookup}            & \code{lookup\_person\_key}                     \\
   \code{Times fetch}              & \code{insertion\_sort}, \code{format\_date},
                                     \code{fetch\_times}                            \\
-  \code{Offline fetch}            & \code{offline\_split}, \code{offline\_fetch}    \\
+  \code{Offline fetch}            & \code{offline\_fetch} (libpq \code{SELECT})    \\
   \code{Main function}            & Option parsing, swimmer table, \code{main}     \\
   \bottomrule
 \end{longtable}
@@ -253,24 +253,23 @@ parse, and print.
   \code{fetch\_times}   & \code{post\_json}, \code{scan\_string},
                           \code{insertion\_sort}, \code{format\_date},
                           \code{csv\_emit\_field}                        \\
-  \code{offline\_fetch} & \code{popen}, \code{offline\_split},
+  \code{offline\_fetch} & \code{PQexecParams}, \code{PQgetvalue},
                           \code{insertion\_sort}                          \\
-  \code{db\_open}/\code{db\_close} & \code{popen}/\code{pclose} +
-                          \code{psql} child process                       \\
+  \code{db\_open}/\code{db\_close} & \code{PQconnectdb}, \code{PQprepare},
+                          \code{PQfinish} (libpq)                         \\
+  \code{db\_insert\_row} & \code{PQexecPrepared} (libpq)                  \\
   \code{post\_json}     & \code{libcurl} easy interface                  \\
   \code{post\_json}     & \code{write\_cb} (callback)                    \\
   \bottomrule
 \end{tabular}
 \end{center}
 
-The dependency graph is acyclic.  The only linked external
-dependency is \code{libcurl}; Postgres is reached through a
-child \texttt{psql} process spawned by \texttt{popen(3)}, so no
-\texttt{libpq} is statically required.  Furthermore the host is
-not assumed to provide a \texttt{psql} client at all: by default
-\code{db\_psql\_command} expands to \texttt{../../pg/pg.sh psql},
-which executes \texttt{psql} \emph{inside} the Postgres container
-via \texttt{docker exec}.
+The dependency graph is acyclic.  The two linked external
+dependencies are \code{libcurl} (HTTP) and \code{libpq} (Postgres
+client library), both linked at build time.  Postgres is reached
+\emph{programmatically} via libpq calls --- no external
+\texttt{psql} process or shell wrapper is involved (this
+realises requirement~\#3 of \texttt{requirements4.txt}).
 
 % --------------------------- 4.4 ---------------------------------
 \subsection{Information view (data structures)}
@@ -306,7 +305,10 @@ typedef struct {
 A static configuration record describing how to identify each
 tracked swimmer in the Sisense Persons table and, optionally,
 the inclusive ISO date window to which results are restricted
-(used by \code{ledecky10}).
+(used by \code{ledecky10}, \code{ledecky12}, \code{ledecky14}).
+The same physical swimmer may appear in \code{SWIMMERS[]} more
+than once with distinct date windows --- this is how the three
+Ledecky age-group views are realised.
 
 \begin{lstlisting}
 typedef struct {
@@ -364,22 +366,29 @@ Both carry the headers \code{Content-Type: application/json} and
 \code{Authorization: Bearer \{SISENSE\_TOKEN\}}.
 
 \paragraph{Database interface.}
-Postgres is reached only through a child \texttt{psql} process
-launched by \texttt{popen(3)} (REQ-I-12, REQ-I-13).  The shell
-prefix is taken from the environment variable
-\texttt{SWIM\_TIMES\_PSQL} when set, otherwise the default
-\texttt{../../pg/pg.sh psql} is used --- the \texttt{pg.sh}
-wrapper, which runs \texttt{psql} inside the container via
-\texttt{docker exec}, so the host need not have a \texttt{psql}
-client of its own.  Two access patterns are needed:
+Postgres is reached \emph{programmatically} through the
+\texttt{libpq} client library (\req{REQ-I-12}) --- no
+\texttt{psql} child process and no shell wrapper.  The
+connection string is taken from
+\texttt{SWIM\_TIMES\_PGCONNINFO} when set, otherwise the
+default keyword string
+\texttt{dbname=swim-times user=postgres host=localhost port=5432}.
+A single \code{PGconn} is opened in \code{db\_open} and reused
+for the lifetime of the run.  Two access patterns are needed:
 \begin{itemize}
-  \item Write (\code{store}): a single
-        \texttt{COPY swim\_times (\dots) FROM~STDIN WITH (FORMAT csv)}
-        invocation streamed for the lifetime of the run.
-  \item Read (\code{offline}): one
-        \texttt{psql -t -A -F'|' -c 'SELECT \dots'} per event,
-        emitting pipe-separated rows that the parser splits on
-        the \texttt{|} character.
+  \item Write (\code{store}): a prepared statement
+        \texttt{INSERT INTO swim\_times (\dots) VALUES
+        (\$1\dots\$7) ON CONFLICT (swimmer, event, swim\_time,
+        swim\_date, meet) DO NOTHING}, executed once per row via
+        \code{PQexecPrepared}.  Per-row inserts (rather than a
+        single \texttt{COPY}) let \texttt{ON~CONFLICT~DO~NOTHING}
+        absorb duplicates one at a time without rolling back the
+        whole batch (\req{REQ-F-75}).
+  \item Read (\code{offline}): one parameterised
+        \texttt{SELECT \dots\ FROM swim\_times WHERE swimmer
+        ILIKE \$1 AND event = \$2} per event via
+        \code{PQexecParams}; tuples are read with
+        \code{PQgetvalue}.
 \end{itemize}
 
 \paragraph{Standard output.}
@@ -396,9 +405,13 @@ A typical invocation flows through the following sequence:
   \item \code{main} parses \code{-o} / \code{-e} via \code{getopt}.
   \item Unless \code{offline} is set, \code{main} initialises
         libcurl (\code{curl\_global\_init}).
-  \item If \code{store} is set, \code{main} calls \code{db\_open}
-        which spawns a \texttt{psql} child running a
-        \texttt{COPY \dots\ FROM~STDIN} transaction.
+  \item If either \code{store} or \code{offline} is set,
+        \code{main} calls \code{db\_open} which opens a libpq
+        connection (\code{PQconnectdb}) and prepares the
+        idempotent \code{INSERT \dots\ ON~CONFLICT~DO~NOTHING}
+        statement.  Failure under \code{offline} is fatal;
+        failure under \code{store} only is logged and persistence
+        is silently disabled.
   \item For each entry in \code{SWIMMERS} not masked out by
         \code{g\_opts}, the dispatcher chooses the online or
         offline path:
@@ -411,15 +424,16 @@ A typical invocation flows through the following sequence:
                 \code{Swimmer}'s optional date window, sorts the
                 rows, and emits them to stdout, the DB pipe, or
                 both per the option mask.
-          \item \emph{Offline.} \code{offline\_fetch} runs
-                \texttt{psql -c 'SELECT \dots'} for each event,
-                parses pipe-separated rows back into a
-                \code{TimeRow} array, applies the date window,
-                sorts, and emits.  No HTTP is performed.
+          \item \emph{Offline.} \code{offline\_fetch} runs a
+                parameterised \texttt{SELECT \dots\ FROM swim\_times}
+                via \code{PQexecParams} for each event, copies
+                each tuple into a \code{TimeRow} array, applies
+                the date window, sorts, and emits.  No HTTP is
+                performed; no child process is spawned.
         \end{enumerate}
-  \item \code{main} calls \code{db\_close} (no-op when no DB
-        pipe was opened) and, unless \code{offline}, also calls
-        \code{curl\_global\_cleanup} before exiting.
+  \item \code{main} calls \code{db\_close} (no-op when no
+        connection was opened) and, unless \code{offline}, also
+        calls \code{curl\_global\_cleanup} before exiting.
 \end{enumerate}
 
 % --------------------------- 4.7 ---------------------------------
@@ -512,34 +526,60 @@ together, and splitting them would force the caller to thread
 the \code{PersonKey} through the shell, complicating every
 invocation for no gain.
 
-\subsection{Why \texttt{psql} via \texttt{pg.sh}, not \texttt{libpq}?}
+\subsection{Why \texttt{libpq} (programmatic), not \texttt{psql}?}
 
-The host build environment is not assumed to carry either
-\texttt{libpq} headers \emph{or} a \texttt{psql} client --- the
-project's macOS development host has neither installed.  What it
-does have is the \texttt{pg.sh} wrapper alongside a Postgres
-Docker container; \texttt{pg.sh psql} runs \texttt{psql}
-\emph{inside} that container via \texttt{docker exec}, so the
-client binary ships with the database itself.  Spawning
-\texttt{pg.sh psql} through \texttt{popen(3)} therefore
-(a)~keeps the swim-times binary's link-time dependency surface
-unchanged (\req{REQ-D-04}: still only \texttt{libcurl} + libc),
-(b)~removes the host \texttt{psql} assumption entirely
-(\req{REQ-I-13}), and (c)~still uses Postgres's optimised
-\texttt{COPY \dots\ FROM~STDIN} bulk path on the write side.  The
-cost is one \texttt{docker~exec} per run for \code{store} and one
-per event for \code{offline} --- both negligible against the
-100~ms-class network latencies dominating online runs.
+Earlier revisions reached Postgres by spawning a child
+\texttt{psql} (via \texttt{pg.sh}) and either piping CSV into
+\texttt{COPY \dots\ FROM~STDIN} or capturing pipe-separated
+\texttt{SELECT} output.  Requirement~\#3 of
+\texttt{requirements4.txt} reverses that decision: ``Access the
+Postgres database programmatically, not through scripts.''  The
+revised design therefore links \texttt{libpq} (Postgres's C
+client library, autodetected via \texttt{pg\_config} in the
+Makefile) and reaches the database through the standard
+\code{PQ*} call surface --- \code{PQconnectdb},
+\code{PQprepare}, \code{PQexecPrepared}, \code{PQexecParams}.
+This (a)~eliminates the shell quoting and \texttt{popen}
+\texttt{SIGPIPE} hazards of the previous design,
+(b)~lets duplicate inserts be absorbed one row at a time by an
+\texttt{ON~CONFLICT~DO~NOTHING} clause without aborting the
+batch (the \texttt{COPY} path could not), and (c)~replaces the
+brittle pipe-separated \texttt{SELECT} output with binary-safe
+\code{PGresult} field access.  The cost is one new link-time
+dependency on \code{libpq}; the SRS allowlist (\req{REQ-D-04})
+is updated accordingly.
+
+\subsection{Why per-row \texttt{INSERT \dots\ ON~CONFLICT}, not \texttt{COPY}?}
+
+Requirement~\#4 of \texttt{requirements4.txt} demands that the
+program ``check for duplicates before adding information \dots\
+and recover appropriately if data already present.''  A bulk
+\texttt{COPY \dots\ FROM~STDIN} cannot satisfy this: the first
+row that violates the unique constraint aborts the entire
+transaction, taking with it every subsequently-streamed row.
+Switching to per-row \texttt{INSERT \dots\ ON CONFLICT
+(swimmer, event, swim\_time, swim\_date, meet) DO NOTHING}
+makes each insert independently idempotent: a duplicate is a
+silent no-op, the run exits~0, nothing is written to standard
+error, and any genuinely-new rows in the same invocation are
+still persisted.  The cost is $N$ round trips instead of one
+streamed transaction, but $N$ is at most a few hundred per
+invocation and each insert completes in well under a
+millisecond against the local container.
 
 \subsection{Why a date-window field on \texttt{Swimmer}?}
 
-\code{ledecky10} demands age-bracket filtering that the
-USA~Swimming JAQL endpoint does not directly express.  Storing
-the date window on the \code{Swimmer} record (rather than as a
-separate command-line flag) keeps the per-swimmer policy in one
-place and makes new historical comparisons additive: another
-swimmer with a different age window can be added by appending a
-single row to \code{SWIMMERS} with no change to \code{main}.
+\code{ledecky10}, \code{ledecky12}, and \code{ledecky14} all
+demand age-bracket filtering that the USA~Swimming JAQL
+endpoint does not directly express.  Storing the date window on
+the \code{Swimmer} record (rather than as a separate
+command-line flag) keeps the per-swimmer policy in one place
+and makes new historical comparisons additive: another swimmer
+(or another age window for the same swimmer, as the three
+Ledecky entries demonstrate) can be added by appending a single
+row to \code{SWIMMERS} with no change to \code{main} ---
+exactly the path used to satisfy
+requirements4.txt~\#1 and \#1a.
 
 \vfill
 \begin{center}

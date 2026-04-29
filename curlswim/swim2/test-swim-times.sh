@@ -85,15 +85,17 @@ else
     fail REQ-D-03 "oversized chunks: $audit"
 fi
 
-# REQ-D-04: only libcurl + libc dynamic deps
+# REQ-D-04: only libcurl, libpq, libc, and TLS as dynamic deps.
+# (libpq joined the allowlist in requirements4.txt #3, which mandated
+# programmatic Postgres access via libpq instead of a psql child process.)
 case "$(uname)" in
     Darwin) deps=$(otool -L "$BIN" 2>/dev/null | tail -n +2 | awk '{print $1}') ;;
     Linux)  deps=$(ldd "$BIN" 2>/dev/null | awk '{print $1}') ;;
     *)      deps="" ;;
 esac
-extras=$(printf '%s\n' "$deps" | grep -Ev 'libcurl|libSystem|libc\.|libssl|libcrypto|libz|ld-linux|linux-vdso|/usr/lib/system|/System/' | grep -v '^$' || true)
+extras=$(printf '%s\n' "$deps" | grep -Ev 'libcurl|libpq|libSystem|libc\.|libssl|libcrypto|libz|libintl|libldap|libsasl|libgssapi|libkrb5|libcom_err|libheimdal|libheimntlm|libhx509|libwind|libroken|libasn1|libpcre|libssh|libnghttp|liboauth|ld-linux|linux-vdso|/usr/lib/system|/System/' | grep -v '^$' || true)
 if [ -z "$extras" ]; then
-    pass REQ-D-04 "binary links only libc/libcurl/TLS"
+    pass REQ-D-04 "binary links only {libc, libcurl, libpq, TLS, support libs}"
 else
     fail REQ-D-04 "unexpected dependencies: $extras"
 fi
@@ -316,13 +318,17 @@ else
         fail REQ-A-01 "repeated invocations differ"
     fi
 
-    # REQ-F-11: when no swimmer keyword but -e supplied, all five are processed
+    # REQ-F-11: when no swimmer keyword but -e supplied, all SWIMMERS[]
+    # entries are processed.  There are seven entries: the four Evans/
+    # Benavente swimmers plus three age-windowed Ledecky entries
+    # (ledecky10, ledecky12, ledecky14) that share the same person but
+    # carry distinct date filters.
     "$BIN" -e "50 FR SCY" >/tmp/swim-times-all.out 2>&1
     nsw=$(grep -cE "^Swimmer: " /tmp/swim-times-all.out || true)
-    if [ "$nsw" = "5" ]; then
-        pass REQ-F-11 "no -o swimmer keyword + -e processes all 5 swimmers"
+    if [ "$nsw" = "7" ]; then
+        pass REQ-F-11 "no -o swimmer keyword + -e processes all 7 entries"
     else
-        fail REQ-F-11 "expected 5 Swimmer: lines, saw $nsw"
+        fail REQ-F-11 "expected 7 Swimmer: lines, saw $nsw"
     fi
 
     # REQ-F-13: ledecky10 keyword resolves to Katie Genevieve Ledecky
@@ -341,6 +347,26 @@ else
         pass REQ-F-14 "ledecky10 dates fall within 9-10 yr-old window"
     else
         fail REQ-F-14 "out-of-window dates: $bad"
+    fi
+
+    # REQ-F-15: ledecky12 date filter restricts dates to 2008-03-17..2010-03-16
+    "$BIN" -o ledecky12,csv -e "100 FR SCY" >/tmp/swim-times-ledecky12-csv.out 2>&1
+    bad=$(awk -F, 'NR>1 { d=$4; gsub(/[",]/,"",d); if (d<"2008-03-17"||d>"2010-03-16") print }' \
+              /tmp/swim-times-ledecky12-csv.out)
+    if [ -z "$bad" ]; then
+        pass REQ-F-15 "ledecky12 dates fall within 11-12 yr-old window"
+    else
+        fail REQ-F-15 "out-of-window dates: $bad"
+    fi
+
+    # REQ-F-16: ledecky14 date filter restricts dates to 2010-03-17..2012-03-16
+    "$BIN" -o ledecky14,csv -e "100 FR SCY" >/tmp/swim-times-ledecky14-csv.out 2>&1
+    bad=$(awk -F, 'NR>1 { d=$4; gsub(/[",]/,"",d); if (d<"2010-03-17"||d>"2012-03-16") print }' \
+              /tmp/swim-times-ledecky14-csv.out)
+    if [ -z "$bad" ]; then
+        pass REQ-F-16 "ledecky14 dates fall within 13-14 yr-old window"
+    else
+        fail REQ-F-16 "out-of-window dates: $bad"
     fi
 
     # REQ-F-21: with no -e, all 31 default events are queried
@@ -411,9 +437,20 @@ else
     if [ "$before" = "$after" ]; then
         pass REQ-F-73 "rerun did not duplicate rows (UNIQUE constraint)"
     else
-        # Duplicate insert is reported as an error by psql; that's fine,
-        # the constraint did its job and the count must not have grown.
         fail REQ-F-73 "row count changed: $before -> $after"
+    fi
+
+    # REQ-F-75: duplicate insert recovers gracefully (requirements4.txt #4).
+    # The program must exit 0 with no warnings on stderr when re-storing
+    # already-present rows; ON CONFLICT DO NOTHING is the recovery path.
+    "$BIN" -o stella,store -e "100 FR SCY" \
+        >/tmp/swim-times-store3.out 2>/tmp/swim-times-store3.err
+    rc=$?
+    err_lines=$(wc -l </tmp/swim-times-store3.err | tr -d ' ')
+    if [ "$rc" = "0" ] && [ "$err_lines" = "0" ]; then
+        pass REQ-F-75 "duplicate-insert run exited 0 with no stderr"
+    else
+        fail REQ-F-75 "rc=$rc err_lines=$err_lines (see /tmp/swim-times-store3.err)"
     fi
 fi
 
