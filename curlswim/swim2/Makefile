@@ -5,8 +5,18 @@ C_SRC    = swim-times.c
 TEX_SRC  = swim-times.tex
 
 CC       = cc
-CFLAGS   = -O2 -Wall
-LDFLAGS  = $(shell curl-config --libs 2>/dev/null || echo "-lcurl")
+
+# libpq (Postgres C client) is reached via pg_config; on macOS Homebrew
+# ships it at /opt/homebrew/opt/libpq/bin/pg_config since libpq is a
+# keg-only formula.  Override PG_CONFIG on the make command line for
+# non-default installations.
+PG_CONFIG ?= $(shell command -v pg_config 2>/dev/null || \
+                     echo /opt/homebrew/opt/libpq/bin/pg_config)
+PG_CFLAGS  = -I$(shell $(PG_CONFIG) --includedir)
+PG_LDFLAGS = -L$(shell $(PG_CONFIG) --libdir) -lpq
+
+CFLAGS   = -O2 -Wall $(PG_CFLAGS)
+LDFLAGS  = $(shell curl-config --libs 2>/dev/null || echo "-lcurl") $(PG_LDFLAGS)
 
 .PHONY: all tangle weave compile clean run
 

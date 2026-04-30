@@ -90,8 +90,10 @@ output is:
 @<Type definitions@> @/
 @<HTTP utilities@> @/
 @<JSON scanner@> @/
+@<Database pipe@> @/
 @<Person lookup@> @/
 @<Times fetch@> @/
+@<Offline fetch@> @/
 @<Main function@>
 
 @* Includes and constants.
@@ -101,7 +103,9 @@ output is:
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include <curl/curl.h>
+#include <libpq-fe.h>
 
 @ The Sisense bearer token authenticates us against the analytics
 instance that backs \.{data.usaswimming.org}.  |EVENTS| lists all
@@ -169,17 +173,26 @@ static const char *EVENTS[NUM_EVENTS] = {
 @ The program accepts two optional flags on the command line.
 
 The \.{-o} flag takes a comma-separated list of one or more keywords.
-Six keywords are recognised:
+Nine keywords are recognised:
 \medskip
 \item{$\bullet$} \.{stella} --- output only Stella Julianna Evans' events.
 \item{$\bullet$} \.{kalea} --- output only Kalea Rose Benavente's events.
 \item{$\bullet$} \.{kenny} --- output only Kenneth Ray Evans' events.
 \item{$\bullet$} \.{keith} --- output only Keith Santiago Evans' events.
+\item{$\bullet$} \.{ledecky10} --- output only Katie Ledecky's times as a 9- or 10-year-old.
+\item{$\bullet$} \.{ledecky12} --- output only Katie Ledecky's times as an 11- or 12-year-old.
+\item{$\bullet$} \.{ledecky14} --- output only Katie Ledecky's times as a 13- or 14-year-old.
 \item{$\bullet$} \.{fastest} --- print only the single fastest time per event.
 \item{$\bullet$} \.{csv} --- emit CSV lines (swimmer name on every line) instead of a table.
+\item{$\bullet$} \.{store} --- write each row to the local Postgres
+    database \.{swim-times} via \.{libpq}; combine with \.{csv} to also
+    print to the terminal.
+\item{$\bullet$} \.{offline} --- skip all network calls; read times from
+    the local Postgres \.{swim-times} database instead.
 \medskip\noindent
-Keywords may be combined, e.g.\ \.{-o stella,fastest} or \.{-o kalea,csv}.
-When no swimmer keyword is specified all four swimmers are shown.
+Keywords may be combined, e.g.\ \.{-o stella,fastest} or
+\.{-o kalea,csv,store}.
+When no swimmer keyword is specified all swimmers (subject to mode) are shown.
 
 The \.{-e} flag takes one or more comma-separated event codes
 (e.g.\ \.{-e "100 FR SCY,50 FL LCM"}) and restricts output to those events
@@ -189,12 +202,17 @@ When \.{-e} is omitted all thirty-one events are reported.
 If no options are given at all the program prints a usage message and exits.
 
 @<Option flags@>=
-#define OPT_STELLA  (1<<0)  /* restrict output to Stella's events         */
-#define OPT_KALEA   (1<<1)  /* restrict output to Kalea's events          */
-#define OPT_FASTEST (1<<2)  /* print only the single fastest time         */
-#define OPT_CSV     (1<<3)  /* emit CSV lines instead of a table          */
-#define OPT_KENNY   (1<<4)  /* restrict output to Kenneth Ray Evans       */
-#define OPT_KEITH   (1<<5)  /* restrict output to Keith Santiago Evans    */
+#define OPT_STELLA    (1<<0)  /* restrict output to Stella's events       */
+#define OPT_KALEA     (1<<1)  /* restrict output to Kalea's events        */
+#define OPT_FASTEST   (1<<2)  /* print only the single fastest time       */
+#define OPT_CSV       (1<<3)  /* emit CSV lines instead of a table        */
+#define OPT_KENNY     (1<<4)  /* restrict output to Kenneth Ray Evans     */
+#define OPT_KEITH     (1<<5)  /* restrict output to Keith Santiago Evans  */
+#define OPT_LEDECKY10 (1<<6)  /* restrict to Katie Ledecky 9-10 yr times  */
+#define OPT_STORE     (1<<7)  /* also persist rows to Postgres            */
+#define OPT_OFFLINE   (1<<8)  /* read from Postgres, skip network         */
+#define OPT_LEDECKY12 (1<<9)  /* restrict to Katie Ledecky 11-12 yr times */
+#define OPT_LEDECKY14 (1<<10) /* restrict to Katie Ledecky 13-14 yr times */
 
 static int  g_opts    = 0;  /* output-selection flags; 0 = show everything */
 static char g_events[NUM_EVENTS][32]; /* event codes requested via \.{-e}  */
@@ -227,6 +245,23 @@ typedef struct {
     char   standard[48];
     char   meet[256];
 } TimeRow;
+
+@ A |Swimmer| record holds the per-swimmer search parameters: a query
+string sent to the person-search API, a lower-case substring used to
+identify the correct row, a flag bit used to filter output, and an
+optional age window expressed as ISO~\.{YYYY-MM-DD} dates.  The
+typedef lives in this section (rather than next to the |SWIMMERS|
+array in main) so that |offline_fetch| can reference it without a
+forward declaration.
+
+@<Type definitions@>+=
+typedef struct {
+    const char *search_query;  /* Name string to search for             */
+    const char *match_substr;  /* Lower-case substring to match         */
+    int         flag;          /* |OPT_STELLA|, |OPT_KALEA|, etc.       */
+    const char *date_min;      /* NULL or "YYYY-MM-DD" inclusive lower  */
+    const char *date_max;      /* NULL or "YYYY-MM-DD" inclusive upper  */
+} Swimmer;
 
 @* HTTP utilities.
 
@@ -351,6 +386,123 @@ static int scan_long(const char *key, const char **pos, long *out)
     return 1;
 }
 
+@* Database connection.
+
+@ The \.{store} option streams rows into the local Postgres database
+\.{swim-times}; the \.{offline} option reads previously-stored rows
+back.  Both reach Postgres \emph{programmatically} via the standard
+client library \.{libpq} --- no \.{psql} child process or wrapper
+script is involved (this is requirement~\#3 of \.{requirements4.txt}:
+``Access the Postgres database programmatically, not through scripts'').
+A connection string can be supplied via the |SWIM_TIMES_PGCONNINFO|
+environment variable; if unset the program connects to a local
+container with the keyword string
+\.{dbname=swim-times user=postgres host=localhost port=5432}.
+Per-row inserts use \.{INSERT \dots\ ON CONFLICT \dots\ DO NOTHING}
+keyed on the unique tuple
+\.{(swimmer, event, swim\_time, swim\_date, meet)} so a duplicate
+silently no-ops without aborting the surrounding work
+(requirement~\#4: ``check for duplicates before adding \dots\ and
+recover appropriately'').
+
+@<Database pipe@>=
+@<Resolve connection string@>
+@<Open and close DB connection@>
+@<Insert one row@>
+
+@ |db_conn_string| returns the libpq connection string.  Override
+at runtime with |SWIM_TIMES_PGCONNINFO|.
+
+@<Resolve connection string@>=
+static const char *db_conn_string(void)
+{
+    const char *e = getenv("SWIM_TIMES_PGCONNINFO");
+    return (e && *e)
+        ? e
+        : "dbname=swim-times user=postgres host=localhost port=5432";
+}
+
+@ |db_open| opens a libpq connection and prepares the parameterised
+\.{INSERT \dots\ ON CONFLICT DO NOTHING} statement that all
+\code{store} writes use.  |db_close| releases the connection.  Both
+are idempotent.  The \.{ON CONFLICT} clause keys on the same unique
+constraint declared by \.{schema.sql}, so a duplicate row is a
+no-op rather than an error.
+
+@<Open and close DB connection@>=
+static PGconn *db_conn = NULL;
+#define DB_INSERT_STMT "swim_times_insert_v1"
+@<Open DB connection@>
+@<Close DB connection@>
+
+@ Connection establishment.  A failure is non-fatal here: the caller
+chooses whether to abort.  In \code{store} mode the program continues
+without persisting; in \code{offline} mode the caller bails out.
+
+@<Open DB connection@>=
+static int db_open(void)
+{
+    db_conn = PQconnectdb(db_conn_string());
+    if (PQstatus(db_conn) != CONNECTION_OK) {
+        fprintf(stderr,
+            "Warning: libpq connection failed: %s",
+            PQerrorMessage(db_conn));
+        PQfinish(db_conn); db_conn = NULL;
+        return 0;
+    }
+    @<Prepare insert statement@>
+    return 1;
+}
+
+@ Tear-down.
+
+@<Close DB connection@>=
+static void db_close(void)
+{
+    if (db_conn) { PQfinish(db_conn); db_conn = NULL; }
+}
+
+@ The prepared insert.  Date and float casts let us pass every
+parameter as a text string; libpq does the parsing.
+
+@<Prepare insert statement@>=
+PGresult *r = PQprepare(db_conn, DB_INSERT_STMT,
+    "INSERT INTO swim_times "
+    "(swimmer,event,swim_time,swim_date,standard,meet,sort_key) "
+    "VALUES ($1,$2,$3,$4::date,$5,$6,$7::float8) "
+    "ON CONFLICT (swimmer,event,swim_time,swim_date,meet) "
+    "DO NOTHING", 7, NULL);
+if (PQresultStatus(r) != PGRES_COMMAND_OK) {
+    fprintf(stderr, "Warning: prepare failed: %s",
+        PQerrorMessage(db_conn));
+    PQclear(r); PQfinish(db_conn); db_conn = NULL;
+    return 0;
+}
+PQclear(r);
+
+@ |db_insert_row| executes the prepared statement once for one
+\code{TimeRow}.  A duplicate hits the \.{ON CONFLICT DO NOTHING}
+branch and is silently absorbed; any other failure logs a warning
+but does not abort the run.
+
+@<Insert one row@>=
+static void db_insert_row(const char *swimmer, const char *event,
+                          const TimeRow *r)
+{
+    if (!db_conn) return;
+    char sk[64];
+    snprintf(sk, sizeof sk, "%g", r->sort_key);
+    const char *vals[7] = {
+        swimmer, event, r->time, r->date, r->standard, r->meet, sk
+    };
+    PGresult *res = PQexecPrepared(db_conn, DB_INSERT_STMT,
+                                   7, vals, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_COMMAND_OK)
+        fprintf(stderr, "Warning: insert failed: %s",
+            PQerrorMessage(db_conn));
+    PQclear(res);
+}
+
 @* Person lookup. |lookup_person_key| posts a search for |search_query| and scans
 the result rows for one whose full name contains |match_substr| (after
 lower-casing).  It returns a heap-allocated decimal |PersonKey| string
@@ -412,6 +564,8 @@ if (!resp) {
 
 @ Rows are scanned until one whose lower-cased name contains
 |match_substr| is found; its |PersonKey| is extracted and duplicated.
+The body of the while-loop is split into a separate sub-chunk so the
+outer scanner stays inside the twenty-four line limit.
 
 @<Scan person-search result@>=
 char *key  = NULL;
@@ -419,25 +573,32 @@ char *name = NULL;
 const char *p = strstr(resp, "\"values\"");
 
 while (p) {
-    char full_name[256];
-    if (!scan_string("text", &p, full_name, sizeof full_name)) break;
+    @<Match one person row@>
+}
 
-    char lower[256];
-    size_t flen = strlen(full_name);
-    for (size_t i = 0; i <= flen; i++)
-        lower[i] = (char)(full_name[i] >= 'A' && full_name[i] <= 'Z'
-                          ? full_name[i] + 32 : full_name[i]);
+@ For each row we extract the full name, lower-case it, and test the
+substring match.  When a match is found the |PersonKey| is converted
+to a heap string and the loop terminates.
 
-    if (strstr(lower, match_substr)) {
-        long pk;
-        if (scan_long("data", &p, &pk)) {
-            char tmp[32];
-            snprintf(tmp, sizeof tmp, "%ld", pk);
-            key  = strdup(tmp);
-            name = strdup(full_name);
-        }
-        break;
+@<Match one person row@>=
+char full_name[256];
+if (!scan_string("text", &p, full_name, sizeof full_name)) break;
+
+char lower[256];
+size_t flen = strlen(full_name);
+for (size_t i = 0; i <= flen; i++)
+    lower[i] = (char)(full_name[i] >= 'A' && full_name[i] <= 'Z'
+                      ? full_name[i] + 32 : full_name[i]);
+
+if (strstr(lower, match_substr)) {
+    long pk;
+    if (scan_long("data", &p, &pk)) {
+        char tmp[32];
+        snprintf(tmp, sizeof tmp, "%ld", pk);
+        key  = strdup(tmp);
+        name = strdup(full_name);
     }
+    break;
 }
 
 @ The response buffer is freed, a diagnostic is printed on failure, and
@@ -506,7 +667,8 @@ broken into five sub-modules.
 
 @<Times fetch@>+=
 static void fetch_times(const char *person_key, const char *event_code,
-                        const char *swimmer_name, int opts)
+                        const char *swimmer_name, int opts,
+                        const char *date_min, const char *date_max)
 {
     @<Build times-query URL@> @/
     @<Build times-query body@> @/
@@ -619,44 +781,179 @@ if (!scan_string("text", &p, date_str, sizeof date_str)) break;
 if (!scan_string("text", &p, std_str,  sizeof std_str))  break;
 @<Store one times row@>
 
-@ The five fields are written into |rows[nrows]| and the row count advances.
+@ The date is reformatted first so it can be tested against the
+swimmer's optional age window.  Rows that fall outside the window
+are skipped; \.{YYYY-MM-DD} sorts lexically so a plain |strcmp|
+suffices.  Surviving rows are copied into |rows[nrows]| and the row
+count advances.
 
 @<Store one times row@>=
+format_date(date_str, rows[nrows].date);
+if (date_min && strcmp(rows[nrows].date, date_min) < 0) continue;
+if (date_max && strcmp(rows[nrows].date, date_max) > 0) continue;
 rows[nrows].sort_key = strtod(sort_str, NULL);
 strncpy(rows[nrows].time, time_str, sizeof rows[nrows].time - 1);
 rows[nrows].time[sizeof rows[nrows].time - 1] = '\0';
-format_date(date_str, rows[nrows].date);
 strncpy(rows[nrows].standard, std_str, sizeof rows[nrows].standard - 1);
 rows[nrows].standard[sizeof rows[nrows].standard - 1] = '\0';
 strncpy(rows[nrows].meet, meet_str, sizeof rows[nrows].meet - 1);
 rows[nrows].meet[sizeof rows[nrows].meet - 1] = '\0';
 nrows++;
 
-@ After all rows are collected the response buffer is freed, the rows are
-sorted, and the result is printed in either CSV or table format.
+@ After all rows are collected the response buffer is freed and the
+common sort/emit chunk is invoked.  The emitter is shared with the
+offline path, which has no |resp| to free.
 
 @<Print times results@>=
 free(resp);
+@<Sort and emit rows@>
+
+@ The sort runs once and then up to three emitters are dispatched
+according to the option mask: CSV to stdout, DB pipe write, or the
+table to stdout.  CSV and DB emit can fire together; \.{store}
+without \.{csv} writes silently to the database while still printing
+the table.
+
+@<Sort and emit rows@>=
 insertion_sort(rows, nrows);
 int lim = (opts & OPT_FASTEST) ? (nrows > 0 ? 1 : 0) : nrows;
-if (opts & OPT_CSV) {
-    for (int i = 0; i < lim; i++)
-        printf("\"%s\",\"%s\",\"%s\",%s,\"%s\",\"%s\"\n",
-               swimmer_name ? swimmer_name : "", event_code,
-               rows[i].time, rows[i].date, rows[i].standard, rows[i].meet);
-} else {
-    printf("%s --- %s:\n", event_code,
-           (opts & OPT_FASTEST) ? "fastest time" : "all times (fastest first)");
-    printf("%-12s  %-10s  %-13s  %s\n", "Time", "Date", "Standard", "Meet");
+if (opts & OPT_CSV)                  { @<Emit rows as CSV@>   }
+if ((opts & OPT_STORE) && db_conn)   { @<Emit rows to DB@>    }
+if (!(opts & OPT_CSV))               { @<Emit rows as table@> }
+
+@ The CSV form on standard output is the same six-column layout
+honoured by the existing CAST report pipeline.
+
+@<Emit rows as CSV@>=
+for (int i = 0; i < lim; i++)
+    printf("\"%s\",\"%s\",\"%s\",%s,\"%s\",\"%s\"\n",
+           swimmer_name ? swimmer_name : "", event_code,
+           rows[i].time, rows[i].date, rows[i].standard, rows[i].meet);
+
+@ The DB form delegates each row to |db_insert_row|.  Per-row inserts
+let \.{ON CONFLICT DO NOTHING} swallow duplicates one at a time
+without aborting the surrounding work --- the bulk \.{COPY} path
+would have rolled back the whole batch on the first collision.
+
+@<Emit rows to DB@>=
+for (int i = 0; i < lim; i++)
+    db_insert_row(swimmer_name ? swimmer_name : "",
+                  event_code, &rows[i]);
+
+@ The table form is the human-readable per-event block printed when
+\.{csv} is not requested.
+
+@<Emit rows as table@>=
+printf("%s --- %s:\n", event_code,
+       (opts & OPT_FASTEST) ? "fastest time" : "all times (fastest first)");
+printf("%-12s  %-10s  %-13s  %s\n", "Time", "Date", "Standard", "Meet");
+printf("%-12s  %-10s  %-13s  %s\n",
+       "------------", "----------", "-------------", "----");
+for (int i = 0; i < lim; i++)
     printf("%-12s  %-10s  %-13s  %s\n",
-           "------------", "----------", "-------------", "----");
-    for (int i = 0; i < lim; i++)
-        printf("%-12s  %-10s  %-13s  %s\n",
-               rows[i].time, rows[i].date, rows[i].standard, rows[i].meet);
-    if (nrows == 0)
-        printf("(no times found)\n");
-    putchar('\n');
+           rows[i].time, rows[i].date, rows[i].standard, rows[i].meet);
+if (nrows == 0)
+    printf("(no times found)\n");
+putchar('\n');
+
+@* Offline fetch.
+
+@ |offline_fetch| is the read counterpart to the insert path: it
+issues a parameterised \.{SELECT} via \.{libpq} on the shared
+|db_conn| and feeds each tuple into the same |TimeRow| array
+consumed by the shared sort/emit chunk.  No network is touched and
+no child process is spawned.  The function takes a |Swimmer|
+pointer so it can use both |match_substr| (for an \.{ILIKE} clause
+that maps the user keyword to whichever full name the database
+happens to hold) and the optional age window
+(|date_min|, |date_max|).
+
+@<Offline fetch@>=
+@<Define offline\_fetch@>
+
+@ The fetch function is decomposed into three sub-chunks so each
+stays inside the twenty-four line limit.
+
+@<Define offline\_fetch@>=
+static void offline_fetch(const Swimmer *sw, const char *event_code, int opts)
+{
+    @<Build offline query params@>
+    @<Read offline rows from libpq@>
+    @<Sort and emit rows@>
 }
+
+@ The query uses two positional parameters: the \.{ILIKE} pattern
+(\.{\%match\_substr\%}) and the event code.  libpq quotes them
+safely so no shell-quoting hazards apply.
+
+@<Build offline query params@>=
+char like_pat[256];
+snprintf(like_pat, sizeof like_pat, "%%%s%%", sw->match_substr);
+const char *params[2] = { like_pat, event_code };
+const char *q =
+    "SELECT swimmer, swim_time, "
+    "to_char(swim_date,'YYYY-MM-DD'), "
+    "standard, meet, sort_key FROM swim_times "
+    "WHERE swimmer ILIKE $1 AND event = $2 "
+    "ORDER BY sort_key";
+
+@ The query is executed, the result is iterated, and each tuple is
+copied into a |TimeRow|.  The age window is honoured here so that an
+offline query that ignores the filter (e.g.\ a wider DB range) still
+produces age-appropriate output.
+
+@<Read offline rows from libpq@>=
+char swimmer_buf[256] = "";
+const char *swimmer_name = swimmer_buf;
+TimeRow rows[MAX_TIMES];
+int nrows = 0;
+
+if (!db_conn) {
+    fputs("Error: no DB connection for offline read\n", stderr);
+    return;
+}
+PGresult *res = PQexecParams(db_conn, q, 2, NULL, params,
+                             NULL, NULL, 0);
+if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+    fprintf(stderr, "Error: offline query failed: %s",
+        PQerrorMessage(db_conn));
+    PQclear(res);
+    return;
+}
+int total = PQntuples(res);
+for (int i = 0; i < total && nrows < MAX_TIMES; i++) {
+    @<Copy one libpq row@>
+}
+PQclear(res);
+
+@ Each tuple carries six columns matching the \.{SELECT} list:
+swimmer name, time, date, standard, meet, sort key.  Rows that
+fall outside the swimmer's optional age window are skipped without
+incrementing |nrows|.
+
+@<Copy one libpq row@>=
+const char *f0 = PQgetvalue(res, i, 0);
+const char *f1 = PQgetvalue(res, i, 1);
+const char *f2 = PQgetvalue(res, i, 2);
+const char *f3 = PQgetvalue(res, i, 3);
+const char *f4 = PQgetvalue(res, i, 4);
+const char *f5 = PQgetvalue(res, i, 5);
+if (sw->date_min && strcmp(f2, sw->date_min) < 0) continue;
+if (sw->date_max && strcmp(f2, sw->date_max) > 0) continue;
+if (!*swimmer_buf) {
+    strncpy(swimmer_buf, f0, sizeof swimmer_buf - 1);
+    swimmer_buf[sizeof swimmer_buf - 1] = '\0';
+}
+strncpy(rows[nrows].time, f1, sizeof rows[nrows].time - 1);
+rows[nrows].time[sizeof rows[nrows].time - 1] = '\0';
+strncpy(rows[nrows].date, f2, sizeof rows[nrows].date - 1);
+rows[nrows].date[sizeof rows[nrows].date - 1] = '\0';
+strncpy(rows[nrows].standard, f3, sizeof rows[nrows].standard - 1);
+rows[nrows].standard[sizeof rows[nrows].standard - 1] = '\0';
+strncpy(rows[nrows].meet, f4, sizeof rows[nrows].meet - 1);
+rows[nrows].meet[sizeof rows[nrows].meet - 1] = '\0';
+rows[nrows].sort_key = strtod(f5, NULL);
+nrows++;
 
 @* Main program.
 
@@ -665,25 +962,36 @@ parameters for each swimmer.  Each entry supplies a |search_query| string
 sent to the database (ideally distinctive enough to return a small set),
 a |match_substr| (lower-cased) used to identify the correct row, and
 a |flag| bit used to filter output when the user passes a swimmer keyword
-to \.{-o}.
+to \.{-o}.  The optional |date_min| and |date_max| fields restrict
+output to swims whose date falls in $[\hbox{|date_min|}, \hbox{|date_max|}]$
+(inclusive, ISO~\.{YYYY-MM-DD}).  These are used to express age-group
+windows---for example Katie Ledecky's 9- and 10-year-old swims fall
+between her ninth and eleventh birthdays.
 Kalea's entry searches ``Benavente'' because the simple two-word query
 ``Kalea Benavente'' returns no results; the API requires an exact substring
 match against the registered name ``Kalea Rose Benavente''.
 Kenneth's entry uses ``kenneth ray'' and Keith's uses ``keith santiago''
 to avoid false matches on the common surname ``Evans''.
+Katie Ledecky was born 17~March~1997, so the window
+\.{2006-03-17} through \.{2008-03-16} captures every swim from her
+ninth birthday up to (but not including) her eleventh.  The same
+construction yields \.{2008-03-17} through \.{2010-03-16} for the
+11- and 12-year-old window (\.{ledecky12}) and \.{2010-03-17}
+through \.{2012-03-16} for the 13- and 14-year-old window
+(\.{ledecky14}).
 
 @<Main function@>=
-typedef struct {
-    const char *search_query;  /* Name string to search for  */
-    const char *match_substr;  /* Lower-case substring to match */
-    int         flag;          /* |OPT_STELLA|, |OPT_KALEA|, etc. */
-} Swimmer;
-
 static const Swimmer SWIMMERS[] = {
-    { "Julianna Evans",  "stella",         OPT_STELLA }, /* Stella Julianna Evans  */
-    { "Benavente",       "kalea",          OPT_KALEA  }, /* Kalea Rose Benavente   */
-    { "Ray Evans",       "kenneth ray",    OPT_KENNY  }, /* Kenneth Ray Evans      */
-    { "Santiago Evans",  "keith santiago", OPT_KEITH  }  /* Keith Santiago Evans   */
+    { "Julianna Evans",  "stella",         OPT_STELLA,    NULL, NULL },
+    { "Benavente",       "kalea",          OPT_KALEA,     NULL, NULL },
+    { "Ray Evans",       "kenneth ray",    OPT_KENNY,     NULL, NULL },
+    { "Santiago Evans",  "keith santiago", OPT_KEITH,     NULL, NULL },
+    { "Ledecky",         "katie",          OPT_LEDECKY10,
+      "2006-03-17", "2008-03-16" },
+    { "Ledecky",         "katie",          OPT_LEDECKY12,
+      "2008-03-17", "2010-03-16" },
+    { "Ledecky",         "katie",          OPT_LEDECKY14,
+      "2010-03-17", "2012-03-16" }
 };
 #define NUM_SWIMMERS ((int)(sizeof SWIMMERS / sizeof SWIMMERS[0]))
 
@@ -700,12 +1008,17 @@ static void parse_opts_str(const char *s)
     if (!buf) return;
     char *tok = strtok(buf, ",");
     while (tok) {
-        if      (strcmp(tok, "stella")  == 0) g_opts |= OPT_STELLA;
-        else if (strcmp(tok, "kalea")   == 0) g_opts |= OPT_KALEA;
-        else if (strcmp(tok, "kenny")   == 0) g_opts |= OPT_KENNY;
-        else if (strcmp(tok, "keith")   == 0) g_opts |= OPT_KEITH;
-        else if (strcmp(tok, "fastest") == 0) g_opts |= OPT_FASTEST;
-        else if (strcmp(tok, "csv")     == 0) g_opts |= OPT_CSV;
+        if      (strcmp(tok, "stella")    == 0) g_opts |= OPT_STELLA;
+        else if (strcmp(tok, "kalea")     == 0) g_opts |= OPT_KALEA;
+        else if (strcmp(tok, "kenny")     == 0) g_opts |= OPT_KENNY;
+        else if (strcmp(tok, "keith")     == 0) g_opts |= OPT_KEITH;
+        else if (strcmp(tok, "ledecky10") == 0) g_opts |= OPT_LEDECKY10;
+        else if (strcmp(tok, "ledecky12") == 0) g_opts |= OPT_LEDECKY12;
+        else if (strcmp(tok, "ledecky14") == 0) g_opts |= OPT_LEDECKY14;
+        else if (strcmp(tok, "fastest")   == 0) g_opts |= OPT_FASTEST;
+        else if (strcmp(tok, "csv")       == 0) g_opts |= OPT_CSV;
+        else if (strcmp(tok, "store")     == 0) g_opts |= OPT_STORE;
+        else if (strcmp(tok, "offline")   == 0) g_opts |= OPT_OFFLINE;
         tok = strtok(NULL, ",");
     }
     free(buf);
@@ -744,10 +1057,16 @@ static void print_usage(const char *prog)
     @<Print usage examples@>
 }
 
-@ The options section describes the \.{-o} and \.{-e} flags with all
-recognised keywords and event codes.
+@ The options section is split into two further sub-modules so each
+fprintf stays inside the twenty-four line limit.
 
 @<Print usage options@>=
+@<Print usage flags@>
+@<Print usage event codes@>
+
+@ The \.{-o} keyword list.
+
+@<Print usage flags@>=
 fprintf(stderr,
     "Usage: %s -o option[,option...] [-e event[,event...]]\n\n"
     "  -o option,...   comma-separated output options:\n"
@@ -755,8 +1074,20 @@ fprintf(stderr,
     "       kalea       restrict output to Kalea Rose Benavente\n"
     "       kenny       restrict output to Kenneth Ray Evans\n"
     "       keith       restrict output to Keith Santiago Evans\n"
+    "       ledecky10   Katie Ledecky's 9- and 10-year-old times\n"
+    "       ledecky12   Katie Ledecky's 11- and 12-year-old times\n"
+    "       ledecky14   Katie Ledecky's 13- and 14-year-old times\n"
     "       fastest     print only the single fastest time per event\n"
-    "       csv         emit CSV output (header + one line per time)\n\n"
+    "       csv         emit CSV output (header + one line per time)\n"
+    "       store       persist each row to Postgres swim-times via libpq\n"
+    "       offline     read times from the Postgres swim-times DB\n"
+    "                   instead of querying USA Swimming over the network\n\n",
+    prog);
+
+@ The \.{-e} event-code menu.
+
+@<Print usage event codes@>=
+fprintf(stderr,
     "  -e event,...    restrict output to one or more event codes;\n"
     "                  comma-separated, or repeat -e for each event.\n"
     "       SCY codes:  50 FR SCY, 100 FR SCY, 200 FR SCY, 500 FR SCY,\n"
@@ -768,8 +1099,7 @@ fprintf(stderr,
     "                   50 FL LCM, 100 FL LCM, 200 FL LCM,\n"
     "                   50 BK LCM, 100 BK LCM, 200 BK LCM,\n"
     "                   50 BR LCM, 100 BR LCM, 200 BR LCM,\n"
-    "                   200 IM LCM, 400 IM LCM\n\n",
-    prog);
+    "                   200 IM LCM, 400 IM LCM\n\n");
 
 @ The examples section illustrates common invocations.
 
@@ -780,8 +1110,11 @@ fprintf(stderr,
     "  %s -o kalea,csv\n"
     "  %s -o kenny -e \"100 FR SCY\"\n"
     "  %s -o keith -e \"100 FR SCY,50 FL SCY\"\n"
-    "  %s -o stella -e \"100 FR SCY\" -e \"50 FL SCY\"\n",
-    prog, prog, prog, prog, prog);
+    "  %s -o stella -e \"100 FR SCY\" -e \"50 FL SCY\"\n"
+    "  %s -o stella,csv,store        # fetch + print + persist to DB\n"
+    "  %s -o kalea,offline           # read from DB, no network\n"
+    "  %s -o ledecky10,fastest       # Katie Ledecky as a 9-10 yr old\n",
+    prog, prog, prog, prog, prog, prog, prog, prog);
 
 @ We initialise the global \.{libcurl} state, parse the optional
 \.{-o} and \.{-e} flags, then for each swimmer (subject to swimmer-selection
@@ -819,8 +1152,9 @@ while ((ch = getopt(argc, argv, "o:e:")) != -1) {
 }
 
 @ If no options were supplied the usage message is printed and the program
-exits.  Otherwise global curl state is initialised and the CSV header is
-emitted if needed.
+exits.  Otherwise global curl state is initialised (skipped under
+\.{offline}, where no HTTP is performed), the CSV header is emitted if
+needed, and the DB pipe is opened if \.{store} was requested.
 
 @<Check for empty invocation@>=
 if (g_opts == 0 && g_nevents == 0) {
@@ -828,35 +1162,63 @@ if (g_opts == 0 && g_nevents == 0) {
     return 1;
 }
 
-curl_global_init(CURL_GLOBAL_DEFAULT);
+if (!(g_opts & OPT_OFFLINE))
+    curl_global_init(CURL_GLOBAL_DEFAULT);
 
 if (g_opts & OPT_CSV)
     printf("\"Swimmer\",\"Event\",\"Time\",\"Date\",\"Standard\",\"Meet\"\n");
 
+if (g_opts & (OPT_STORE | OPT_OFFLINE)) {
+    int ok = db_open();
+    if (!ok && (g_opts & OPT_OFFLINE)) {
+        fputs("Error: offline mode requires a DB connection\n", stderr);
+        return 1;
+    }
+}
+
 @ Each swimmer is visited in turn.  The swimmer-filter mask is applied
-before the expensive |PersonKey| lookup.
+before the expensive |PersonKey| lookup.  The DB pipe (if any) is
+flushed and closed before \.{libcurl} is torn down.
 
 @<Fetch and print swimmer times@>=
-int swimmer_mask = OPT_STELLA | OPT_KALEA | OPT_KENNY | OPT_KEITH;
+int swimmer_mask = OPT_STELLA | OPT_KALEA | OPT_KENNY | OPT_KEITH
+                 | OPT_LEDECKY10 | OPT_LEDECKY12 | OPT_LEDECKY14;
 
 for (int s = 0; s < NUM_SWIMMERS; s++) {
     @<Process one swimmer@>
 }
 
-curl_global_cleanup();
+db_close();
+if (!(g_opts & OPT_OFFLINE)) curl_global_cleanup();
 return 0;
 
 @ One swimmer is resolved and all requested events are fetched.
+Under \.{offline} the network |PersonKey| lookup is bypassed and the
+swimmer's display name is taken from the database in |offline_fetch|.
+The online branch is split into its own sub-chunk.
 
 @<Process one swimmer@>=
 if ((g_opts & swimmer_mask) && !(g_opts & SWIMMERS[s].flag))
     continue;
 
+if (g_opts & OPT_OFFLINE) {
+    @<Fetch events offline@>
+    continue;
+}
+
+@<Online swimmer dispatch@>
+
+@ The online path resolves a |PersonKey| and dispatches the per-event
+fetcher.  A failed lookup is fatal; the DB pipe is closed and curl is
+torn down before exit.
+
+@<Online swimmer dispatch@>=
 const char *name = NULL;
 char *key = lookup_person_key(SWIMMERS[s].search_query,
                               SWIMMERS[s].match_substr,
                               &name);
 if (!key) {
+    db_close();
     curl_global_cleanup();
     return 1;
 }
@@ -872,16 +1234,34 @@ free((void *)name);
 if (!(g_opts & OPT_CSV))
     putchar('\n');
 
-@ Either the user-requested events or all thirty-one default events are fetched.
+@ Either the user-requested events or all thirty-one default events are
+fetched online.  The optional age window from the |Swimmer| record is
+forwarded to |fetch_times|.
 
 @<Fetch events for swimmer@>=
 if (g_nevents > 0) {
     for (int i = 0; i < g_nevents; i++)
-        fetch_times(key, g_events[i], name, g_opts);
+        fetch_times(key, g_events[i], name, g_opts,
+                    SWIMMERS[s].date_min, SWIMMERS[s].date_max);
 } else {
     for (int i = 0; i < NUM_EVENTS; i++)
-        fetch_times(key, EVENTS[i], name, g_opts);
+        fetch_times(key, EVENTS[i], name, g_opts,
+                    SWIMMERS[s].date_min, SWIMMERS[s].date_max);
 }
+
+@ The offline counterpart calls |offline_fetch| once per event.  No
+HTTP request is performed, no |PersonKey| is resolved, and the DB
+pipe is irrelevant (\.{store} composes only with online runs).
+
+@<Fetch events offline@>=
+if (g_nevents > 0) {
+    for (int i = 0; i < g_nevents; i++)
+        offline_fetch(&SWIMMERS[s], g_events[i], g_opts);
+} else {
+    for (int i = 0; i < NUM_EVENTS; i++)
+        offline_fetch(&SWIMMERS[s], EVENTS[i], g_opts);
+}
+if (!(g_opts & OPT_CSV)) putchar('\n');
 
 @* Glossary.
 

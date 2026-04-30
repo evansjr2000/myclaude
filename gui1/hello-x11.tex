@@ -1,0 +1,711 @@
+\input cwebmac
+
+\N{1}{1}Hello X11.
+
+This is a small graphical program written in standard~C using
+Donald Knuth's literate programming paradigm.  It opens a single
+top-level window via the X~Window~System and draws two clickable
+buttons inside it:
+
+\medskip
+$${\vbox{
+\item{} {\bf Hello} --- prints
+\.{Hello World, and the current local time.}
+(followed by the current local time) to standard output.
+
+\item{} {\bf Exit}  --- closes the window and terminates the program.
+}}$$
+
+\medskip\noindent
+The window may also be closed via the standard window-manager close
+gesture (the \.{WM\_DELETE\_WINDOW} protocol), in which case the program
+exits cleanly as if {\bf Exit} had been clicked.  All graphics and event
+handling are performed with raw \.{Xlib} calls (\.{libX11}); no toolkit
+(Xt, Motif, GTK, Qt) is involved.
+
+\fi
+
+\M{2}{\bf How it works.}
+The program is a textbook Xlib client.  It performs four phases in
+sequence:
+
+\medskip\item{1.}  Connect to the X~display server and discover screen
+defaults (root window, default colours, default font).
+
+\item{2.}  Create a top-level window, install a graphics context, and
+request the events of interest (exposure, button presses, structure
+notifications).
+
+\item{3.}  Enter an event loop: each event is dispatched to a handler
+that either repaints the buttons (\.{Expose}), checks for a button
+click (\.{ButtonPress}), or terminates the loop
+(\.{ClientMessage} with \.{WM\_DELETE\_WINDOW}).
+
+\item{4.}  On exit, release the graphics context and close the display.
+\medskip
+
+\fi
+
+\M{3}{\bf Literate programming.}
+Donald Knuth introduced {\it literate programming\/} in 1984 as a way of
+writing software that is meant to be read by human beings first and
+executed by computers second.  Rather than annotating code with
+comments, a literate program interweaves prose and code in a single
+source document.  The prose explains the {\it why\/}---the motivation,
+the design decisions, the mathematical reasoning---while the code
+expresses the {\it how}.  The two live together in one file
+(conventionally given the extension \.{.w}) and are separated only at
+build time by two companion tools: \.{ctangle} and \.{cweave}.
+
+\fi
+
+\M{4}{\bf ctangle.}
+\.{ctangle} is the {\it tangling\/} tool.  It reads a \.{.w} source
+file and extracts the C~code sections, assembling them in the order
+dictated by named chunk references rather than the order in which they
+appear in the document.  The result is a plain \.{.c} file that a
+standard C~compiler can process without any knowledge of literate
+programming.  In this project, running
+$$\.{ctangle hello-x11.w}$$
+produces \.{hello-x11.c}, which is then compiled with \.{cc} and linked
+against \.{libX11} to create the \.{hello-x11} executable.  The
+generated \.{.c} file should be treated as a build artefact: the
+\.{.w} file is the true source of record.
+
+\fi
+
+\M{5}{\bf cweave.}
+\.{cweave} is the {\it weaving\/} tool.  It reads the same \.{.w} source
+and produces a \.{.tex} file formatted for \.{pdftex} using the
+\.{cwebmac} macro package.  \.{cweave} pretty-prints all C~code with
+bold keywords, italic identifiers, and cross-references, and numbers
+every named chunk so the reader can follow the program's logical
+structure independently of its physical layout.  An index of identifiers
+and a table of contents are generated automatically.  Running
+$$\.{cweave hello-x11.w}$$
+produces \.{hello-x11.tex}; running \.{pdftex} on that file yields the
+typeset documentation you are reading now.
+
+\fi
+
+\M{6}{\bf Compilation.}  After tangling with \.{ctangle}:
+$$\.{cc -O2 -o hello-x11 hello-x11.c -lX11}$$
+On systems where \.{X11/Xlib.h} is not on the default include path, add
+\.{-I/usr/X11R6/include -L/usr/X11R6/lib} (Linux/BSD) or
+\.{-I/opt/X11/include -L/opt/X11/lib} (macOS with XQuartz).
+
+\fi
+
+\M{7}{\bf Program structure.}  The top-level arrangement of the tangled
+output is:
+
+\Y\B\X9:Includes\X\6
+\X10:Constants\X\6
+\X13:Type definitions\X\6
+\X14:Globals\X\6
+\X17:Time helper\X\6
+\X19:Hit testing\X\6
+\X21:Drawing routines\X\6
+\X25:Event handlers\X\6
+\X29:Display setup\X\6
+\X35:Display teardown\X\6
+\X37:Main function\X\par
+\fi
+
+\N{1}{8}Includes and constants.
+
+\fi
+
+\M{9}Three standard headers cover the C~runtime; \.{Xlib.h} is the only
+X~Window header needed for this program (the higher-level \.{Xutil.h}
+is pulled in for the \.{XSizeHints} structure used to suggest a fixed
+window size to the window manager).
+
+\Y\B\4\X9:Includes\X${}\E{}$\6
+\8\#\&{include} \.{<stdio.h>}\6
+\8\#\&{include} \.{<stdlib.h>}\6
+\8\#\&{include} \.{<string.h>}\6
+\8\#\&{include} \.{<time.h>}\6
+\8\#\&{include} \.{<X11/Xlib.h>}\6
+\8\#\&{include} \.{<X11/Xutil.h>}\par
+\U7.\fi
+
+\M{10}The window dimensions and the geometry of the two buttons are fixed
+at compile time --- the program is not designed to be resized.  The
+buttons are stacked vertically with a uniform margin.
+
+\Y\B\4\X10:Constants\X${}\E{}$\6
+\8\#\&{define} \.{WIN\_W}\5\T{320}\C{ top-level window width in pixels
+}\6
+\8\#\&{define} \.{WIN\_H}\5\T{160}\C{ top-level window height in pixels
+}\6
+\8\#\&{define} \.{BTN\_W}\5\T{120}\C{ button width in pixels
+}\6
+\8\#\&{define} \.{BTN\_H}\5\T{40}\C{ button height in pixels                  }%
+\6
+\8\#\&{define} \.{MARGIN}\5\T{20}\C{ margin around and between buttons        }%
+\6
+\8\#\&{define} \.{WIN\_TITLE}\5\.{"Hello\ X11"}\par
+\A11.
+\U7.\fi
+
+\M{11}Each button has its origin at the top-left corner of its rectangle.
+\PB{\.{HELLO\_X}}/\PB{\.{HELLO\_Y}} place the {\bf Hello} button in the upper
+region
+of the window; \PB{\.{EXIT\_X}}/\PB{\.{EXIT\_Y}} place the {\bf Exit} button
+directly
+below it.  Both buttons are horizontally centred.
+
+\Y\B\4\X10:Constants\X${}\mathrel+\E{}$\6
+\8\#\&{define} \.{HELLO\_X}\5${}((\.{WIN\_W}-\.{BTN\_W})/\T{2}){}$\6
+\8\#\&{define} \.{HELLO\_Y}\5\.{MARGIN}\6
+\8\#\&{define} \.{EXIT\_X}\5${}((\.{WIN\_W}-\.{BTN\_W})/\T{2}){}$\6
+\8\#\&{define} \.{EXIT\_Y}\5${}(\.{MARGIN}+\.{BTN\_H}+\.{MARGIN}){}$\par
+\fi
+
+\N{1}{12}Data structures.
+
+\fi
+
+\M{13}A \PB{\\{Button}} record bundles the four geometry fields and the label
+string for a single clickable rectangle.  Storing the geometry in a
+struct (rather than chasing six bare \.{\#define}s through every event
+handler) keeps the hit-test routine to a single line.
+
+\Y\B\4\X13:Type definitions\X${}\E{}$\6
+\&{typedef} \&{struct} ${}\{{}$\1\6
+\&{int} \|x${},\39\|y{}$;\C{ top-left corner, in window coordinates    }\6
+\&{int} \|w${},\39\|h{}$;\C{ width and height in pixels                }\6
+\&{const} \&{char} ${}{*}\\{label}{}$;\C{ null-terminated text drawn inside
+    }\2\6
+${}\}{}$ \&{Button};\par
+\U7.\fi
+
+\M{14}Two globals hold the X~Window state: the open display connection and
+the graphics context used for every draw call.  They are initialised
+by \PB{\\{display\_open}} and released by \PB{\\{display\_close}}; in between
+they are
+read by the drawing and event-handling routines.  Keeping them at file
+scope avoids threading them through every callback as parameters.
+
+\Y\B\4\X14:Globals\X${}\E{}$\6
+\&{static} \\{Display}${}{*}\\{g\_dpy}\K\NULL{}$;\C{ connection to the X~server
+        }\6
+\&{static} \.{GC}\\{g\_gc}${}\K\NULL{}$;\C{ graphics context for all drawing
+}\6
+\&{static} \\{Window}\\{g\_win}${}\K\T{0}{}$;\C{ the top-level window
+    }\6
+\&{static} \\{Atom}\\{g\_wm\_delete}${}\K\T{0}{}$;\C{ \.{WM\_DELETE\_WINDOW}
+client atom }\par
+\A15.
+\U7.\fi
+
+\M{15}The two buttons are file-scope so that \PB{\\{draw\_buttons}} and \PB{%
+\\{hit\_test}}
+can iterate over them without rebuilding the array on every event.
+The order in this array also determines paint order (top to bottom).
+
+\Y\B\4\X14:Globals\X${}\mathrel+\E{}$\6
+\&{static} \&{const} \&{Button} \\{g\_buttons}[\T{2}]${}\K\{\{\.{HELLO\_X},\39%
+\.{HELLO\_Y},\39\.{BTN\_W},\39\.{BTN\_H},\39\.{"Hello"}\},\39\{\.{EXIT\_X},\39%
+\.{EXIT\_Y},\39\.{BTN\_W},\39\.{BTN\_H},\39\.{"Exit"}\}\};{}$\6
+\8\#\&{define} \.{N\_BUTTONS}\5((\&{int})(\&{sizeof} \\{g\_buttons}${}/{}$%
+\&{sizeof} \\{g\_buttons}[\T{0}]))\par
+\fi
+
+\N{1}{16}Time helper.
+
+\fi
+
+\M{17}\PB{\\{format\_local\_time}} writes the current local time into \PB{%
+\\{out}} as
+\.{YYYY-MM-DD HH:MM:SS}.  \PB{\\{out}} must hold at least 20 bytes
+(19~characters plus a null terminator).  The format string is
+deliberately unambiguous --- ISO~8601 date plus 24-hour time --- so
+the line printed by the {\bf Hello} button is locale-independent.
+
+\Y\B\4\X17:Time helper\X${}\E{}$\6
+\1\1\&{static} \&{void} \\{format\_local\_time}(\&{char} ${}{*}\\{out},\39{}$%
+\&{size\_t} \\{max\_len})\2\2\6
+${}\{{}$\1\6
+\&{time\_t} \\{now}${}\K\\{time}(\NULL);{}$\6
+\&{struct} \\{tm} ${}{*}\\{lt}\K\\{localtime}({\AND}\\{now});{}$\7
+\&{if} (\\{lt})\1\5
+${}\\{strftime}(\\{out},\39\\{max\_len},\39\.{"\%Y-\%m-\%d\ \%H:\%M:\%S"},\39%
+\\{lt});{}$\2\6
+\&{else}\1\5
+${}\\{snprintf}(\\{out},\39\\{max\_len},\39\.{"(time\ unavailable)"});{}$\2\6
+\4${}\}{}$\2\par
+\U7.\fi
+
+\N{1}{18}Hit testing.
+
+\fi
+
+\M{19}\PB{\\{hit\_test}} returns the index of the button containing the point
+$(x,y)$, or $-1$ if no button is hit.  The buttons do not overlap, so
+the first match wins.
+
+\Y\B\4\X19:Hit testing\X${}\E{}$\6
+\1\1\&{static} \&{int} \\{hit\_test}(\&{int} \|x${},\39{}$\&{int} \|y)\2\2\6
+${}\{{}$\1\6
+\&{for} (\&{int} \|i${}\K\T{0};{}$ ${}\|i<\.{N\_BUTTONS};{}$ ${}\|i\PP){}$\5
+${}\{{}$\1\6
+\&{const} \&{Button} ${}{*}\|b\K{\AND}\\{g\_buttons}[\|i];{}$\7
+\&{if} ${}(\|x\G\|b\MG\|x\W\|x<\|b\MG\|x+\|b\MG\|w\W\|y\G\|b\MG\|y\W\|y<\|b\MG%
+\|y+\|b\MG\|h){}$\1\5
+\&{return} \|i;\2\6
+\4${}\}{}$\2\6
+\&{return} ${}{-}\T{1};{}$\6
+\4${}\}{}$\2\par
+\U7.\fi
+
+\N{1}{20}Drawing routines.
+
+\fi
+
+\M{21}\PB{\\{draw\_button}} paints a single button: an outlined rectangle with
+the
+label centred horizontally and vertically.  The label is centred by
+querying the font metrics of the current graphics context with
+\PB{\\{XQueryTextExtents}}; this avoids hard-coding a font width and keeps the
+labels centred even if the user installs a different default font.
+
+\Y\B\4\X21:Drawing routines\X${}\E{}$\6
+\1\1\&{static} \&{void} \\{draw\_button}(\&{const} \&{Button} ${}{*}\|b)\2\2{}$%
+\6
+${}\{{}$\1\6
+${}\\{XDrawRectangle}(\\{g\_dpy},\39\\{g\_win},\39\\{g\_gc},\39\|b\MG\|x,\39\|b%
+\MG\|y,\39\|b\MG\|w,\39\|b\MG\|h);{}$\6
+\X22:Centre and draw the button label\X\6
+\4${}\}{}$\2\par
+\A23.
+\U7.\fi
+
+\M{22}The text-extents query reports the label's bounding box in the
+current font.  The horizontal centre is straightforward; the vertical
+centre uses the font's ascent so the label sits on a baseline that
+splits the button cleanly.
+
+\Y\B\4\X22:Centre and draw the button label\X${}\E{}$\6
+\&{int} \\{dir}${},\39\\{ascent},\39\\{descent};{}$\7
+\\{XCharStruct}\\{ext};\7
+\&{int} \\{len}${}\K(\&{int})\,\\{strlen}(\|b\MG\\{label});{}$\7
+${}\\{XQueryTextExtents}(\\{g\_dpy},\39\\{XGContextFromGC}(\\{g\_gc}),\39\|b\MG%
+\\{label},\39\\{len},\39{\AND}\\{dir},\39{\AND}\\{ascent},\39{\AND}\\{descent},%
+\39{\AND}\\{ext});{}$\7
+\&{int} \\{tx}${}\K\|b\MG\|x+(\|b\MG\|w-\\{ext}.\\{width})/\T{2};{}$\6
+\&{int} \\{ty}${}\K\|b\MG\|y+(\|b\MG\|h+\\{ascent}-\\{descent})/\T{2};{}$\7
+${}\\{XDrawString}(\\{g\_dpy},\39\\{g\_win},\39\\{g\_gc},\39\\{tx},\39\\{ty},%
+\39\|b\MG\\{label},\39\\{len}){}$;\par
+\U21.\fi
+
+\M{23}\PB{\\{draw\_buttons}} repaints every button.  It is called on every
+\.{Expose} event so the window can recover from being uncovered or
+resized by the window manager.
+
+\Y\B\4\X21:Drawing routines\X${}\mathrel+\E{}$\6
+\1\1\&{static} \&{void} \\{draw\_buttons}(\&{void})\2\2\6
+${}\{{}$\1\6
+\&{for} (\&{int} \|i${}\K\T{0};{}$ ${}\|i<\.{N\_BUTTONS};{}$ ${}\|i\PP){}$\1\5
+${}\\{draw\_button}({\AND}\\{g\_buttons}[\|i]);{}$\2\6
+\4${}\}{}$\2\par
+\fi
+
+\N{1}{24}Event handlers.
+
+\fi
+
+\M{25}\PB{\\{on\_hello\_click}} prints the greeting and the current local time
+to
+standard output.  \PB{\\{fflush}} is called explicitly because \.{stdout} is
+typically line-buffered when attached to a terminal but
+{\it block\/}-buffered when redirected to a pipe or file --- without
+the flush, a user redirecting the output to \.{tee} would see nothing
+until the program exited.
+
+\Y\B\4\X25:Event handlers\X${}\E{}$\6
+\1\1\&{static} \&{void} \\{on\_hello\_click}(\&{void})\2\2\6
+${}\{{}$\1\6
+\&{char} \\{ts}[\T{32}];\7
+${}\\{format\_local\_time}(\\{ts},\39{}$\&{sizeof} \\{ts});\6
+${}\\{printf}(\.{"Hello\ World,\ and\ th}\)\.{e\ current\ local\ time}\)\.{:\ %
+\%s\\n"},\39\\{ts});{}$\6
+\\{fflush}(\\{stdout});\6
+\4${}\}{}$\2\par
+\As26\ET27.
+\U7.\fi
+
+\M{26}\PB{\\{on\_button\_press}} dispatches a \.{ButtonPress} event to the
+appropriate handler.  Returning non-zero asks the main loop to exit;
+this is how the {\bf Exit} button terminates the program.  Clicks
+outside any button are silently ignored.
+
+\Y\B\4\X25:Event handlers\X${}\mathrel+\E{}$\6
+\1\1\&{static} \&{int} \\{on\_button\_press}(\&{const} \\{XButtonEvent}${}{*}%
+\\{ev})\2\2{}$\6
+${}\{{}$\1\6
+\&{int} \\{idx}${}\K\\{hit\_test}(\\{ev}\MG\|x,\39\\{ev}\MG\|y);{}$\7
+\&{if} ${}(\\{idx}<\T{0}){}$\1\5
+\&{return} \T{0};\2\6
+\&{if} ${}(\\{strcmp}(\\{g\_buttons}[\\{idx}].\\{label},\39\.{"Hello"})\E%
+\T{0}){}$\5
+${}\{{}$\1\6
+\\{on\_hello\_click}(\,);\6
+\&{return} \T{0};\6
+\4${}\}{}$\2\6
+\&{if} ${}(\\{strcmp}(\\{g\_buttons}[\\{idx}].\\{label},\39\.{"Exit"})\E%
+\T{0}){}$\5
+${}\{{}$\1\6
+\&{return} \T{1};\6
+\4${}\}{}$\2\6
+\&{return} \T{0};\6
+\4${}\}{}$\2\par
+\fi
+
+\M{27}\PB{\\{on\_client\_message}} handles the \.{WM\_DELETE\_WINDOW} protocol:
+when the user clicks the window manager's close decoration, the server
+delivers a \.{ClientMessage} carrying the \PB{\\{g\_wm\_delete}} atom.  We
+return non-zero to break out of the event loop so the close button
+behaves identically to the in-window {\bf Exit} button.
+
+\Y\B\4\X25:Event handlers\X${}\mathrel+\E{}$\6
+\1\1\&{static} \&{int} \\{on\_client\_message}(\&{const} %
+\\{XClientMessageEvent}${}{*}\\{ev})\2\2{}$\6
+${}\{{}$\1\6
+\&{if} ${}((\\{Atom})\\{ev}\MG\\{data}.\|l[\T{0}]\E\\{g\_wm\_delete}){}$\1\5
+\&{return} \T{1};\2\6
+\&{return} \T{0};\6
+\4${}\}{}$\2\par
+\fi
+
+\N{1}{28}Display setup.
+
+\fi
+
+\M{29}\PB{\\{display\_open}} performs all four pre-loop X~Window steps: open
+the
+display, create the window, create the graphics context, and register
+for the \.{WM\_DELETE\_WINDOW} protocol.  The body is split into four
+sub-modules so no single chunk exceeds twenty-four lines.  The function
+returns 1 on success or 0 on any failure, with a diagnostic on
+\.{stderr}.
+
+\Y\B\4\X29:Display setup\X${}\E{}$\6
+\1\1\&{static} \&{int} \\{display\_open}(\&{void})\2\2\6
+${}\{{}$\1\6
+${}\X30:Open the X display\X\X31:Create the top-level window\X\X32:Create the
+graphics context\X\X33:Register for window-manager close\X\\{XMapWindow}(\\{g%
+\_dpy},\39\\{g\_win});{}$\6
+\&{return} \T{1};\6
+\4${}\}{}$\2\par
+\U7.\fi
+
+\M{30}The display name is read from the \PB{\.{DISPLAY}} environment variable
+when
+the argument to \PB{\\{XOpenDisplay}} is \PB{$\NULL$}.  A failure here
+typically
+means \.{DISPLAY} is unset or the user lacks permission to connect to
+the named server.
+
+\Y\B\4\X30:Open the X display\X${}\E{}$\6
+$\\{g\_dpy}\K\\{XOpenDisplay}(\NULL);{}$\6
+\&{if} ${}(\R\\{g\_dpy}){}$\5
+${}\{{}$\1\6
+${}\\{fputs}(\.{"Error:\ cannot\ open\ }\)\.{X\ display\ "}\.{"(is\ \$DISPLAY\
+set?)\\}\)\.{n"},\39\\{stderr});{}$\6
+\&{return} \T{0};\6
+\4${}\}{}$\2\par
+\U29.\fi
+
+\M{31}The window is created as a child of the screen's root window, with a
+white background and a one-pixel black border.  We immediately call
+\PB{\\{XSelectInput}} to subscribe to the three event masks the program needs:
+\.{ExposureMask} (initial paint and repaints),
+\.{ButtonPressMask} (mouse clicks), and
+\.{StructureNotifyMask} (the window-manager close gesture is delivered
+as a structure-notify-class \.{ClientMessage}).
+The title is set with \PB{\\{XStoreName}} so window managers display
+\.{Hello X11} in the title bar.
+
+\Y\B\4\X31:Create the top-level window\X${}\E{}$\6
+\&{int} \\{scr}${}\K\\{DefaultScreen}(\\{g\_dpy});{}$\7
+${}\\{Window}\\{root}\K\\{RootWindow}(\\{g\_dpy},\39\\{scr});{}$\6
+${}\\{g\_win}\K\\{XCreateSimpleWindow}(\\{g\_dpy},\39\\{root},\39\T{0},\39%
+\T{0},\39\.{WIN\_W},\39\.{WIN\_H},\39\T{1},\39\\{BlackPixel}(\\{g\_dpy},\39%
+\\{scr}),\39\\{WhitePixel}(\\{g\_dpy},\39\\{scr}));{}$\6
+${}\\{XStoreName}(\\{g\_dpy},\39\\{g\_win},\39\.{WIN\_TITLE});{}$\6
+${}\\{XSelectInput}(\\{g\_dpy},\39\\{g\_win},\39\\{ExposureMask}\OR%
+\\{ButtonPressMask}\OR\\{StructureNotifyMask}){}$;\par
+\U29.\fi
+
+\M{32}The graphics context is created against the window's drawable.  We
+pre-set the foreground colour to black --- the default is
+implementation-defined.  All draw calls (rectangles and strings) reuse
+this single GC; there is no need for separate contexts since the
+program draws in only one colour and one font.
+
+\Y\B\4\X32:Create the graphics context\X${}\E{}$\6
+$\\{g\_gc}\K\\{XCreateGC}(\\{g\_dpy},\39\\{g\_win},\39\T{0},\39\NULL);{}$\6
+\&{if} ${}(\R\\{g\_gc}){}$\5
+${}\{{}$\1\6
+${}\\{fputs}(\.{"Error:\ cannot\ creat}\)\.{e\ graphics\ context\\n}\)\.{"},\39%
+\\{stderr});{}$\6
+${}\\{XDestroyWindow}(\\{g\_dpy},\39\\{g\_win});{}$\6
+\\{XCloseDisplay}(\\{g\_dpy});\6
+${}\\{g\_dpy}\K\NULL;{}$\6
+\&{return} \T{0};\6
+\4${}\}{}$\2\6
+${}\\{XSetForeground}(\\{g\_dpy},\39\\{g\_gc},\39\\{BlackPixel}(\\{g\_dpy},\39%
+\\{DefaultScreen}(\\{g\_dpy}))){}$;\par
+\U29.\fi
+
+\M{33}The \.{WM\_DELETE\_WINDOW} protocol is the standard way for an
+X~client to learn that the user has clicked the window manager's
+close decoration.  We intern the atom and register it on the window;
+the server will then deliver a \.{ClientMessage} carrying that atom
+instead of summarily destroying the window.
+
+\Y\B\4\X33:Register for window-manager close\X${}\E{}$\6
+$\\{g\_wm\_delete}\K\\{XInternAtom}(\\{g\_dpy},\39\.{"WM\_DELETE\_WINDOW"},\39%
+\\{False});{}$\6
+${}\\{XSetWMProtocols}(\\{g\_dpy},\39\\{g\_win},\39{\AND}\\{g\_wm\_delete},\39%
+\T{1}){}$;\par
+\U29.\fi
+
+\N{1}{34}Display teardown.
+
+\fi
+
+\M{35}\PB{\\{display\_close}} is the symmetric counterpart to \PB{\\{display%
+\_open}}.  It
+releases the graphics context, destroys the window, and closes the
+display.  Each step is guarded so the function is safe to call after
+a partial setup failure.
+
+\Y\B\4\X35:Display teardown\X${}\E{}$\6
+\1\1\&{static} \&{void} \\{display\_close}(\&{void})\2\2\6
+${}\{{}$\1\6
+\&{if} (\\{g\_dpy})\5
+${}\{{}$\1\6
+\&{if} (\\{g\_gc})\5
+${}\{{}$\1\6
+${}\\{XFreeGC}(\\{g\_dpy},\39\\{g\_gc});{}$\6
+${}\\{g\_gc}\K\NULL;{}$\6
+\4${}\}{}$\2\6
+\&{if} (\\{g\_win})\5
+${}\{{}$\1\6
+${}\\{XDestroyWindow}(\\{g\_dpy},\39\\{g\_win});{}$\6
+${}\\{g\_win}\K\T{0};{}$\6
+\4${}\}{}$\2\6
+\\{XCloseDisplay}(\\{g\_dpy});\6
+${}\\{g\_dpy}\K\NULL;{}$\6
+\4${}\}{}$\2\6
+\4${}\}{}$\2\par
+\U7.\fi
+
+\N{1}{36}Main function.
+
+\fi
+
+\M{37}\PB{\\{main}} ignores its arguments --- the program takes no command-line
+options.  After a successful display setup it enters a blocking event
+loop driven by \PB{\\{XNextEvent}}; each event is dispatched to the
+appropriate handler.  The loop terminates when either the {\bf Exit}
+button is clicked or the window-manager close gesture is received.
+
+\Y\B\4\X37:Main function\X${}\E{}$\6
+\1\1\&{int} \\{main}(\&{int} \\{argc}${},\39{}$\&{char} ${}{*}{*}\\{argv})\2%
+\2{}$\6
+${}\{{}$\1\6
+(\&{void})\,\\{argc};\6
+(\&{void})\,\\{argv};\6
+\&{if} ${}(\R\\{display\_open}(\,)){}$\1\5
+\&{return} \T{1};\2\6
+\X38:Run the event loop\X\\{display\_close}(\,);\6
+\&{return} \T{0};\6
+\4${}\}{}$\2\par
+\U7.\fi
+
+\M{38}The event loop dispatches three event types and silently drops the
+rest.  A non-zero return from a handler breaks the loop.
+
+\Y\B\4\X38:Run the event loop\X${}\E{}$\6
+\&{for} ( ;  ; \,)\5
+${}\{{}$\1\6
+\\{XEvent}\\{ev};\6
+${}\\{XNextEvent}(\\{g\_dpy},\39{\AND}\\{ev});{}$\7
+\&{int} \\{quit}${}\K\T{0};{}$\7
+\&{switch} ${}(\\{ev}.\\{type}){}$\5
+${}\{{}$\1\6
+\4\&{case} \\{Expose}:\6
+\&{if} ${}(\\{ev}.\\{xexpose}.\\{count}\E\T{0}){}$\1\5
+\\{draw\_buttons}(\,);\2\6
+\&{break};\6
+\4\&{case} \\{ButtonPress}:\5
+${}\\{quit}\K\\{on\_button\_press}({\AND}\\{ev}.\\{xbutton});{}$\6
+\&{break};\6
+\4\&{case} \\{ClientMessage}:\5
+${}\\{quit}\K\\{on\_client\_message}({\AND}\\{ev}.\\{xclient});{}$\6
+\&{break};\6
+\4\&{default}:\5
+\&{break};\6
+\4${}\}{}$\2\6
+\&{if} (\\{quit})\1\5
+\&{break};\2\6
+\4${}\}{}$\2\par
+\U37.\fi
+
+\N{1}{39}Xlib API Calls.
+This program uses the synchronous core of \.{libX11}.  All identifiers
+listed here are declared in \.{<X11/Xlib.h>} (or \.{<X11/Xutil.h>} for
+the few utility types).
+
+\medskip
+\item{$\bullet$} {\tt Display *XOpenDisplay(const char *name)}.
+\par\noindent Parameter: {\tt name} --- display string such as
+\.{":0"} or \.{NULL} to read \.{\$DISPLAY}.
+Returns a connection handle, or \.{NULL} on failure.
+
+\item{$\bullet$} {\tt int XCloseDisplay(Display *dpy)}.
+Closes the connection and frees all server-side resources still
+associated with it.
+
+\item{$\bullet$} {\tt int DefaultScreen(Display *dpy)} (macro).
+Returns the integer index of the user's default screen, used as the
+second argument to many other macros.
+
+\item{$\bullet$} {\tt Window RootWindow(Display *dpy, int scr)} (macro).
+Returns the screen's root window, used as the parent of every
+top-level application window.
+
+\item{$\bullet$} {\tt unsigned long BlackPixel(Display *dpy, int scr)}
+/ {\tt WhitePixel(Display *dpy, int scr)} (macros).
+Return colormap entries for pure black / pure white on the named
+screen.  Used here for the window border, foreground, and background.
+
+\item{$\bullet$} {\tt Window XCreateSimpleWindow(Display *dpy,
+Window parent, int x, int y, unsigned w, unsigned h, unsigned bw,
+unsigned long border, unsigned long bg)}.
+Allocates a new \.{InputOutput} window with the given geometry,
+border width, and pixel colours.  The window is created
+{\it unmapped}: it does not appear until \PB{\\{XMapWindow}}.
+
+\item{$\bullet$} {\tt int XStoreName(Display *dpy, Window w,
+const char *name)}.
+Sets the \.{WM\_NAME} property; window managers display this in the
+title bar.
+
+\item{$\bullet$} {\tt int XSelectInput(Display *dpy, Window w,
+long mask)}.
+Specifies which event classes the server should deliver for the
+window.  This program ORs three mask bits.
+
+\item{$\bullet$} {\tt int XMapWindow(Display *dpy, Window w)}.
+Requests that the window be made visible (subject to the window
+manager's policy).
+
+\item{$\bullet$} {\tt int XDestroyWindow(Display *dpy, Window w)}.
+Removes the window and any descendants.
+
+\item{$\bullet$} {\tt GC XCreateGC(Display *dpy, Drawable d,
+unsigned long valuemask, XGCValues *values)}.
+Allocates a graphics context.  This program passes
+\PB{$\\{valuemask}\K\T{0}$} and \PB{$\\{values}\K\NULL$} to accept all server
+defaults,
+then customises the foreground via \PB{\\{XSetForeground}}.
+
+\item{$\bullet$} {\tt int XSetForeground(Display *dpy, GC gc,
+unsigned long pixel)}.
+Sets the foreground pixel value used by subsequent draw calls.
+
+\item{$\bullet$} {\tt int XFreeGC(Display *dpy, GC gc)}.
+Releases a graphics context allocated by \PB{\\{XCreateGC}}.
+
+\item{$\bullet$} {\tt int XDrawRectangle(Display *dpy, Drawable d,
+GC gc, int x, int y, unsigned w, unsigned h)}.
+Draws the {\it outline\/} of a rectangle.  The rectangle covers
+$w+1$ columns and $h+1$ rows of pixels.
+
+\item{$\bullet$} {\tt int XDrawString(Display *dpy, Drawable d,
+GC gc, int x, int y, const char *string, int length)}.
+Draws an 8-bit text string at the given baseline position using
+the GC's current font.
+
+\item{$\bullet$} {\tt int XQueryTextExtents(Display *dpy,
+XID font\_id, const char *string, int len,
+int *direction, int *ascent, int *descent,
+XCharStruct *overall)}.
+Asks the server for the metrics of a string in the named font.
+Used here to centre the button label.
+
+\item{$\bullet$} {\tt GContext XGContextFromGC(GC gc)} (macro).
+Returns the X resource ID associated with a graphics context, used
+here as the \PB{\\{font\_id}} argument to \PB{\\{XQueryTextExtents}}.
+
+\item{$\bullet$} {\tt Atom XInternAtom(Display *dpy,
+const char *name, Bool only\_if\_exists)}.
+Returns the unique server-wide atom for a string property name.
+Used to obtain \.{WM\_DELETE\_WINDOW}.
+
+\item{$\bullet$} {\tt Status XSetWMProtocols(Display *dpy, Window w,
+Atom *protocols, int count)}.
+Tells the server which window-manager protocols this client is
+willing to handle, here just \.{WM\_DELETE\_WINDOW}.
+
+\item{$\bullet$} {\tt int XNextEvent(Display *dpy, XEvent *ev\_return)}.
+Blocks until an event is available for the connection, then writes
+it into the supplied union.
+
+\fi
+
+\M{40}{\bf POSIX System Calls and Library Functions.}
+The following identifiers from the POSIX.1-2008 standard are used
+directly in this program.
+
+\medskip
+\item{$\bullet$} {\tt time\_t time(time\_t *t)}.
+Returns the current calendar time (seconds since the Epoch).
+
+\item{$\bullet$} {\tt struct tm *localtime(const time\_t *clock)}.
+Converts a calendar time into broken-down local time in a static
+buffer.
+
+\item{$\bullet$} {\tt size\_t strftime(char *s, size\_t max,
+const char *fmt, const struct tm *tm)}.
+Formats a broken-down time into a character buffer using a
+\.{printf}-like format string.  This program uses
+\.{"\%Y-\%m-\%d \%H:\%M:\%S"}.
+
+\item{$\bullet$} {\tt int printf(const char *fmt, ...)}.
+Writes formatted output to standard output.
+
+\item{$\bullet$} {\tt int snprintf(char *s, size\_t n,
+const char *fmt, ...)}.
+Bounded \.{sprintf}; used as a fallback when \PB{\\{localtime}} fails.
+
+\item{$\bullet$} {\tt int fputs(const char *s, FILE *stream)}.
+Writes a string without a trailing newline; used for diagnostics
+on \.{stderr}.
+
+\item{$\bullet$} {\tt int fflush(FILE *stream)}.
+Flushes the buffered output of \PB{\\{stream}}; called after each
+{\bf Hello} click so the line appears immediately even when
+\.{stdout} is piped.
+
+\item{$\bullet$} {\tt size\_t strlen(const char *s)}.
+Returns the number of bytes in the string before its null
+terminator.
+
+\item{$\bullet$} {\tt int strcmp(const char *a, const char *b)}.
+Lexicographic byte-wise comparison; used to dispatch button clicks
+by label.
+
+\fi
+
+\N{1}{41}Index.
+\fi
+
+\inx
+\fin
+\con

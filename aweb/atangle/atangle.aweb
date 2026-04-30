@@ -5,6 +5,11 @@
 % This program by D. E. Knuth is not copyrighted and can be used freely.
 % Adaption to ADA by U. Schweigert based on TANGLE Version 2.8.
 % Version 1.0 was released May 31, 1988.
+% Version 2.0: prose updated for Ada 95 source files (the
+% lexical structure of Ada 95 is unchanged with respect to identifiers,
+% so ATANGLE itself needed no syntactic changes; the manual references
+% have been updated to reflect ISO/IEC 8652:1995 instead of MIL-STD-1815A).
+% Version 2.1: -v / --version command-line flag added.
 
  
 % Here is TeX material that gets inserted after \input webmaca
@@ -25,7 +30,7 @@
   \centerline{\titlefont The {\ttitlefont ATANGLE} processor}
   \vskip 15pt
   \centerline{(based on {\tt TANGLE} Version 2.8)}
-  \centerline{{\ninerm[ADA-Version 1.0]}}
+  \centerline{{\ninerm[ADA-Version 2.1 --- Ada 95 + version flag]}}
   \vfill}
 \pageno=\contentspagenumber \advance\pageno by 1
  
@@ -40,7 +45,10 @@ has been done by U. Schweigert in May 1988.
 For large \.{AWEB} files one should have a large memory, since \.{ATANGLE}
 keeps all the \ADA\ text in memory (in an abbreviated form). This program
 uses only \ADA-features as described in ``The Programming Language \ADA\
-Reference Manual'' and is thus conform with ANSI/MIL-STD-1815A-1983.
+Reference Manual.''  As of Version 2.0 it is intended to handle programs
+written in \ADA\ 95 (ISO/IEC 8652:1995); since \ADA\ 95 retains the
+identifier syntax of \ADA\ 83 the tangler itself does not require new
+lexical rules---only the documentation has been updated.
  
 The system-dependent portions of \.{ATANGLE} can be identified by looking at
 the entries for `system dependencies' in the index below.
@@ -49,7 +57,7 @@ the entries for `system dependencies' in the index below.
 The ``banner line'' defined here should be changed whenever \.{ATANGLE} is
 modified.
  
-@d banner=="This is ATANGLE, Version 1.0"
+@d banner=="This is ATANGLE, Version 2.1 (Ada 95)"
 
 @ The program consists of several packages that are declared right now;
 each of these packages and either the specification and the body of
@@ -2872,6 +2880,13 @@ use  data_structures,input_output,input_phase,output_phase;
 procedure @!ATANGLE is
  ac : INTEGER := 0;
  begin
+  if Argument_Count >= 1 and then
+     (Argument(1) = "-v" or else Argument(1) = "--version") then
+    {Honour the version request without opening any files; the program
+     prints the |banner| and returns successfully.}
+    TEXT_IO.Put_Line(banner);
+    return;
+  end if;
   print_ln("Trying to open input file.");
   ac := Argument_Count;
   if ac < 1 then

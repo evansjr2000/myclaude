@@ -1,24 +1,8 @@
 #!/bin/bash
+# Container entrypoint for the aweb image.  After the PostgreSQL
+# stack was removed in release 2.1 (requirement 10) this script has
+# nothing to do at startup; it simply hands control to the requested
+# command.  It is kept as a single layer of indirection so the image's
+# run interface (CMD args are run as a shell command) is preserved.
 set -e
-
-# Locate PostgreSQL binaries (works across versions)
-PG_VERSION=$(ls /usr/lib/postgresql/ | sort -V | tail -1)
-PG_BINDIR="/usr/lib/postgresql/$PG_VERSION/bin"
-
-# Initialize the data directory if it has not been set up yet
-if [ ! -f "$PGDATA/PG_VERSION" ]; then
-    echo "Initializing PostgreSQL $PG_VERSION data directory at $PGDATA..."
-    mkdir -p "$PGDATA"
-    chown postgres:postgres "$PGDATA"
-    su -s /bin/bash postgres -c "$PG_BINDIR/initdb -D $PGDATA"
-    echo "PostgreSQL initialization complete."
-fi
-
-# Start PostgreSQL in the background
-echo "Starting PostgreSQL $PG_VERSION..."
-mkdir -p /var/log/postgresql
-chown postgres:postgres /var/log/postgresql
-su -s /bin/bash postgres -c \
-    "$PG_BINDIR/pg_ctl -D $PGDATA -l /var/log/postgresql/startup.log start"
-
 exec "$@"

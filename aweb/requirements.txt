@@ -5,4 +5,23 @@ file for database persistence, and make sure it initializes correctly when first
 
 3.  Rename aweb.sh awegpg.sh and rename the dockefile to evansjr/awebpg.
 
+4. Currently aweave and atangle correctly parse an early version of Ada, a version before Ada 95.
+Update the aweave and atangle ".web" programs to correctly parse Ada 95 programs (more key words are present).
+Update the documentation in the ".aweb" programes as appropriate.
 
+5.  Compile the programs and verify they work correctly, then update the Dockerfile to incorporate these new
+versions.  Update the version numbers in the ".web" files as well.
+
+6.  Create a TeX or LaTeX document, called a Software Test Plan, according to IEEE software standards, and a concomitant
+software test script.
+
+7.  Make sure the tests run in the awebpg container.  By invoking "awebpg.sh shell" with concomitant commands.
+
+8.  Add the command line option "-v" or "--version" to the programs aweave and atangle which will print out
+the version of the program, and exit. Make the new version "2.1".
+
+9.  Add a test for this to the test sript and test plan. Make sure this new
+version is included in the new container built from the Dockerfile, and make the container tag produced by
+the Dockerfile is "2.1".
+
+10.  Remove the postgress stuff from  the Dockerfile.  Recreate the docker container and re-run the tests.

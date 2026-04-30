@@ -85,15 +85,17 @@ else
     fail REQ-D-03 "oversized chunks: $audit"
 fi
 
-# REQ-D-04: only libcurl + libc dynamic deps
+# REQ-D-04: only libcurl, libpq, libc, and TLS as dynamic deps.
+# (libpq joined the allowlist in requirements4.txt #3, which mandated
+# programmatic Postgres access via libpq instead of a psql child process.)
 case "$(uname)" in
     Darwin) deps=$(otool -L "$BIN" 2>/dev/null | tail -n +2 | awk '{print $1}') ;;
     Linux)  deps=$(ldd "$BIN" 2>/dev/null | awk '{print $1}') ;;
     *)      deps="" ;;
 esac
-extras=$(printf '%s\n' "$deps" | grep -Ev 'libcurl|libSystem|libc\.|libssl|libcrypto|libz|ld-linux|linux-vdso|/usr/lib/system|/System/' | grep -v '^$' || true)
+extras=$(printf '%s\n' "$deps" | grep -Ev 'libcurl|libpq|libSystem|libc\.|libssl|libcrypto|libz|libintl|libldap|libsasl|libgssapi|libkrb5|libcom_err|libheimdal|libheimntlm|libhx509|libwind|libroken|libasn1|libpcre|libssh|libnghttp|liboauth|ld-linux|linux-vdso|/usr/lib/system|/System/' | grep -v '^$' || true)
 if [ -z "$extras" ]; then
-    pass REQ-D-04 "binary links only libc/libcurl/TLS"
+    pass REQ-D-04 "binary links only {libc, libcurl, libpq, TLS, support libs}"
 else
     fail REQ-D-04 "unexpected dependencies: $extras"
 fi
@@ -316,13 +318,55 @@ else
         fail REQ-A-01 "repeated invocations differ"
     fi
 
-    # REQ-F-11: when no swimmer keyword but -e supplied, all four are processed
+    # REQ-F-11: when no swimmer keyword but -e supplied, all SWIMMERS[]
+    # entries are processed.  There are seven entries: the four Evans/
+    # Benavente swimmers plus three age-windowed Ledecky entries
+    # (ledecky10, ledecky12, ledecky14) that share the same person but
+    # carry distinct date filters.
     "$BIN" -e "50 FR SCY" >/tmp/swim-times-all.out 2>&1
     nsw=$(grep -cE "^Swimmer: " /tmp/swim-times-all.out || true)
-    if [ "$nsw" = "4" ]; then
-        pass REQ-F-11 "no -o swimmer keyword + -e processes all 4 swimmers"
+    if [ "$nsw" = "7" ]; then
+        pass REQ-F-11 "no -o swimmer keyword + -e processes all 7 entries"
     else
-        fail REQ-F-11 "expected 4 Swimmer: lines, saw $nsw"
+        fail REQ-F-11 "expected 7 Swimmer: lines, saw $nsw"
+    fi
+
+    # REQ-F-13: ledecky10 keyword resolves to Katie Genevieve Ledecky
+    "$BIN" -o ledecky10,fastest -e "100 FR SCY" >/tmp/swim-times-ledecky.out 2>&1
+    if grep -q "Katie Genevieve Ledecky" /tmp/swim-times-ledecky.out; then
+        pass REQ-F-13 "ledecky10 keyword resolves to Katie Genevieve Ledecky"
+    else
+        fail REQ-F-13 "ledecky10 did not resolve Katie Ledecky"
+    fi
+
+    # REQ-F-14: ledecky10 date filter restricts dates to 2006-03-17..2008-03-16
+    "$BIN" -o ledecky10,csv -e "100 FR SCY" >/tmp/swim-times-ledecky-csv.out 2>&1
+    bad=$(awk -F, 'NR>1 { d=$4; gsub(/[",]/,"",d); if (d<"2006-03-17"||d>"2008-03-16") print }' \
+              /tmp/swim-times-ledecky-csv.out)
+    if [ -z "$bad" ]; then
+        pass REQ-F-14 "ledecky10 dates fall within 9-10 yr-old window"
+    else
+        fail REQ-F-14 "out-of-window dates: $bad"
+    fi
+
+    # REQ-F-15: ledecky12 date filter restricts dates to 2008-03-17..2010-03-16
+    "$BIN" -o ledecky12,csv -e "100 FR SCY" >/tmp/swim-times-ledecky12-csv.out 2>&1
+    bad=$(awk -F, 'NR>1 { d=$4; gsub(/[",]/,"",d); if (d<"2008-03-17"||d>"2010-03-16") print }' \
+              /tmp/swim-times-ledecky12-csv.out)
+    if [ -z "$bad" ]; then
+        pass REQ-F-15 "ledecky12 dates fall within 11-12 yr-old window"
+    else
+        fail REQ-F-15 "out-of-window dates: $bad"
+    fi
+
+    # REQ-F-16: ledecky14 date filter restricts dates to 2010-03-17..2012-03-16
+    "$BIN" -o ledecky14,csv -e "100 FR SCY" >/tmp/swim-times-ledecky14-csv.out 2>&1
+    bad=$(awk -F, 'NR>1 { d=$4; gsub(/[",]/,"",d); if (d<"2010-03-17"||d>"2012-03-16") print }' \
+              /tmp/swim-times-ledecky14-csv.out)
+    if [ -z "$bad" ]; then
+        pass REQ-F-16 "ledecky14 dates fall within 13-14 yr-old window"
+    else
+        fail REQ-F-16 "out-of-window dates: $bad"
     fi
 
     # REQ-F-21: with no -e, all 31 default events are queried
@@ -332,6 +376,81 @@ else
         pass REQ-F-21 "no -e queries all 31 default events"
     else
         fail REQ-F-21 "expected 31 event sections, saw $nev"
+    fi
+fi
+
+# -----------------------------------------------------------------
+# REQ-F-70..73 / REQ-D-10: Postgres persistence (store + offline)
+# -----------------------------------------------------------------
+section "Database persistence"
+
+PSQL_CMD="${SWIM_TIMES_PSQL:-../../pg/pg.sh psql}"
+DB_REACHABLE=0
+if eval "$PSQL_CMD -d swim-times -c 'SELECT 1' >/dev/null 2>&1"; then
+    DB_REACHABLE=1
+fi
+
+if [ $DB_REACHABLE -eq 0 ] || [ $ONLINE -eq 0 ]; then
+    reason="Postgres swim-times unreachable via \$SWIM_TIMES_PSQL"
+    [ $ONLINE -eq 0 ] && reason="$reason or network offline"
+    for r in REQ-F-70 REQ-F-71 REQ-F-72 REQ-F-73; do
+        skip "$r" "$reason"
+    done
+else
+    # REQ-F-70: store + csv inserts rows AND prints CSV to stdout
+    eval "$PSQL_CMD -d swim-times -c 'TRUNCATE swim_times'" >/dev/null 2>&1
+    "$BIN" -o stella,csv,store -e "100 FR SCY" >/tmp/swim-times-store.out 2>&1
+    n_csv=$(grep -cE '^"' /tmp/swim-times-store.out || true)
+    n_db=$(eval "$PSQL_CMD -d swim-times -tAc 'SELECT count(*) FROM swim_times'" 2>/dev/null)
+    if [ "$n_csv" -gt 1 ] && [ "$n_db" -gt 0 ]; then
+        pass REQ-F-70 "store+csv: $n_csv stdout lines, $n_db rows in DB"
+    else
+        fail REQ-F-70 "store+csv: stdout=$n_csv db=$n_db"
+    fi
+
+    # REQ-F-71: offline read returns rows previously stored
+    "$BIN" -o stella,offline,csv -e "100 FR SCY" >/tmp/swim-times-offline.out 2>&1
+    n_off=$(grep -cE '^"' /tmp/swim-times-offline.out || true)
+    if [ "$n_off" -gt 1 ]; then
+        pass REQ-F-71 "offline read produced $n_off CSV lines"
+    else
+        fail REQ-F-71 "offline read returned no rows"
+    fi
+
+    # REQ-F-72: offline performs no network call (drop network in env)
+    if SWIM_TIMES_SKIP_NETWORK=1 "$BIN" -o stella,offline,csv -e "100 FR SCY" \
+            >/tmp/swim-times-offline-only.out 2>&1; then
+        n2=$(grep -cE '^"' /tmp/swim-times-offline-only.out || true)
+        if [ "$n2" -gt 1 ]; then
+            pass REQ-F-72 "offline mode runs without network ($n2 rows)"
+        else
+            fail REQ-F-72 "offline run produced no rows"
+        fi
+    else
+        fail REQ-F-72 "offline run failed"
+    fi
+
+    # REQ-F-73: store unique constraint prevents duplicate rows on rerun
+    before=$(eval "$PSQL_CMD -d swim-times -tAc 'SELECT count(*) FROM swim_times'" 2>/dev/null)
+    "$BIN" -o stella,store -e "100 FR SCY" >/dev/null 2>/tmp/swim-times-store2.err || true
+    after=$(eval "$PSQL_CMD -d swim-times -tAc 'SELECT count(*) FROM swim_times'" 2>/dev/null)
+    if [ "$before" = "$after" ]; then
+        pass REQ-F-73 "rerun did not duplicate rows (UNIQUE constraint)"
+    else
+        fail REQ-F-73 "row count changed: $before -> $after"
+    fi
+
+    # REQ-F-75: duplicate insert recovers gracefully (requirements4.txt #4).
+    # The program must exit 0 with no warnings on stderr when re-storing
+    # already-present rows; ON CONFLICT DO NOTHING is the recovery path.
+    "$BIN" -o stella,store -e "100 FR SCY" \
+        >/tmp/swim-times-store3.out 2>/tmp/swim-times-store3.err
+    rc=$?
+    err_lines=$(wc -l </tmp/swim-times-store3.err | tr -d ' ')
+    if [ "$rc" = "0" ] && [ "$err_lines" = "0" ]; then
+        pass REQ-F-75 "duplicate-insert run exited 0 with no stderr"
+    else
+        fail REQ-F-75 "rc=$rc err_lines=$err_lines (see /tmp/swim-times-store3.err)"
     fi
 fi
 
