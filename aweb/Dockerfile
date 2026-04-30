@@ -1,5 +1,12 @@
 FROM ubuntu:26.04
 
+LABEL org.opencontainers.image.title="awebpg" \
+      org.opencontainers.image.description="AWEB literate-programming toolchain (atangle/aweave) with Ada 95 keyword support, plus PostgreSQL" \
+      org.opencontainers.image.version="2.0" \
+      org.opencontainers.image.source="https://github.com/evansjr/aweb" \
+      aweb.atangle.version="2.0" \
+      aweb.aweave.version="2.0"
+
 RUN apt-get update && apt-get install -y \
     gnat \
     make \

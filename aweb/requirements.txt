@@ -5,4 +5,19 @@ file for database persistence, and make sure it initializes correctly when first
 
 3.  Rename aweb.sh awegpg.sh and rename the dockefile to evansjr/awebpg.
 
+4. Currently aweave and atangle correctly parse an early version of Ada, a version before Ada 95.
+Update the aweave and atangle ".web" programs to correctly parse Ada 95 programs (more key words are present).
+Update the documentation in the ".aweb" programes as appropriate.
+
+5.  Compile the programs and verify they work correctly, then update the Dockerfile to incorporate these new
+versions.  Update the version numbers in the ".web" files as well.
+
+6.  Create a TeX or LaTeX document, called a Software Test Plan, according to IEEE software standards, and a concomitant
+software test script.
+
+7.  Make sure the tests run in the awebpg container.  By invoking "awebpg.sh shell" with concomitant commands.
+
+
+
+
 
