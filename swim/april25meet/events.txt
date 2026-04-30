@@ -1,0 +1,21 @@
+⏺ Found all of Stella Evans' entries across the psych sheet. Here's the text table:                            
+                                                                                                               
+  Stella Julianna Evans (age 10, CAST-SI) — 2026 SI PS ABB Meet Group A                                        
+  =====================================================================                                        
+                                                                                                               
+  Event#  Date          Event                                  Seed Time   Event Starts                        
+  ------  ------------  -------------------------------------  ----------  ------------                        
+     9    Sat 4/25/26   Girls 12 & Under 200 LC Meter Free     3:25.69     08:30 AM                            
+    13    Sat 4/25/26   Girls 12 & Under 50  LC Meter Fly        42.22Y    09:26 AM                            
+    17    Sat 4/25/26   Girls 12 & Under 50  LC Meter Back       42.24Y    10:09 AM                            
+    27    Sun 4/26/26   Girls 100 LC Meter Backstroke          1:29.91Y    01:56 PM                            
+    35    Sun 4/26/26   Girls 100 LC Meter Freestyle           1:21.08Y    03:25 PM                            
+                                                                                                               
+  Notes:                                                                                                       
+  - "Y" suffix on seed times = converted from short course yards.
+  - "Event Starts" is the start time of the first heat of that event (from the meet's Session Report). Heat    
+  interval is 20 seconds (back +15), so Stella's actual swim will be later within the event window depending on
+   her heat. Given her converted-from-yards seed times, she is typically seeded into one of the earlier heats. 
+  - Sat session is Day 2 (5 heats for Event 9, 8 heats for Events 13 & 17). Sun session is Day 3 (10 heats for
+  Event 27, 15 heats for Event 35).                                                                            
+                                                                                              
