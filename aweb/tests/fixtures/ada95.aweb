@@ -1,0 +1,53 @@
+% Ada 95 fixture for the AWEB toolchain.
+% Exercises every reserved word added in Ada 95:
+%   abstract, aliased, protected, requeue, tagged, until.
+\input awebmac
+
+@* Ada 95 sample. Each new reserved word appears at least once
+in the program text below so that the weaver can be checked for
+correct classification, and the tangler for correct output.
+
+@a
+with TEXT_IO;
+package ADA95_SAMPLE is
+
+   type SHAPE is abstract tagged record
+      ID : INTEGER;
+   end record;
+
+   type SHAPE_PTR is access all SHAPE'CLASS;
+
+   PIVOT : aliased INTEGER := 0;
+
+   protected type COUNTER is
+      entry INCREMENT;
+      function VALUE return INTEGER;
+   private
+      N : INTEGER := 0;
+   end COUNTER;
+
+end ADA95_SAMPLE;
+
+package body ADA95_SAMPLE is
+
+   protected body COUNTER is
+      entry INCREMENT when N < 10 is
+      begin
+         N := N + 1;
+         if N = 5 then
+            requeue INCREMENT;
+         end if;
+      end INCREMENT;
+
+      function VALUE return INTEGER is
+      begin
+         return N;
+      end VALUE;
+   end COUNTER;
+
+   procedure WAIT_A_BIT is
+   begin
+      delay until ADA.CALENDAR.CLOCK + 0.1;
+   end WAIT_A_BIT;
+
+end ADA95_SAMPLE;

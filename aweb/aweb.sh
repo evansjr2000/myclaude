@@ -7,7 +7,7 @@
 #   ./awebpg.sh test                        # run the STP test harness
 #   ./awebpg.sh build                       # rebuild the image
 
-VERSION="2.0"
+VERSION="2.1"
 IMAGE_NAME="evansjr/awebpg:$VERSION"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
