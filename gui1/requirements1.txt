@@ -1,0 +1,10 @@
+1. Create a simple program that creates a box, using X windows calls.  The box will have two buttons.  One to exit, and one
+to print out a simple "Hello World, and the current local time."
+
+2.  The program will be written using Donald Knuth's literate programming style and standard C.
+
+3.  Follow the same guidelines for literate programs used in the swim-times.w program.
+
+4.  Make sure the documentation, the tex file produced from the web file,
+   produces a pdf file with no errors
+

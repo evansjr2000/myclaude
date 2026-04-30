@@ -1,0 +1,34 @@
+\I\X22:Centre and draw the button label\X
+\U21.
+\I\X10, 11:Constants\X
+\U7.
+\I\X32:Create the graphics context\X
+\U29.
+\I\X31:Create the top-level window\X
+\U29.
+\I\X29:Display setup\X
+\U7.
+\I\X35:Display teardown\X
+\U7.
+\I\X21, 23:Drawing routines\X
+\U7.
+\I\X25, 26, 27:Event handlers\X
+\U7.
+\I\X14, 15:Globals\X
+\U7.
+\I\X19:Hit testing\X
+\U7.
+\I\X9:Includes\X
+\U7.
+\I\X37:Main function\X
+\U7.
+\I\X30:Open the X display\X
+\U29.
+\I\X33:Register for window-manager close\X
+\U29.
+\I\X38:Run the event loop\X
+\U37.
+\I\X17:Time helper\X
+\U7.
+\I\X13:Type definitions\X
+\U7.
