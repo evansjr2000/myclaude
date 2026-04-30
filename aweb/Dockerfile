@@ -1,25 +1,18 @@
 FROM ubuntu:26.04
 
 LABEL org.opencontainers.image.title="awebpg" \
-      org.opencontainers.image.description="AWEB literate-programming toolchain (atangle/aweave) with Ada 95 keyword support, plus PostgreSQL" \
-      org.opencontainers.image.version="2.0" \
+      org.opencontainers.image.description="AWEB literate-programming toolchain (atangle/aweave) with Ada 95 keyword support and -v/--version flag" \
+      org.opencontainers.image.version="2.1" \
       org.opencontainers.image.source="https://github.com/evansjr/aweb" \
-      aweb.atangle.version="2.0" \
-      aweb.aweave.version="2.0"
+      aweb.atangle.version="2.1" \
+      aweb.aweave.version="2.1"
 
 RUN apt-get update && apt-get install -y \
     gnat \
     make \
     file \
     emacs \
-    postgresql \
-    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
-
-# PostgreSQL environment and persistence
-ENV PGDATA=/var/lib/postgresql/data
-EXPOSE 5432
-VOLUME ["/var/lib/postgresql/data"]
 
 # Copy source and build atangle
 WORKDIR /opt/aweb/atangle
@@ -43,3 +36,4 @@ WORKDIR /work
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["/bin/bash"]
+
