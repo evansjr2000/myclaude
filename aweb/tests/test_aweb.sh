@@ -4,7 +4,7 @@
 #
 # Usage:
 #   tests/test_aweb.sh              # run from the repository root
-#   awebpg.sh test                  # run inside the awebpg container
+#   aweb.sh test                  # run inside the aweb container
 #
 # Exit status: 0 if every non-skipped case passes; 1 otherwise.
 
@@ -13,8 +13,22 @@ set -u
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TESTS_DIR="$REPO_ROOT/tests"
 LOG="$TESTS_DIR/test_aweb.log"
-WORK="$TESTS_DIR/work"
 
+# Per-case scratch goes here.  When the harness is executed inside the
+# container, `$REPO_ROOT` is a Docker bind mount (VirtIOFS on macOS),
+# which is fast enough for normal use but occasionally lags on bursts of
+# small create/delete operations -- exactly what the retangle and
+# round-trip cases produce.  Putting the scratch directory on the
+# container-local overlay filesystem (/tmp) avoids those flakes while
+# leaving the log file on the bind mount so it is still visible after
+# the run.
+if [[ -f /.dockerenv ]] && [[ -w /tmp ]]; then
+    WORK="/tmp/aweb-test-work"
+else
+    WORK="$TESTS_DIR/work"
+fi
+
+rm -rf "$WORK"
 mkdir -p "$WORK"
 : > "$LOG"
 
@@ -29,7 +43,7 @@ sk()    { skip=$((skip+1)); printf 'SKIP  %-6s  %s\n' "$1" "$2" | tee -a "$LOG";
 
 # ---------------------------------------------------------------------------
 # Environment detection.  Two modes:
-#   * "container"  -- running inside the awebpg image; pre-installed
+#   * "container"  -- running inside the aweb image; pre-installed
 #                     binaries live under /usr/local/bin and the
 #                     docker-of-docker cases (TC-010..TC-014) are
 #                     meaningless and are skipped.
@@ -250,6 +264,59 @@ version_flag_check TC-016 "$AWEAVE"  "--version" \
     "This is AWEAVE, Version 2.1 (Ada 95 keyword support)" "$WORK/v_aweave"
 
 # ---------------------------------------------------------------------------
+# TC-017 / TC-018 -- retangle the literate sources with their .ach change
+# files (requirement 11).  Each case runs the SUT against
+# (atangle.aweb, atangle.ach) and (aweave.aweb, aweave.ach), then asserts
+# that the change-file-redirected GNAT-style output files appear and that
+# atangle reported "(No errors were found.)".
+# ---------------------------------------------------------------------------
+retangle_check() {
+    local id="$1" subdir="$2" base="$3"; shift 3
+    local expected=( "$@" )
+    if [[ ! -x "$ATANGLE" ]]; then
+        sk "$id" "atangle not built (gnatmake required)"
+        return
+    fi
+    local src_dir="$REPO_ROOT/$subdir"
+    if [[ ! -f "$src_dir/$base.aweb" || ! -f "$src_dir/$base.ach" ]]; then
+        ko "$id" "missing $subdir/$base.aweb or .ach"
+        return
+    fi
+    local rt_dir="$WORK/retangle-$base"
+    rm -rf "$rt_dir"; mkdir -p "$rt_dir"
+    cp "$src_dir/$base.aweb" "$src_dir/$base.ach" "$rt_dir/"
+    local out
+    out=$( cd "$rt_dir" && "$ATANGLE" "$base.aweb" "$base.ach" 2>&1 )
+    if ! printf '%s\n' "$out" | grep -qF "(No errors were found.)"; then
+        ko "$id" "atangle reported errors: $(printf '%s' "$out" | tail -n 3 | tr '\n' ' ')"
+        return
+    fi
+    local missing=()
+    for f in "${expected[@]}"; do
+        [[ -f "$rt_dir/$f" ]] || missing+=("$f")
+    done
+    if (( ${#missing[@]} > 0 )); then
+        ko "$id" "expected output files missing: ${missing[*]}"
+        return
+    fi
+    ok "$id" "retangle ${base}.aweb+${base}.ach produced ${#expected[@]} GNAT files"
+}
+
+retangle_check TC-017 atangle atangle \
+    atangle.adb data_structures.adb data_structures.ads \
+    hashing.adb hashing.ads input_output.adb input_output.ads \
+    input_phase.adb input_phase.ads int_number_io.ads \
+    output_phase.adb output_phase.ads
+
+retangle_check TC-018 aweave aweave \
+    aweave.adb data_structures.adb data_structures.ads \
+    first_phase.adb first_phase.ads input_output.adb input_output.ads \
+    lexical_scanning.adb lexical_scanning.ads output.adb output.ads \
+    parsing.adb parsing.ads parsing-ada_parse.adb parsing-do_cases.adb \
+    parsing-translate.adb searching.adb searching.ads \
+    second_phase.adb second_phase.ads third_phase.adb third_phase.ads
+
+# ---------------------------------------------------------------------------
 # TC-010 / TC-011 / TC-013 / TC-014 -- container cases.
 # (TC-012 was the PostgreSQL persistence case; withdrawn in release 2.1
 # when PostgreSQL was removed from the image per requirement 10.)
@@ -273,10 +340,10 @@ if [[ $docker_ok -eq 0 ]]; then
     sk TC-013 "$reason"
     sk TC-014 "$reason"
 else
-    if docker build -t evansjr/awebpg:2.1 "$REPO_ROOT" >>"$LOG" 2>&1; then
-        ok TC-010 "container image built (evansjr/awebpg:2.1)"
+    if docker build -t evansjr/aweb:2.1 "$REPO_ROOT" >>"$LOG" 2>&1; then
+        ok TC-010 "container image built (evansjr/aweb:2.1)"
 
-        if docker run --rm --entrypoint /bin/bash evansjr/awebpg:2.1 \
+        if docker run --rm --entrypoint /bin/bash evansjr/aweb:2.1 \
               -c 'command -v make && command -v file && command -v emacs' \
               >>"$LOG" 2>&1; then
             ok TC-011 "container provides make, file, emacs"
@@ -288,9 +355,9 @@ else
         # was removed from the image in release 2.1 per requirement 10.
 
         if docker run --rm -v "$WORK:/work" \
-                evansjr/awebpg:2.1 \
+                evansjr/aweb:2.1 \
                 /bin/bash -c "atangle ada95.aweb" >>"$LOG" 2>&1; then
-            ok TC-013 "awebpg.sh-style atangle dispatch inside container"
+            ok TC-013 "aweb.sh-style atangle dispatch inside container"
         else
             ko TC-013 "in-container atangle dispatch failed"
         fi
@@ -298,7 +365,7 @@ else
         # End-to-end keyword verification using the in-container aweave.
         rm -f "$WORK"/*.tex
         if docker run --rm -v "$WORK:/work" \
-                evansjr/awebpg:2.1 \
+                evansjr/aweb:2.1 \
                 /bin/bash -c "aweave ada95.aweb" >>"$LOG" 2>&1; then
             tex=$( ls "$WORK"/*.tex 2>/dev/null | head -n 1 )
             if [[ -n "$tex" ]]; then

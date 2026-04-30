@@ -1,6 +1,6 @@
 FROM ubuntu:26.04
 
-LABEL org.opencontainers.image.title="awebpg" \
+LABEL org.opencontainers.image.title="aweb" \
       org.opencontainers.image.description="AWEB literate-programming toolchain (atangle/aweave) with Ada 95 keyword support and -v/--version flag" \
       org.opencontainers.image.version="2.1" \
       org.opencontainers.image.source="https://github.com/evansjr/aweb" \

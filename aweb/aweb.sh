@@ -1,14 +1,14 @@
 #!/bin/bash
 # Helper script to run atangle/aweave in Docker
 # Usage:
-#   ./awebpg.sh atangle file.aweb [changefile]
-#   ./awebpg.sh aweave  file.aweb [changefile]
-#   ./awebpg.sh shell                       # interactive shell
-#   ./awebpg.sh test                        # run the STP test harness
-#   ./awebpg.sh build                       # rebuild the image
+#   ./aweb.sh atangle file.aweb [changefile]
+#   ./aweb.sh aweave  file.aweb [changefile]
+#   ./aweb.sh shell                       # interactive shell
+#   ./aweb.sh test                        # run the STP test harness
+#   ./aweb.sh build                       # rebuild the image
 
 VERSION="2.1"
-IMAGE_NAME="evansjr/awebpg:$VERSION"
+IMAGE_NAME="evansjr/aweb:$VERSION"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Build image if it doesn't exist
