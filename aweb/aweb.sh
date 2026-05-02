@@ -7,7 +7,7 @@
 #   ./aweb.sh test                        # run the STP test harness
 #   ./aweb.sh build                       # rebuild the image
 
-VERSION="2.1"
+VERSION="2.2"
 IMAGE_NAME="evansjr/aweb:$VERSION"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 

@@ -12,7 +12,11 @@ RUN apt-get update && apt-get install -y \
     make \
     file \
     emacs \
-    && rm -rf /var/lib/apt/lists/*
+&& rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y \
+    gprbuild \
+&& rm -rf /var/lib/apt/lists/*
 
 # Copy source and build atangle
 WORKDIR /opt/aweb/atangle
