@@ -1,5 +1,5 @@
 % SOFTWARE_TEST_PLAN.tex
-% Software Test Plan for the AWEB toolchain (atangle/aweave) release 2.1.
+% Software Test Plan for the AWEB toolchain (atangle/aweave) release 2.2.
 % Conforms to IEEE Std 829-2008 (Standard for Software and System Test
 % Documentation).  This document is intended to be typeset with pdflatex
 % but uses only the standard article class so that any TeX engine of
@@ -17,19 +17,19 @@
 \usepackage{parskip}
 
 \hypersetup{
-  pdftitle  = {AWEB-STP-2.1: Software Test Plan},
+  pdftitle  = {AWEB-STP-2.2: Software Test Plan},
   pdfauthor = {AWEB Toolchain Maintainers},
   colorlinks = true,
   linkcolor  = blue,
   urlcolor   = blue
 }
 
-\newcommand{\stpid}{AWEB-STP-2.1}
+\newcommand{\stpid}{AWEB-STP-2.2}
 \newcommand{\sut}{\textsf{atangle}/\textsf{aweave}}
 
-\title{Software Test Plan\\\large AWEB Toolchain (\textsf{atangle} 2.1 / \textsf{aweave} 2.1)}
+\title{Software Test Plan\\\large AWEB Toolchain (\textsf{atangle} 2.2 / \textsf{aweave} 2.2)}
 \author{AWEB Toolchain Maintainers}
-\date{2026--04--30}
+\date{2026--05--06}
 
 \begin{document}
 \maketitle
@@ -50,7 +50,7 @@ Conforming standard   & IEEE Std 829--2008\\
 \section{Introduction}
 
 \subsection{Document identifier}
-This is the Software Test Plan (STP) for release 2.1 of the AWEB
+This is the Software Test Plan (STP) for release 2.2 of the AWEB
 toolchain, comprising the programs \texttt{atangle} and \texttt{aweave}.
 It is identified as \stpid.
 
@@ -63,26 +63,42 @@ words were added to the lexical recognizer of \texttt{aweave}:
 \texttt{abstract},\ \texttt{aliased},\ \texttt{protected},\
 \texttt{requeue},\ \texttt{tagged},\ \texttt{until}.
 \end{quote}
-Release~2.1 adds a \texttt{-v} / \texttt{--version} command-line option
-to both programs.  When the option is given, the program prints its
-banner and exits successfully without opening any input or output
-files.  The container is now tagged \texttt{evansjr/awebpg:2.1}.
+Release~2.1 added a \texttt{-v} / \texttt{--version} command-line option
+to both programs and removed the bundled PostgreSQL stack.
 
-Release~2.1 also removes the PostgreSQL stack that was bundled in
-release~2.0 (requirement~10).  The image now contains only the
-toolchain (\texttt{atangle}, \texttt{aweave}) and supporting utilities
-(\texttt{make}, \texttt{file}, \texttt{emacs}); the corresponding
-PostgreSQL test case (TC--012) is withdrawn.
+Release~2.2 extends the toolchain to recognise programs written in
+Ada~2012 (ISO/IEC~8652:2012) in addition to Ada~83 and Ada~95.  Four
+reserved words --- three carried over from Ada~2005 and one introduced
+by Ada~2012 itself --- are added to the lexical recognizer of
+\texttt{aweave}:
+\begin{quote}
+\texttt{interface},\ \texttt{overriding},\ \texttt{synchronized}\
+(Ada~2005);\ \texttt{some}\ (Ada~2012).
+\end{quote}
+Because the lexical structure of Ada~2012 is unchanged with respect to
+identifiers, \texttt{atangle} requires no syntactic change; the new
+keywords are passed through verbatim and pretty-printed by
+\texttt{aweave}.  The container is now tagged
+\texttt{evansjr/aweb:2.2}, and the version banner of both programs has
+been updated to ``Version 2.2 (Ada 2012)''.
+
+The change-file workflow (requirement~11) and the \texttt{-v} /
+\texttt{--version} command-line flag (requirement~8) are carried over
+unchanged from release~2.1; only the banner strings they print have
+been retargeted to the new version.
 
 This STP exercises the unchanged behaviour (regression), the Ada~95
-keyword classification, the new version-flag behaviour, and the
-surrounding container artefacts (\texttt{Dockerfile},
-\texttt{awebpg.sh}, \texttt{docker-entrypoint.sh}).
+keyword classification (regression), the new Ada~2012 keyword
+classification, the version-flag behaviour, and the surrounding
+container artefacts (\texttt{Dockerfile}, \texttt{aweb.sh},
+\texttt{docker-entrypoint.sh}).
 
 \subsection{References}
 \begin{enumerate}[label=R\arabic*., leftmargin=2.5em]
   \item IEEE Std~829--2008, \emph{Standard for Software and System Test
         Documentation}.
+  \item ISO/IEC~8652:2012, \emph{Information technology --- Programming
+        languages --- Ada} (Ada~2012).
   \item ISO/IEC~8652:1995, \emph{Information technology --- Programming
         languages --- Ada} (Ada~95).
   \item ANSI/MIL-STD-1815A-1983, \emph{Reference Manual for the Ada
@@ -90,6 +106,8 @@ surrounding container artefacts (\texttt{Dockerfile},
   \item D.~E.~Knuth, \emph{Literate Programming}, CSLI, 1992.
   \item \texttt{requirements.txt} in this repository: functional
         requirements for release~2.1.
+  \item \texttt{requirements2.txt} in this repository: functional
+        requirements for release~2.2.
   \item \texttt{aweave/aweave.aweb}, \texttt{atangle/atangle.aweb}:
         literate sources of the SUT.
 \end{enumerate}
@@ -101,16 +119,16 @@ surrounding container artefacts (\texttt{Dockerfile},
 \toprule
 ID    & Item                          & Version & Source of record\\
 \midrule
-TI--1 & \texttt{atangle} executable   & 2.1 & \texttt{atangle/atangle.adb} (+ tangled units)\\
-TI--2 & \texttt{aweave}  executable   & 2.1 & \texttt{aweave/aweave.adb}  (+ tangled units)\\
-TI--3 & \texttt{Dockerfile}           & 2.1 & \texttt{./Dockerfile}\\
-TI--4 & \texttt{awebpg.sh} driver     & 2.1 & \texttt{./awebpg.sh}\\
-TI--5 & \texttt{docker-entrypoint.sh} & 2.1 & \texttt{./docker-entrypoint.sh}\\
+TI--1 & \texttt{atangle} executable   & 2.2 & \texttt{atangle/atangle.adb} (+ tangled units)\\
+TI--2 & \texttt{aweave}  executable   & 2.2 & \texttt{aweave/aweave.adb}  (+ tangled units)\\
+TI--3 & \texttt{Dockerfile}           & 2.2 & \texttt{./Dockerfile}\\
+TI--4 & \texttt{aweb.sh} driver     & 2.2 & \texttt{./aweb.sh}\\
+TI--5 & \texttt{docker-entrypoint.sh} & 2.2 & \texttt{./docker-entrypoint.sh}\\
 \bottomrule
 \end{tabular}
 \end{center}
 Each item is delivered as part of a single OCI image tagged
-\texttt{evansjr/awebpg:2.1}.
+\texttt{evansjr/aweb:2.2}.
 
 \section{Features to be tested}
 
@@ -128,21 +146,29 @@ F--4  & Tangling of an Ada~95 program containing the six new reserved
 F--5  & Weaving of an Ada~83 program (regression).\\
 F--6  & Weaving of an Ada~95 program: each new reserved word is set in
         \verb|\&{...}| (bold) face.\\
+F--6b & Weaving of an Ada~2012 program: the four new Ada~2005 / Ada~2012
+        reserved words (\texttt{interface}, \texttt{overriding},
+        \texttt{synchronized}, \texttt{some}) are set in
+        \verb|\&{...}| (bold) face.\\
 F--7  & Round-trip: tangling is idempotent on a fixed Ada~95 source.\\
 F--8  & Container build (\texttt{docker build}) yields image
-        \texttt{evansjr/awebpg:2.1}.\\
+        \texttt{evansjr/aweb:2.2}.\\
 F--9  & \emph{Withdrawn in release 2.1}: PostgreSQL was removed from the
         image (requirement~10), so the previous initialisation /
         persistence feature no longer applies.\\
 F--10 & \texttt{make}, \texttt{file}, \texttt{emacs} are present in the
         container image.\\
-F--11 & \texttt{awebpg.sh} dispatch (\texttt{atangle}, \texttt{aweave},
+F--11 & \texttt{aweb.sh} dispatch (\texttt{atangle}, \texttt{aweave},
         \texttt{shell}, \texttt{test}) functions inside the container.\\
 F--12 & The full test harness can be executed inside the container
         (requirement~7).\\
 F--13 & The \texttt{-v} / \texttt{--version} command-line flag prints the
         version banner and exits successfully without opening any input
         or output files (requirement~8).\\
+F--14 & Running \texttt{atangle} on \texttt{atangle.aweb}/\texttt{aweave.aweb}
+        together with the bundled \texttt{.ach} change file produces the
+        GNAT-style \texttt{.adb}/\texttt{.ads} output files
+        (requirement~11).\\
 \bottomrule
 \end{tabularx}
 \end{center}
@@ -154,9 +180,9 @@ F--13 & The \texttt{-v} / \texttt{--version} command-line flag prints the
 \toprule
 ID    & Feature & Rationale\\
 \midrule
-NF--1 & Ada~2005/Ada~2012 keywords (\texttt{interface},
-        \texttt{overriding}, \texttt{synchronized}, \texttt{some})
-      & Out of scope for release~2.1; only Ada~95 was contracted.\\
+NF--1 & Ada~2022 keywords (\texttt{parallel}; \texttt{declare} as
+        expression form)
+      & Out of scope for release~2.2; only Ada~2012 was contracted.\\
 NF--2 & Performance / throughput on multi-megabyte AWEB inputs
       & No performance requirement was levied.\\
 NF--3 & Internationalization of TeX output
@@ -188,7 +214,7 @@ interactive judgement is required.
 
 \subsection{Test levels covered}
 \begin{description}[leftmargin=*]
-  \item[Unit] (lexical-table) F--2, F--4, F--6.
+  \item[Unit] (lexical-table) F--2, F--4, F--6, F--6b.
   \item[Integration] (program + I/O) F--1, F--3, F--5, F--7, F--11.
   \item[System] (container) F--8, F--9, F--10, F--12.
 \end{description}
@@ -203,7 +229,7 @@ The harness is designed to run in two execution environments:
         requires GNAT for the native-compile cases (when not running in
         the container).
   \item \emph{In container} --- invoked via
-        \texttt{awebpg.sh test} or \texttt{awebpg.sh shell} followed by
+        \texttt{aweb.sh test} or \texttt{aweb.sh shell} followed by
         \texttt{bash tests/test\_aweb.sh}.  In this mode the harness
         uses the pre-installed binaries at \texttt{/usr/local/bin/atangle}
         and \texttt{/usr/local/bin/aweave} and skips the docker-of-docker
@@ -238,7 +264,7 @@ Deliverable                        & Location\\
 \midrule
 This Software Test Plan            & \texttt{SOFTWARE\_TEST\_PLAN.tex}\\
 Test harness                       & \texttt{tests/test\_aweb.sh}\\
-Test fixtures (Ada~83 + Ada~95)    & \texttt{tests/fixtures/}\\
+Test fixtures (Ada~83, Ada~95, Ada~2012) & \texttt{tests/fixtures/}\\
 Test log (produced by harness)     & \texttt{tests/test\_aweb.log}\\
 \bottomrule
 \end{tabularx}
@@ -253,7 +279,7 @@ Test log (produced by harness)     & \texttt{tests/test\_aweb.log}\\
 \midrule
 1 & Stage source tree                                   & ---\\
 2 & Build container image                               & 1\\
-3 & Run \texttt{awebpg.sh test} (or run the harness on the host) & 1, 2\\
+3 & Run \texttt{aweb.sh test} (or run the harness on the host) & 1, 2\\
 4 & Inspect log; declare pass/fail                      & 3\\
 \bottomrule
 \end{tabular}
@@ -261,7 +287,7 @@ Test log (produced by harness)     & \texttt{tests/test\_aweb.log}\\
 
 \section{Test cases}\label{sec:cases}
 
-The fourteen cases below are implemented by
+The fifteen cases below are implemented by
 \texttt{tests/test\_aweb.sh}.  ``Procedure'' is summarised; the full
 procedure is the script itself.
 
@@ -281,11 +307,11 @@ Exit~0; \texttt{aweave} executable produced.\\
 
 TC--003 & atangle banner & F--2 &
 \texttt{atangle ada83.aweb} ; first stdout line. &
-Contains ``This is ATANGLE, Version 2.1 (Ada 95)''.\\
+Contains ``This is ATANGLE, Version 2.2 (Ada 2012)''.\\
 
 TC--004 & aweave banner & F--2 &
 \texttt{aweave ada83.aweb} ; first stdout line. &
-Contains ``This is AWEAVE, Version 2.1 (Ada 95 keyword support)''.\\
+Contains ``This is AWEAVE, Version 2.2 (Ada 2012 keyword support)''.\\
 
 TC--005 & Tangle Ada 83 fixture & F--3 &
 Tangle \texttt{ada83.aweb}; check produced \texttt{.a} file. &
@@ -307,14 +333,21 @@ Weave \texttt{ada95.aweb}; verify
 appear at least once in the \texttt{.tex}. &
 All six present.\\
 
+TC--008b & Weave Ada 2012: new keywords are bold & F--6b &
+Weave \texttt{ada2012.aweb}; verify
+\verb|\&{interface}|, \verb|\&{overriding}|,
+\verb|\&{synchronized}|, \verb|\&{some}| each
+appear at least once in the \texttt{.tex}. &
+All four present.\\
+
 TC--009 & Round-trip equivalence & F--7 &
 Tangle \texttt{ada95.aweb} twice; \texttt{diff} the two outputs. &
 \texttt{diff} empty.\\
 
 TC--010 & Container build & F--8 &
-\texttt{docker build -t evansjr/awebpg:2.1 .} &
+\texttt{docker build -t evansjr/aweb:2.2 .} &
 Build succeeds; image carries label
-\texttt{org.opencontainers.image.version=2.1}.\\
+\texttt{org.opencontainers.image.version=2.2}.\\
 
 TC--011 & Container has make, file, emacs & F--10 &
 \texttt{docker run \dots\ command -v make file emacs}. &
@@ -323,8 +356,8 @@ All three resolve to absolute paths.\\
 TC--012 & \multicolumn{4}{l}{\emph{Withdrawn in release 2.1: PostgreSQL
 was removed from the image per requirement~10.}}\\
 
-TC--013 & \texttt{awebpg.sh} dispatch & F--11 &
-\texttt{awebpg.sh atangle ada95.aweb} inside the container. &
+TC--013 & \texttt{aweb.sh} dispatch & F--11 &
+\texttt{aweb.sh atangle ada95.aweb} inside the container. &
 Exit~0; \texttt{web\_output.a} produced.\\
 
 TC--014 & In-container Ada~95 keyword classification & F--6, F--12 &
@@ -339,15 +372,40 @@ Run \texttt{atangle -v} in an empty working directory; observe
 exit~0, stdout contains the banner, and no \texttt{.a}/\texttt{.tex}
 files are produced. &
 Banner contains
-``This is ATANGLE, Version 2.1 (Ada 95)''; no artefacts.\\
+``This is ATANGLE, Version 2.2 (Ada 2012)''; no artefacts.\\
 
 TC--016 & \texttt{aweave --version} prints version & F--13 &
 Run \texttt{aweave --version} in an empty working directory; observe
 exit~0, stdout contains the banner, and no \texttt{.a}/\texttt{.tex}
 files are produced. &
 Banner contains
-``This is AWEAVE, Version 2.1 (Ada 95 keyword support)'';
+``This is AWEAVE, Version 2.2 (Ada 2012 keyword support)'';
 no artefacts.\\
+
+TC--017 & Retangle \texttt{atangle.aweb} with \texttt{atangle.ach} & F--14 &
+Copy \texttt{atangle.aweb} and \texttt{atangle.ach} into a clean
+directory, run \texttt{atangle atangle.aweb atangle.ach}, and inspect
+the produced files. &
+\texttt{atangle.adb}, \texttt{data\_structures.\{adb,ads\}},
+\texttt{hashing.\{adb,ads\}}, \texttt{input\_output.\{adb,ads\}},
+\texttt{input\_phase.\{adb,ads\}}, \texttt{int\_number\_io.ads},
+\texttt{output\_phase.\{adb,ads\}} all present; no errors reported.\\
+
+TC--018 & Retangle \texttt{aweave.aweb} with \texttt{aweave.ach} & F--14 &
+Copy \texttt{aweave.aweb} and \texttt{aweave.ach} into a clean
+directory, run \texttt{atangle aweave.aweb aweave.ach}, and inspect
+the produced files. &
+\texttt{aweave.adb}, \texttt{data\_structures.\{adb,ads\}},
+\texttt{first\_phase.\{adb,ads\}},
+\texttt{input\_output.\{adb,ads\}},
+\texttt{lexical\_scanning.\{adb,ads\}},
+\texttt{output.\{adb,ads\}},
+\texttt{parsing.\{adb,ads\}},
+\texttt{parsing-ada\_parse.adb}, \texttt{parsing-do\_cases.adb},
+\texttt{parsing-translate.adb},
+\texttt{searching.\{adb,ads\}},
+\texttt{second\_phase.\{adb,ads\}},
+\texttt{third\_phase.\{adb,ads\}} all present; no errors reported.\\
 \bottomrule
 \end{longtable}
 }
@@ -372,7 +430,7 @@ Role               & Party\\
 \midrule
 Test author        & Toolchain maintainer\\
 Test executor      & CI system or developer running
-                     \texttt{awebpg.sh test}\\
+                     \texttt{aweb.sh test}\\
 Defect adjudicator & Toolchain maintainer\\
 \bottomrule
 \end{tabular}
@@ -416,9 +474,9 @@ pass.\\
 \toprule
 Role               & Name             & Date\\
 \midrule
-Author             & (toolchain team) & 2026-04-30\\
-Configuration mgr. & (toolchain team) & 2026-04-30\\
-Quality assurance  & (toolchain team) & 2026-04-30\\
+Author             & (toolchain team) & 2026-05-06\\
+Configuration mgr. & (toolchain team) & 2026-05-06\\
+Quality assurance  & (toolchain team) & 2026-05-06\\
 \bottomrule
 \end{tabular}
 \end{center}
