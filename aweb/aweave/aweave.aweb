@@ -4,6 +4,8 @@
 % ADA-Version 2.0 (Ada 95 keyword support: abstract, aliased, protected,
 %                  requeue, tagged, until)
 % ADA-Version 2.1 (-v / --version command-line flag added)
+% ADA-Version 2.2 (Ada 2012 keyword support: interface, overriding,
+%                  synchronized, some)
 
 % Here is TeX material that gets inserted after \input webmac
 \def\hang{\hangindent 3em\indent\ignorespaces}
@@ -25,7 +27,7 @@
   \centerline{\titlefont The {\ttitlefont AWEAVE} processor}
   \vskip 15pt
   \centerline{(based on {\tt WEAVE} Version 2.8)}
-  \centerline{\ninerm[ADA-Version 2.1 --- Ada 95 keywords + version flag]}
+  \centerline{\ninerm[ADA-Version 2.2 --- Ada 2012 keywords]}
   \vfill}
 \pageno=\contentspagenumber \advance\pageno by 1
  
@@ -42,7 +44,7 @@ U. Schweigert in May, 1988.
 The ``banner line'' defined here should be changed whenever \.{AWEAVE}
 is modified.
  
-@d banner=="This is AWEAVE, Version 2.1 (Ada 95 keyword support)"
+@d banner=="This is AWEAVE, Version 2.2 (Ada 2012 keyword support)"
  
 @ The program consists of several packages that are declared right now;
 each of these packages and both the specification and the body of
@@ -1302,13 +1304,14 @@ A few macros permit us to do the initialization with a compact program.
 @!cur_name:name_pointer; {points to the identifier just inserted}
  
 @ First we define the reserved words of \ADA.
-The list below corresponds to the reserved words of \ADA\ 95 as enumerated
-in {\sl Ada Reference Manual --- ISO/IEC 8652:1995(E)}, section~2.9.
-With respect to the original \ADA\ 83 list this includes the six new
-reserved words \&{abstract}, \&{aliased}, \&{protected}, \&{requeue},
-\&{tagged}, and \&{until}.  Each reserved word is mapped to the parser
-category (|*_like|) that controls how \.{AWEAVE} pretty-prints
-constructs starting with that word.
+The list below corresponds to the reserved words of \ADA\ 2012 as enumerated
+in {\sl Ada Reference Manual --- ISO/IEC 8652:2012(E)}, section~2.9.
+With respect to the \ADA\ 83 list this adds the six \ADA\ 95 keywords
+\&{abstract}, \&{aliased}, \&{protected}, \&{requeue}, \&{tagged}, and
+\&{until}; the three \ADA\ 2005 keywords \&{interface}, \&{overriding},
+and \&{synchronized}; and the one \ADA\ 2012 keyword \&{some}.
+Each reserved word is mapped to the parser category (|*_like|) that
+controls how \.{AWEAVE} pretty-prints constructs starting with that word.
  
 @<Store all the reserved words@>=
 id_first:=1;@/
@@ -1343,6 +1346,7 @@ id(7)(@'g',@'e',@'n',@'e',@'r',@'i',@'c')(generic_like);@/
 id(4)(@'g',@'o',@'t',@'o')(goto_like);@/
 id(2)(@'i',@'f')(if_like);@/
 id(2)(@'i',@'n')(in_like);@/
+id(9)(@'i',@'n',@'t',@'e',@'r',@'f',@'a',@'c',@'e')(goto_like);@/
 id(2)(@'i',@'s')(is_like);@/
 id(7)(@'l',@'i',@'m',@'i',@'t',@'e',@'d')(goto_like);@/
 id(4)(@'l',@'o',@'o',@'p')(loop_like);@/
@@ -1384,6 +1388,7 @@ id(6)(@'o',@'t',@'h',@'e',@'r',@'s')(goto_like);
 @!@rgoto@>
 @!@rif@>
 @!@rin@>
+@!@rinterface@>
 @!@ris@>
 @!@rlimited@>
 @!@rloop@>
@@ -1397,6 +1402,7 @@ id(6)(@'o',@'t',@'h',@'e',@'r',@'s')(goto_like);
 
 @ @<Store all the res...@>=
 id(3)(@'o',@'u',@'t')(goto_like);@/
+id(10)(@'o',@'v',@'e',@'r',@'r',@'i',@'d',@'i',@'n',@'g')(goto_like);@/
 id(7)(@'p',@'a',@'c',@'k',@'a',@'g',@'e')(proc_like);@/
 id(6)(@'p',@'r',@'a',@'g',@'m',@'a')(pragma_like);@/
 id(7)(@'p',@'r',@'i',@'v',@'a',@'t',@'e')(private_like);@/
@@ -1412,7 +1418,9 @@ id(6)(@'r',@'e',@'t',@'u',@'r',@'n')(return_like);@/
 id(7)(@'r',@'e',@'v',@'e',@'r',@'s',@'e')(goto_like);@/
 id(6)(@'s',@'e',@'l',@'e',@'c',@'t')(begin_like);@/
 id(8)(@'s',@'e',@'p',@'a',@'r',@'a',@'t',@'e')(separate_like);@/
+id(4)(@'s',@'o',@'m',@'e')(all_like);@/
 id(7)(@'s',@'u',@'b',@'t',@'y',@'p',@'e')(type_like);@/
+id(12)(@'s',@'y',@'n',@'c',@'h',@'r',@'o',@'n',@'i',@'z',@'e',@'d')(goto_like);@/
 id(6)(@'t',@'a',@'g',@'g',@'e',@'d')(goto_like);@/
 id(4)(@'t',@'a',@'s',@'k')(proc_like);@/
 id(9)(@'t',@'e',@'r',@'m',@'i',@'n',@'a',@'t',@'e')(all_like);@/
@@ -1425,6 +1433,7 @@ id(5)(@'w',@'h',@'i',@'l',@'e')(goto_like);@/
 id(4)(@'w',@'i',@'t',@'h')(with_like);@/
 id(3)(@'x',@'o',@'r')(mod_like)@;
 @!@rout@>
+@!@roverriding@>
 @!@rpackage@>
 @!@rpragma@>
 @!@rprivate@>
@@ -1440,7 +1449,9 @@ id(3)(@'x',@'o',@'r')(mod_like)@;
 @!@rreverse@>
 @!@rselect@>
 @!@rseparate@>
+@!@rsome@>
 @!@rsubtype@>
+@!@rsynchronized@>
 @!@rtagged@>
 @!@rtask@>
 @!@rterminate@>
