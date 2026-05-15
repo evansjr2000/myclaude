@@ -1,0 +1,9 @@
+1. Follow the requirements outline in requirements-documentation.txt
+
+2. Create a Software Requirements Specification and a Software Test Plan.  These should be written in TeX or LaTex.
+
+3.  Create an automated test script to test the requirements outlined in the SRS. And also create a software
+test plan according to IEEE software standards.  The Test plan should be written in TeX or LaTeX
+
+4.  Create a script to run the tests outlined in the STP.
+

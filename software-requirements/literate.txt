@@ -1,0 +1,9 @@
+1.  Write the software using Donald Knuth's literate programming paradigm.
+
+1a.  Ada code should use the aweb.sh helper script, and C code should use the helper script cweb.sh
+
+2.  Make sure each module in the web code is less than 24 lines of code.
+
+3. Document all POSIX system calls in the literate program.  Preferably in its own section,
+with all system calls noted in the index.
+
