@@ -1,8 +1,7 @@
 0. Follow the principles outlined in the famous 1886 paper "A Rationale Design Process: How and Why to Fake It".  When
 developing documentation for software.
 
-1. Write a CONOPS in TeX format using the latest IEEE standard for the program implemented by the literate program
-stella-times.w
+1. Write a CONOPS in TeX format using the latest IEEE standard for the program implemented by the literate program.
 
 2.  Standard Components of a ConOps
 A document following the IEEE structure typically includes the following sections:
