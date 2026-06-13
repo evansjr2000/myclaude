@@ -1,5 +1,6 @@
 #!/bin/bash
-# Helper script to run atangle/aweave in Docker
+# Helper script to run atangle/aweave in Docker.
+# Targets the Ada 2012 toolchain image (release 2.2).
 # Usage:
 #   ./aweb.sh atangle file.aweb [changefile]
 #   ./aweb.sh aweave  file.aweb [changefile]
