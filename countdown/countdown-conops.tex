@@ -1,0 +1,299 @@
+% countdown-conops.tex
+% Concept of Operations for the countdown program.
+% Structure per IEEE Std 1362-1998 (ConOps) / ISO/IEC/IEEE 29148:2018.
+% Compiled with: pdflatex countdown-conops.tex
+
+\documentclass[12pt]{article}
+
+\usepackage{geometry}
+\geometry{letterpaper, margin=1in}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+
+\definecolor{cdteal}{RGB}{0,90,120}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small Countdown Project}
+\fancyhead[R]{\small ConOps: countdown}
+\fancyfoot[C]{\thepage}
+
+\titleformat{\section}{\large\bfseries\color{cdteal}}{\thesection}{0.5em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\req}[1]{\texttt{#1}}
+
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\Huge\bfseries\color{cdteal} Concept of Operations\\[0.5em]}
+  {\Large countdown: An X~Window Countdown Timer}\\[2em]
+  {\large Countdown Software Project}\\[0.5em]
+  {\normalsize Prepared for: Users and Maintainers of \code{countdown}}\\[0.5em]
+  {\normalsize Prepared by: J.\,R.\,Evans}\\[2em]
+  \begin{tabular}{ll}
+    Document identifier: & CD-CONOPS-001                                  \\
+    Revision:            & 1.0                                            \\
+    Date:                & June 13, 2026                                  \\
+    Status:              & Released                                       \\
+    Governing standard:  & IEEE Std 1362-1998 (ConOps)                    \\
+  \end{tabular}
+  \vfill
+  {\small\textit{This document is prepared in accordance with the
+  principles of rational documentation articulated in
+  D.\,L.\,Parnas and P.\,C.\,Clements, ``A Rational Design Process:
+  How and Why to Fake It,'' \textit{IEEE Transactions on Software
+  Engineering}, vol.\,SE-12, no.\,2, pp.\,251--257, February 1986.}}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+% =================================================================
+\section{Scope}
+% =================================================================
+
+\subsection{System identification}
+
+This Concept of Operations (ConOps) describes \code{countdown}, a small
+single-window graphical application for the X~Window System.  Given a
+fixed future instant --- by default \code{2026-08-19 08:00:00} in local
+time --- the program displays the time remaining until that instant and
+updates the display live until it is reached.
+
+\subsection{Document purpose}
+
+The ConOps states, in the language of the user, what \code{countdown} is
+for, how the situation looks without it, why it is worth building, and how
+a user interacts with it.  It is the topmost document in the
+\code{countdown} documentation set; the Software Requirements
+Specification (CD-SRS-001), Software Design Document (CD-SDD-001), and
+Software Test Plan (CD-STP-001) refine and verify the intent recorded
+here.
+
+\subsection{A note on rational documentation}
+
+Following Parnas and Clements, this document is written as though the
+concept had been arrived at by an orderly process.  The real path was the
+usual mixture of trial and revision; the value of presenting an idealised
+account is that a reader can understand the system without retracing every
+false start.  The same fiction is maintained, deliberately, throughout the
+documentation set.
+
+% =================================================================
+\section{Referenced documents}
+% =================================================================
+
+\begin{longtable}{p{0.28\textwidth}p{0.66\textwidth}}
+\toprule
+\textbf{Reference} & \textbf{Title} \\
+\midrule
+IEEE Std 1362-1998 & Guide for Information Technology---System Definition---Concept of Operations Document \\
+ISO/IEC/IEEE 29148:2018 & Systems and software engineering---Life cycle processes---Requirements engineering \\
+Parnas \& Clements, 1986 & A Rational Design Process: How and Why to Fake It \\
+Knuth, 1984 & Literate Programming, \textit{The Computer Journal} 27(2) \\
+CD-SRS-001 & Software Requirements Specification: countdown \\
+CD-SDD-001 & Software Design Document: countdown \\
+CD-STP-001 & Software Test Plan: countdown \\
+X11R7 / Xlib & \textit{Xlib---C Language X Interface}, X Consortium \\
+POSIX.1-2017 & IEEE Std 1003.1-2017 (\code{time}, \code{mktime}, \code{select}) \\
+\bottomrule
+\end{longtable}
+
+% =================================================================
+\section{Current system or situation}
+% =================================================================
+
+\subsection{Background}
+
+People frequently wish to mark the approach of a specific moment: the
+start of an event, a deadline, a launch, a celebration.  In the absence of
+a dedicated tool the countdown is performed by mental arithmetic against a
+wall clock or calendar, or by a web page of uncertain provenance that
+requires a network connection and a browser.
+
+\subsection{Description of the current situation}
+
+On a typical desktop running the X~Window System the user today has:
+
+\begin{itemize}[noitemsep]
+  \item the \code{date} command, which prints the current time but
+        performs no subtraction toward a target;
+  \item general-purpose calculators, into which the user must transcribe
+        and difference two timestamps by hand;
+  \item online countdown widgets, which depend on a browser, a network
+        path, and a third party's continued operation.
+\end{itemize}
+
+\subsection{Problems and limitations}
+
+The manual approach is error-prone (time-zone and daylight-saving
+mistakes are common), is not continuously updated, and gives no glanceable
+visual artefact that can be left running on the desktop.  The online
+approach surrenders privacy and availability to a remote service for a
+computation the local machine can trivially perform.
+
+% =================================================================
+\section{Justification for change}
+% =================================================================
+
+A countdown to a known instant is a self-contained computation requiring
+only the system clock and the local time-zone rules.  A small native
+program can perform it correctly, continuously, and offline, presenting a
+single uncluttered window.  The justification for building
+\code{countdown} is therefore:
+
+\begin{itemize}[noitemsep]
+  \item \textbf{Correctness:} time-zone and daylight-saving handling is
+        delegated to the operating system's \code{mktime}, eliminating a
+        common class of manual error.
+  \item \textbf{Continuity:} the display advances automatically, without
+        user action, at sub-second resolution.
+  \item \textbf{Independence:} no network, browser, or third-party service
+        is involved; the program runs wholly on the local host.
+  \item \textbf{Transparency:} the program is a literate document, so its
+        behaviour can be read and audited in full.
+\end{itemize}
+
+% =================================================================
+\section{Proposed system}
+% =================================================================
+
+\subsection{Overview}
+
+\code{countdown} is a single executable that opens one window on the
+X~Window System.  The window shows the target instant, the remaining time
+expressed as days and a \code{HH:MM:SS} clock, a status line, and a one-line
+hint listing the available keys.  The user starts and pauses the countdown
+from the keyboard or mouse and quits when finished.
+
+\subsection{Operational environment}
+
+The program runs on any POSIX host providing an X~server (Linux with an
+X~display, or macOS with XQuartz).  It links only against the core Xlib
+client library; no widget toolkit is required.  It consumes negligible CPU
+because it sleeps on \code{select} between updates rather than polling.
+
+\subsection{High-level capabilities}
+
+\begin{enumerate}[noitemsep]
+  \item Count down to a default instant of \code{2026-08-19 08:00:00},
+        or to any instant supplied on the command line.
+  \item Display the remaining time live, updating at least once per
+        second.
+  \item Let the user start, pause, resume, and quit interactively.
+  \item Announce arrival when the target instant is reached, and never
+        display a negative remaining time.
+\end{enumerate}
+
+\subsection{Modes of operation}
+
+The program has three user-visible modes: \emph{armed} (started but not
+yet running --- the initial state, showing the full duration);
+\emph{running} (counting down live); and \emph{paused} (the figure is
+frozen at the value captured when the user paused).  A fourth, terminal
+condition, \emph{arrived}, is entered when the remaining time reaches zero.
+
+% =================================================================
+\section{Operational scenarios}
+% =================================================================
+
+\subsection{Scenario 1: Counting down to the default instant}
+
+Dana wants a visible countdown to the morning of 19~August 2026 left
+running on her desktop.  She launches \code{countdown} with no arguments.
+A window appears showing \emph{Target: Wed 19 Aug 2026 08:00:00} and the
+full remaining duration with the status \emph{ready}.  She presses the
+space bar; the status changes to \emph{running} and the seconds begin to
+tick down.  She leaves the window in a corner of her screen.
+
+\subsection{Scenario 2: A custom target}
+
+Raj is timing a 25-minute presentation rehearsal that should end at
+14:30.  He runs \code{countdown "2026-06-13 14:30:00"}.  The window opens
+with that instant as the target.  Part-way through he is interrupted; he
+clicks the window to pause, deals with the interruption, then clicks again
+to resume.
+
+\subsection{Scenario 3: Reaching the target}
+
+As the target instant arrives, the remaining figure reaches
+\code{0 d 00:00:00} and the status line changes to \emph{THE MOMENT HAS
+ARRIVED}.  The figure does not go negative.  The user observes the message
+and presses \code{q} to quit.
+
+\subsection{Scenario 4: A mistyped target}
+
+A user runs \code{countdown "Aug 19"}.  Because the argument does not match
+\code{YYYY-MM-DD HH:MM:SS}, the program prints a diagnostic naming the
+expected form and exits with a non-zero status, without opening a window.
+
+% =================================================================
+\section{Summary of impacts}
+% =================================================================
+
+\subsection{Operational impacts}
+
+Users gain a reliable, glanceable countdown that runs locally.  No new
+infrastructure, account, or network dependency is introduced.
+
+\subsection{Organisational impacts}
+
+None of consequence.  The program is a single self-contained executable;
+there is no server to administer and no data to retain between runs.
+
+\subsection{Support and maintenance impacts}
+
+Because the program is a literate document, maintenance proceeds by
+reading and editing \code{countdown.w} and re-tangling.  A maintainer
+needs familiarity with C, Xlib, and the CWEB tools, all of which are
+documented in the program itself and in CD-SDD-001.
+
+% =================================================================
+\section{Analysis of the proposed system}
+% =================================================================
+
+\subsection{Alternatives considered}
+
+\textbf{A terminal (text) countdown.}  Simplest to build, but the ConOps
+calls explicitly for a window on the X~Window System, and a graphical
+artefact is more glanceable.  Rejected on requirement grounds.
+
+\medskip\noindent
+\textbf{A toolkit-based GUI (GTK, Qt, Motif).}  Would give buttons and
+theming for free, but pulls in a large dependency for a one-window program
+and obscures the underlying mechanism.  Rejected in favour of raw Xlib,
+which keeps the program small, dependency-light, and fully readable.
+
+\medskip\noindent
+\textbf{A browser/web widget.}  Rejected for the privacy, availability,
+and dependency reasons set out in Section~4.
+
+\subsection{Trade-offs}
+
+Choosing raw Xlib trades developer convenience (no ready-made widgets) for
+a minimal, transparent, portable program.  Choosing \code{select}-based
+multiplexing over a busy-wait trades a few lines of code for near-zero idle
+CPU.  Choosing local-time semantics (via \code{mktime}) trades a little
+ambiguity at daylight-saving boundaries for the convenience of letting
+users write wall-clock times.
+
+\subsection{Justification for the selected approach}
+
+The selected approach---a single Xlib window driven by a
+\code{select}-based event-and-timer loop, written as a literate
+program---meets every capability in Section~6 with the least machinery and
+the greatest readability, and is therefore the most defensible choice for
+a tool whose whole purpose is to be small, correct, and self-evident.
+
+\end{document}

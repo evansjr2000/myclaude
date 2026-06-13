@@ -1,0 +1,314 @@
+% countdown-srs.tex
+% Software Requirements Specification for the countdown program.
+% Structure per IEEE Std 830-1998 / ISO/IEC/IEEE 29148:2018.
+% Compiled with: pdflatex countdown-srs.tex
+
+\documentclass[12pt]{article}
+
+\usepackage{geometry}
+\geometry{letterpaper, margin=1in}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+
+\definecolor{cdteal}{RGB}{0,90,120}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small Countdown Project}
+\fancyhead[R]{\small SRS: countdown}
+\fancyfoot[C]{\thepage}
+
+\titleformat{\section}{\large\bfseries\color{cdteal}}{\thesection}{0.5em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\req}[1]{\texttt{#1}}
+
+% A requirement table row: id | statement
+\newcommand{\rrow}[2]{\req{#1} & #2 \\}
+
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\Huge\bfseries\color{cdteal} Software Requirements\\ Specification\\[0.5em]}
+  {\Large countdown: An X~Window Countdown Timer}\\[2em]
+  {\large Countdown Software Project}\\[0.5em]
+  {\normalsize Prepared by: J.\,R.\,Evans}\\[2em]
+  \begin{tabular}{ll}
+    Document identifier: & CD-SRS-001                                     \\
+    Revision:            & 1.0                                            \\
+    Date:                & June 13, 2026                                  \\
+    Status:              & Released                                       \\
+    Governing standard:  & IEEE Std 830-1998 (SRS)                        \\
+  \end{tabular}
+  \vfill
+  {\small\textit{This document is prepared in accordance with the
+  principles of rational documentation articulated in
+  D.\,L.\,Parnas and P.\,C.\,Clements, ``A Rational Design Process:
+  How and Why to Fake It,'' \textit{IEEE Transactions on Software
+  Engineering}, vol.\,SE-12, no.\,2, pp.\,251--257, February 1986.}}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+% =================================================================
+\section{Introduction}
+% =================================================================
+
+\subsection{Purpose}
+
+This Software Requirements Specification (SRS) states the externally
+observable requirements on the \code{countdown} program.  It is the
+contract against which the Software Design Document (CD-SDD-001) is
+written and against which the Software Test Plan (CD-STP-001) and its
+automated harness verify the delivered program.
+
+\subsection{Scope}
+
+\code{countdown} is a single-window X~Window System application that
+displays the time remaining until a fixed future instant and updates that
+display live.  The SRS covers the program tangled from
+\code{countdown.w}.  It does not cover the X~server, the operating
+system's time-zone database, or the CWEB tools themselves, except to state
+the program's reliance on them.
+
+\subsection{Definitions and acronyms}
+
+\begin{longtable}{p{0.22\textwidth}p{0.72\textwidth}}
+\toprule
+\textbf{Term} & \textbf{Meaning} \\
+\midrule
+Target instant & The fixed future date and time to which the program counts down. \\
+Armed & Started but not yet running; shows the full remaining duration. \\
+Running & Counting down live. \\
+Paused & Display frozen at the value captured when the user paused. \\
+Arrived & The remaining time has reached zero. \\
+CWEB & Knuth's literate-programming system; \code{ctangle} extracts C, \code{cweave} extracts \TeX. \\
+Xlib & The C-language client interface to the X~Window System. \\
+POSIX & IEEE Std 1003.1 operating-system interface. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Rational-process note}
+
+In the spirit of Parnas and Clements, the requirements below are presented
+as a clean, numbered hierarchy as though derived top-down.  They were in
+fact refined alongside the design; the idealised presentation is retained
+because it is the form most useful to a reader.
+
+\subsection{Requirement identifier scheme}
+
+Each requirement carries an identifier \req{REQ-\textit{C}-\textit{nn}}
+where \textit{C} is a category letter---\textbf{F}unctional,
+\textbf{G}UI, \textbf{T}iming, \textbf{D}esign-constraint, or
+\textbf{B}uild---and \textit{nn} is a serial number.  Identifiers are
+stable and are referenced verbatim by CD-STP-001 and by the automated test
+harness.
+
+% =================================================================
+\section{Overall description}
+% =================================================================
+
+\subsection{Product perspective}
+
+\code{countdown} is a self-contained, standalone program.  It depends on
+an X~server for display and input, and on the POSIX time facilities of the
+host for the current time and time-zone conversion.  It has no persistent
+storage, no configuration file, and no network interface.
+
+\subsection{Product functions (summary)}
+
+The program converts a target calendar string to an absolute instant,
+repeatedly computes the seconds remaining until that instant, formats them
+as days and a clock, and paints them in an X~window, reacting to keyboard
+and mouse input to start, pause, resume, and quit.
+
+\subsection{User characteristics}
+
+The user is anyone able to launch a program in an X~session.  No
+specialised knowledge is assumed beyond reading a window and pressing a
+key or mouse button.
+
+\subsection{Constraints}
+
+The program shall be written as a literate program in CWEB and built with
+the project's \code{cweb.sh} helper.  It shall link only against core
+Xlib.  It shall run on Linux/X11 and macOS/XQuartz hosts.
+
+\subsection{Assumptions and dependencies}
+
+It is assumed that an X~server is reachable via the \code{DISPLAY}
+environment variable, that the host clock is set correctly, and that the
+time-zone database reflects the rules in force for the target date.
+
+% =================================================================
+\section{Specific requirements}
+% =================================================================
+
+\subsection{Functional requirements}
+
+\begin{longtable}{p{0.16\textwidth}p{0.78\textwidth}}
+\toprule
+\textbf{ID} & \textbf{Requirement} \\
+\midrule
+\endhead
+\rrow{REQ-F-01}{The program shall count down to a \emph{target instant}
+  specified as local calendar time.}
+\rrow{REQ-F-02}{In the absence of a command-line argument, the target
+  instant shall default to \code{2026-08-19 08:00:00} local time.}
+\rrow{REQ-F-03}{The program shall accept an alternate target instant as
+  its first command-line argument, in the form
+  \code{"YYYY-MM-DD HH:MM:SS"}.}
+\rrow{REQ-F-04}{Given a target argument that is malformed or denotes an
+  invalid date, the program shall print a diagnostic to standard error
+  and terminate with a non-zero exit status, without opening a window.}
+\rrow{REQ-F-05}{The program shall display the remaining time as a whole
+  number of days followed by a 24-hour \code{HH:MM:SS} clock, with minutes
+  and seconds zero-padded.}
+\rrow{REQ-F-06}{When the target instant has been reached, the remaining
+  time shall read \code{0 d 00:00:00}; the program shall never display a
+  negative remaining time.}
+\rrow{REQ-F-07}{Upon arrival the program shall display a status message
+  announcing that the target instant has been reached.}
+\bottomrule
+\end{longtable}
+
+\subsection{Graphical user interface requirements}
+
+\begin{longtable}{p{0.16\textwidth}p{0.78\textwidth}}
+\toprule
+\textbf{ID} & \textbf{Requirement} \\
+\midrule
+\endhead
+\rrow{REQ-G-01}{The program shall present its output in a graphical window
+  on the X~Window System using the Xlib client interface.}
+\rrow{REQ-G-02}{The window shall display, simultaneously, the target
+  instant in human-readable form, the remaining time, a status line, and a
+  one-line hint naming the available controls.}
+\rrow{REQ-G-03}{The user shall be able to start, pause, and resume the
+  countdown by pressing the space bar or by clicking a mouse button in the
+  window.}
+\rrow{REQ-G-04}{The user shall be able to terminate the program by pressing
+  \code{q} or the Escape key.}
+\rrow{REQ-G-05}{The window shall be repainted in response to expose and
+  resize (configure) events so that its contents remain correct.}
+\rrow{REQ-G-06}{If the preferred font is unavailable, the program shall
+  fall back to the server's default font rather than fail.}
+\bottomrule
+\end{longtable}
+
+\subsection{Timing requirements}
+
+\begin{longtable}{p{0.16\textwidth}p{0.78\textwidth}}
+\toprule
+\textbf{ID} & \textbf{Requirement} \\
+\midrule
+\endhead
+\rrow{REQ-T-01}{While running, the displayed remaining time shall advance
+  at least once per second.}
+\rrow{REQ-T-02}{The remaining time shall be computed from the host's
+  wall-clock time as obtained from the POSIX \code{time} service.}
+\rrow{REQ-T-03}{Conversion of the target calendar string to an absolute
+  instant shall honour the host's local time zone and daylight-saving
+  rules, as provided by the POSIX \code{mktime} service.}
+\rrow{REQ-T-04}{The program shall remain idle between updates by blocking
+  on the POSIX \code{select} service with a timeout; it shall not
+  busy-wait.}
+\bottomrule
+\end{longtable}
+
+\subsection{Design-constraint requirements}
+
+\begin{longtable}{p{0.16\textwidth}p{0.78\textwidth}}
+\toprule
+\textbf{ID} & \textbf{Requirement} \\
+\midrule
+\endhead
+\rrow{REQ-D-01}{The program shall be written as a literate program in the
+  CWEB system, with \code{countdown.w} as the single source of record.}
+\rrow{REQ-D-02}{Each woven module (CWEB section) shall contain fewer than
+  twenty-four lines of code.}
+\rrow{REQ-D-03}{Every POSIX system call used by the program (directly or
+  on the program's behalf by Xlib) shall be documented in a dedicated
+  section of the literate program and entered in its index.}
+\rrow{REQ-D-04}{The compilable C source shall be a build artefact
+  regenerable in full from \code{countdown.w} by \code{ctangle}.}
+\rrow{REQ-D-05}{The tangled C source shall compile cleanly under
+  \code{-Wall} with no warnings.}
+\bottomrule
+\end{longtable}
+
+\subsection{Build and portability requirements}
+
+\begin{longtable}{p{0.16\textwidth}p{0.78\textwidth}}
+\toprule
+\textbf{ID} & \textbf{Requirement} \\
+\midrule
+\endhead
+\rrow{REQ-B-01}{The program shall be tangled, woven, and compiled through
+  the project \code{Makefile}, which drives the CWEB tools via the
+  \code{cweb.sh} helper.}
+\rrow{REQ-B-02}{The program shall link against the core Xlib library only,
+  with no dependency on any widget toolkit.}
+\bottomrule
+\end{longtable}
+
+\subsection{External interface requirements}
+
+\textbf{Command-line interface.}  \code{countdown [TARGET]}, where the
+optional \code{TARGET} is a string of the form \code{"YYYY-MM-DD HH:MM:SS"}
+(REQ-F-03).  Exit status is \code{0} on normal termination, \code{1} on
+inability to open the display, and \code{2} on a malformed target
+(REQ-F-04).
+
+\medskip\noindent
+\textbf{User interface.}  One top-level X~window (REQ-G-01--REQ-G-05) with
+keyboard and pointer input.
+
+\medskip\noindent
+\textbf{Environment interface.}  The \code{DISPLAY} variable selects the
+X~server; the \code{TZ} variable (or system default) selects the time
+zone used by \code{mktime}.
+
+\subsection{Non-functional requirements}
+
+\textbf{Performance.}  Idle CPU use shall be negligible, achieved by
+\code{select}-based blocking (REQ-T-04).  \textbf{Portability.}  The
+program shall build and run on Linux/X11 and macOS/XQuartz (Section~2.4).
+\textbf{Readability.}  The program shall be legible as a typeset document
+produced by \code{cweave} (REQ-D-01, REQ-D-02).
+
+% =================================================================
+\section{Requirements traceability}
+% =================================================================
+
+Each requirement traces upward to a ConOps capability or scenario
+(CD-CONOPS-001) and downward to one or more design modules
+(CD-SDD-001) and test cases (CD-STP-001).  The condensed upward trace is:
+
+\begin{longtable}{p{0.20\textwidth}p{0.74\textwidth}}
+\toprule
+\textbf{Requirement(s)} & \textbf{ConOps origin} \\
+\midrule
+REQ-F-01, REQ-F-02 & \S6.3 capabilities 1; \S7.1 Scenario~1 \\
+REQ-F-03 & \S7.2 Scenario~2 (custom target) \\
+REQ-F-04 & \S7.4 Scenario~4 (mistyped target) \\
+REQ-F-05--REQ-F-07 & \S6.3 capabilities 2 and 4; \S7.3 Scenario~3 \\
+REQ-G-01--REQ-G-06 & \S6.1 overview; \S6.4 modes of operation \\
+REQ-T-01--REQ-T-04 & \S6.2 operational environment; \S8.2 trade-offs \\
+REQ-D-01--REQ-D-05 & \S4 justification (transparency); \S8 analysis \\
+REQ-B-01--REQ-B-02 & \S6.2 operational environment \\
+\bottomrule
+\end{longtable}
+
+\end{document}

@@ -1,0 +1,6 @@
+1.  Read the documents in ~/myclaude/software_requirements/ as guidance for writing software.
+
+2. Write a literate program with an X-windows GUI to start a countdown to a specific time and date.
+
+3. The default time and date to countdown to is  2026-08-19 at 8:00 AM.
+
