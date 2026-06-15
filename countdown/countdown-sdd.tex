@@ -319,4 +319,34 @@ default paths on Linux; \code{make weave} and \code{make pdf} produce the
 typeset program.  The C, \TeX, and PDF outputs are artefacts; the source
 of record is \code{countdown.w} (REQ-D-04).
 
+\medskip\noindent
+\textbf{Containerised toolchain (REQ-B-03).}  Every target that invokes
+the container first runs \code{docker-check.sh}, which probes
+\code{docker info} and, if the daemon is down, launches Docker Desktop and
+waits for it to come up.  In the \code{Makefile} this is the
+\code{DOCKER\_CHECK} variable (default \code{docker-check.sh}); it is the
+first command of each container recipe and may be overridden to \code{true}
+for a purely local toolchain.  Because GNU~make predefines \code{CTANGLE}
+and \code{CWEAVE} as built-in defaults, the \code{Makefile} assigns them
+with plain \code{=} (not \code{?=}) so the \code{cweb.sh} wrappers are not
+silently bypassed; command-line assignments still override them.
+
+\medskip\noindent
+\textbf{Documentation build (REQ-B-04).}  \code{make docs} typesets the
+entire document set inside the same \code{evansjr/cweb} image: the woven
+program listing via \code{pdftex countdown.tex}, and each IEEE/ISO
+specification (\code{conops}, \code{srs}, \code{sdd}, \code{stp}) via two
+\code{pdflatex} passes so tables of contents and cross-references resolve.
+No local \TeX{} installation is required.  \code{make clean} removes all
+intermediates (the tangled C, the woven \TeX, the executable, and the
+\TeX/CWEB auxiliary files), preserving the hand-written specification
+sources; \code{make distclean} additionally removes the generated PDFs.
+
+\medskip\noindent
+\textbf{Installation (REQ-B-05).}  \code{make install} places the compiled
+executable in \code{\$(PREFIX)/bin} (default \code{/usr/local/bin}) with
+mode \code{755}; \code{PREFIX} and \code{DESTDIR} support staged or
+relocated installs, and \code{make uninstall} removes it.  Writing to
+\code{/usr/local/bin} may require \code{sudo}.
+
 \end{document}

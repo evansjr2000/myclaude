@@ -260,6 +260,15 @@ time-zone database reflects the rules in force for the target date.
   \code{cweb.sh} helper.}
 \rrow{REQ-B-02}{The program shall link against the core Xlib library only,
   with no dependency on any widget toolkit.}
+\rrow{REQ-B-03}{Before any container-driven step, the \code{Makefile} shall
+  invoke \code{docker-check.sh} to verify that the Docker daemon is
+  running and start it (Docker Desktop) if it is not.}
+\rrow{REQ-B-04}{The \code{Makefile} shall build all documentation---the
+  woven program listing and the IEEE/ISO document set---inside the same
+  container used by \code{cweb.sh} (\code{make docs}), and shall provide a
+  \code{clean} target that removes all intermediate build files.}
+\rrow{REQ-B-05}{The \code{Makefile} shall install the final executable into
+  \code{/usr/local/bin} (\code{make install}).}
 \bottomrule
 \end{longtable}
 
@@ -307,7 +316,7 @@ REQ-F-05--REQ-F-07 & \S6.3 capabilities 2 and 4; \S7.3 Scenario~3 \\
 REQ-G-01--REQ-G-06 & \S6.1 overview; \S6.4 modes of operation \\
 REQ-T-01--REQ-T-04 & \S6.2 operational environment; \S8.2 trade-offs \\
 REQ-D-01--REQ-D-05 & \S4 justification (transparency); \S8 analysis \\
-REQ-B-01--REQ-B-02 & \S6.2 operational environment \\
+REQ-B-01--REQ-B-05 & \S6.2 operational environment; build/packaging \\
 \bottomrule
 \end{longtable}
 

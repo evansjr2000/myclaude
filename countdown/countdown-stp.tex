@@ -156,6 +156,9 @@ TC-10 & REQ-F-05 & \code{fmt\_duration} emits the \code{d HH:MM:SS} form with ze
 TC-11 & REQ-F-06 & \code{remaining\_secs} clamps a past target to zero (verified via a past-dated target with status~2 guard / source inspection of the clamp). \\
 TC-12 & REQ-T-02, REQ-T-03 & The source computes remaining time with \code{time} and converts the target with \code{mktime} using \code{tm\_isdst = -1}. \\
 TC-13 & REQ-T-04 & The event loop blocks on \code{select} (no busy-wait). \\
+TC-14 & REQ-B-03 & The \code{Makefile} invokes \code{docker-check.sh} (via \code{DOCKER\_CHECK}) as the first command of every container recipe. \\
+TC-15 & REQ-B-04 & \code{make -n docs} drives \code{pdftex}/\code{pdflatex} inside the \code{cweb} container for the program listing and all four IEEE/ISO documents; \code{make clean} removes the C, \TeX, executable, and auxiliary artefacts. \\
+TC-16 & REQ-B-05 & \code{make -n install} installs the executable into \code{/usr/local/bin} (\code{\$(PREFIX)/bin}) with mode~755. \\
 \bottomrule
 \end{longtable}
 
