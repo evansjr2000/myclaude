@@ -28,7 +28,7 @@
 # A plain "=" (not "?=") is required: GNU make predefines CTANGLE and
 # CWEAVE as built-in defaults, so "?=" would leave them as bare ctangle /
 # cweave and silently bypass the container.
-CWEB        ?= ../../curlswim/cweb.sh
+CWEB        ?= cweb.sh
 CTANGLE      = $(CWEB) ctangle
 CWEAVE       = $(CWEB) cweave
 
