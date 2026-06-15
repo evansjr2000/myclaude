@@ -4,3 +4,12 @@
 
 3. The default time and date to countdown to is  2026-08-19 at 8:00 AM.
 
+4.  Use the shell script in ~/evansjr/bin called docker-check.sh to see if docker is running,
+and which also starts docker if it is not running.
+
+5. Make sure the "Makefile" cleans up all the intermediate files, and can run and build the application,
+and create all the documentation using the docker container called by either cweb.sh or aweb.sh.
+
+6.  Install the final executable in /usr/local/bin from the Makefile.
+
+

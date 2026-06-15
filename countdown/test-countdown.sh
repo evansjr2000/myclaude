@@ -212,6 +212,43 @@ skip REQ-G-05 "manual: repaint on expose/resize (MC-05)"
 skip REQ-F-07 "manual: arrival message at zero (MC-06)"
 
 # -----------------------------------------------------------------
+# Build-system requirements (static; no Docker required).
+# -----------------------------------------------------------------
+section "Build system (TC-14, TC-15, TC-16)"
+
+MK="$HERE/Makefile"
+
+# TC-14 / REQ-B-03 : docker-check.sh guards every container step.
+if grep -Eq '^DOCKER_CHECK[[:space:]]*\?=[[:space:]]*docker-check\.sh' "$MK" && \
+   ( cd "$HERE" && make -n -B tangle 2>/dev/null ) | grep -q 'docker-check.sh'; then
+    pass REQ-B-03 "Makefile runs docker-check.sh before container steps"
+else
+    fail REQ-B-03 "docker-check.sh not invoked by the Makefile"
+fi
+
+# TC-15 / REQ-B-04 : docs built in-container; clean removes intermediates.
+DOCS_CMDS=$( cd "$HERE" && make -n -B docs 2>/dev/null )
+CLEAN_CMDS=$( cd "$HERE" && make -n clean 2>/dev/null )
+if printf '%s' "$DOCS_CMDS" | grep -q 'pdftex' && \
+   printf '%s' "$DOCS_CMDS" | grep -q 'pdflatex' && \
+   printf '%s' "$DOCS_CMDS" | grep -q 'evansjr/cweb' && \
+   printf '%s' "$CLEAN_CMDS" | grep -Eq 'countdown\.c' && \
+   printf '%s' "$CLEAN_CMDS" | grep -Eq 'countdown\.tex'; then
+    pass REQ-B-04 "make docs typesets all docs in-container; clean removes intermediates"
+else
+    fail REQ-B-04 "docs target or clean target incomplete"
+fi
+
+# TC-16 / REQ-B-05 : install places the executable in /usr/local/bin.
+INSTALL_CMDS=$( cd "$HERE" && make -n install 2>/dev/null )
+if printf '%s' "$INSTALL_CMDS" | grep -q '/usr/local/bin' && \
+   printf '%s' "$INSTALL_CMDS" | grep -q 'install -m 755'; then
+    pass REQ-B-05 "make install -> /usr/local/bin (mode 755)"
+else
+    fail REQ-B-05 "install target does not install into /usr/local/bin"
+fi
+
+# -----------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------
 section "Summary"

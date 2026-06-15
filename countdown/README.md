@@ -22,18 +22,35 @@ and the POSIX system calls (`time`, `mktime`, `localtime`, `select`,
 ## Building
 
 The build is driven by the `Makefile` through the project `cweb.sh` helper
-(containerised CWEB). To use a locally installed CWEB instead, override the
-tangle/weave commands.
+(containerised CWEB). Every container step first runs `docker-check.sh`
+(in `~/bin`), which verifies the Docker daemon is up and starts Docker
+Desktop if it is not — so `make` works from a cold start.
 
 ```bash
+make               # tangle + compile (default target)
 make tangle        # ctangle countdown.w -> countdown.c
-make compile       # cc + Xlib          -> countdown
-make weave pdf     # cweave + pdftex     -> countdown.pdf (typeset program)
+make compile       # cc + Xlib           -> countdown
+make weave pdf     # cweave + pdftex      -> countdown.pdf (typeset program)
+make docs          # countdown.pdf + the four IEEE PDFs (all in-container)
 make run           # build and launch the GUI
-
-# local CWEB fallback (no Docker):
-make all CTANGLE=ctangle
+sudo make install  # install ./countdown into /usr/local/bin
+make clean         # remove all intermediate build files
+make distclean     # clean + remove the generated PDFs
 ```
+
+`make docs` typesets every document (the woven program listing **and** the
+IEEE/ISO set) inside the same `evansjr/cweb` container, so no local TeX
+installation is required.
+
+To use a locally installed toolchain instead of the container, override the
+tangle/weave commands and disable the Docker check:
+
+```bash
+make all CTANGLE=ctangle CWEAVE=cweave DOCKER_CHECK=true
+```
+
+`make install` honours `PREFIX` (default `/usr/local`) and `DESTDIR` for
+staged or relocated installs; `make uninstall` removes the executable.
 
 X11 headers/libraries are taken from `/opt/X11` on macOS (XQuartz) or the
 default paths on Linux; override `X11_PREFIX` for other locations.
@@ -47,7 +64,9 @@ default paths on Linux; override `X11_PREFIX` for other locations.
 | `countdown-sdd.tex`    | Software Design Document | IEEE Std 1016-2009 |
 | `countdown-stp.tex`    | Software Test Plan | ISO/IEC/IEEE 29119-3 |
 
-Build any with `pdflatex <file>` (run twice for the table of contents).
+Build the whole set with `make docs` (typeset in-container, two `pdflatex`
+passes each), or an individual file with `pdflatex <file>` (run twice for
+the table of contents).
 
 ## Testing
 
