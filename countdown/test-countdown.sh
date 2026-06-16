@@ -134,8 +134,8 @@ else
 fi
 
 # TC-08 / REQ-F-03 : argv target accepted
-if grep -q 'argc > 1' "$SOURCE" && grep -q 'argv\[1\]' "$SOURCE"; then
-    pass REQ-F-03 "target accepted from argv[1]"
+if grep -q 'argv\[i\]' "$SOURCE" && grep -q 'spec = argv' "$SOURCE"; then
+    pass REQ-F-03 "target accepted from the command line"
 else
     fail REQ-F-03 "command-line target handling not found"
 fi
@@ -186,21 +186,67 @@ else
 fi
 
 # -----------------------------------------------------------------
+# Run-mode requirements: terminal is the default, -gui selects the window.
+# -----------------------------------------------------------------
+section "Run-mode selection (TC-14, TC-15)"
+
+# TC-14 / REQ-F-08 : default (no -gui) runs in the terminal, -gui selects
+# the window.  Static check: the -gui option is recognised and a terminal
+# runner exists in the source.
+src_ok=1
+grep -q 'strcmp(argv\[i\], "-gui")' "$SOURCE" || src_ok=0
+grep -q 'run_terminal' "$SOURCE" || src_ok=0
+if [ $src_ok -eq 1 ]; then
+    pass REQ-F-08 "source selects -gui window vs. default terminal mode"
+else
+    fail REQ-F-08 "-gui option / terminal runner not found in source"
+fi
+
+# Dynamic check (also REQ-F-08): with no -gui and no DISPLAY, a near-future
+# target counts down in the terminal, announces arrival, and exits 0 --
+# proving the default mode needs no X server.
+if [ -x "$BIN" ]; then
+    TGT=$(date -d '+2 seconds' '+%Y-%m-%d %H:%M:%S' 2>/dev/null \
+          || date -v+2S '+%Y-%m-%d %H:%M:%S' 2>/dev/null)
+    if [ -n "$TGT" ]; then
+        OUT=$( DISPLAY= timeout 10 "$BIN" "$TGT" 2>&1 ); rc=$?
+        if [ $rc -eq 0 ] && printf '%s' "$OUT" | grep -qi 'ARRIVED'; then
+            pass REQ-F-08 "default mode counts down in the terminal (no X), exit 0"
+        else
+            fail REQ-F-08 "terminal countdown rc=$rc, out='$OUT'"
+        fi
+    else
+        skip REQ-F-08 "could not compute a near-future target with date(1)"
+    fi
+else
+    skip REQ-F-08 "executable not built"
+fi
+
+# TC-15 / REQ-F-09 : terminal mode updates a single line in place (\r), so
+# the figure ticks without scrolling.
+if grep -q 'printf("\\rRemaining' "$SOURCE"; then
+    pass REQ-F-09 "terminal mode rewrites the line in place (carriage return)"
+else
+    fail REQ-F-09 "in-place terminal update (\\r) not found"
+fi
+
+# -----------------------------------------------------------------
 # GUI requirements: smoke-tested live if a display is available,
 # otherwise recorded as manual (CD-STP-001 Section 8).
 # -----------------------------------------------------------------
 section "GUI requirements (manual / smoke)"
 
 if [ -x "$BIN" ] && [ -n "${DISPLAY:-}" ]; then
-    # Brief launch-and-kill smoke test: the program should stay up.
-    "$BIN" "2026-08-19 08:00:00" &
+    # Brief launch-and-kill smoke test: with -gui the program should open a
+    # window and stay up.
+    "$BIN" -gui "2026-08-19 08:00:00" &
     pid=$!
     sleep 1
     if kill -0 "$pid" 2>/dev/null; then
         kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
-        pass REQ-G-01 "window opened and stayed up on \$DISPLAY"
+        pass REQ-G-01 "-gui window opened and stayed up on \$DISPLAY"
     else
-        fail REQ-G-01 "program exited prematurely on \$DISPLAY"
+        fail REQ-G-01 "-gui program exited prematurely on \$DISPLAY"
     fi
 else
     skip REQ-G-01 "no \$DISPLAY; GUI cases are manual (see CD-STP-001 Sec 8)"
@@ -214,11 +260,11 @@ skip REQ-F-07 "manual: arrival message at zero (MC-06)"
 # -----------------------------------------------------------------
 # Build-system requirements (static; no Docker required).
 # -----------------------------------------------------------------
-section "Build system (TC-14, TC-15, TC-16)"
+section "Build system (TC-16, TC-17, TC-18)"
 
 MK="$HERE/Makefile"
 
-# TC-14 / REQ-B-03 : docker-check.sh guards every container step.
+# TC-16 / REQ-B-03 : docker-check.sh guards every container step.
 if grep -Eq '^DOCKER_CHECK[[:space:]]*\?=[[:space:]]*docker-check\.sh' "$MK" && \
    ( cd "$HERE" && make -n -B tangle 2>/dev/null ) | grep -q 'docker-check.sh'; then
     pass REQ-B-03 "Makefile runs docker-check.sh before container steps"
@@ -226,7 +272,7 @@ else
     fail REQ-B-03 "docker-check.sh not invoked by the Makefile"
 fi
 
-# TC-15 / REQ-B-04 : docs built in-container; clean removes intermediates.
+# TC-17 / REQ-B-04 : docs built in-container; clean removes intermediates.
 DOCS_CMDS=$( cd "$HERE" && make -n -B docs 2>/dev/null )
 CLEAN_CMDS=$( cd "$HERE" && make -n clean 2>/dev/null )
 if printf '%s' "$DOCS_CMDS" | grep -q 'pdftex' && \
@@ -239,7 +285,7 @@ else
     fail REQ-B-04 "docs target or clean target incomplete"
 fi
 
-# TC-16 / REQ-B-05 : install places the executable in /usr/local/bin.
+# TC-18 / REQ-B-05 : install places the executable in /usr/local/bin.
 INSTALL_CMDS=$( cd "$HERE" && make -n install 2>/dev/null )
 if printf '%s' "$INSTALL_CMDS" | grep -q '/usr/local/bin' && \
    printf '%s' "$INSTALL_CMDS" | grep -q 'install -m 755'; then

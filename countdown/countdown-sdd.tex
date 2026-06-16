@@ -42,8 +42,8 @@
   {\normalsize Prepared by: J.\,R.\,Evans}\\[2em]
   \begin{tabular}{ll}
     Document identifier: & CD-SDD-001                                     \\
-    Revision:            & 1.0                                            \\
-    Date:                & June 13, 2026                                  \\
+    Revision:            & 1.1                                            \\
+    Date:                & June 15, 2026                                  \\
     Status:              & Released                                       \\
     Governing standard:  & IEEE Std 1016-2009 (SDD)                       \\
   \end{tabular}
@@ -98,10 +98,14 @@ artefact (REQ-D-04).
 
 \subsection{Architectural style}
 
-\code{countdown} is a single-threaded, event-driven program.  A central
-loop multiplexes two stimuli---X~events and the passage of time---using one
+\code{countdown} is a single-threaded program offering two run modes
+selected on the command line.  In GUI mode (\code{-gui}) a central loop
+multiplexes two stimuli---X~events and the passage of time---using one
 POSIX \code{select} call, and repaints the window in response to either.
-All state lives in one record; the routines are pure functions of that
+In the default terminal mode a simpler loop recomputes and reprints the
+remaining time once per tick, using \code{select} purely as a sub-second
+sleep.  Both modes share the same time computation and formatting; all
+state lives in one record, and the routines are pure functions of that
 record plus the system clock.
 
 \subsection{Top-level decomposition}
@@ -120,6 +124,7 @@ The tangled program is assembled in this order (the unnamed root section of
   \item Render the display
   \item Handle one X event
   \item The event-and-timer loop
+  \item Run the countdown in the terminal
   \item The \code{main} function
 \end{enumerate}
 
@@ -137,6 +142,8 @@ The tangled program is assembled in this order (the unnamed root section of
 \code{render} & REQ-F-05, REQ-F-07, REQ-G-02 \\
 \code{handle\_event}, \code{toggle\_run} & REQ-G-03, REQ-G-04, REQ-G-05 \\
 \code{run\_loop} & REQ-T-01, REQ-T-04 \\
+\code{run\_terminal} & REQ-F-08, REQ-F-09 \\
+\code{main} (argument scan) & REQ-F-03, REQ-F-08 \\
 Many small sections; POSIX section & REQ-D-01--REQ-D-03 \\
 \bottomrule
 \end{longtable}
@@ -230,6 +237,26 @@ the X~connection descriptor with a quarter-second timeout, then repaints if
 running.  This yields sub-second visual updates (REQ-T-01) with negligible
 idle CPU (REQ-T-04).
 
+\subsection{Terminal countdown (\code{run\_terminal})}
+
+The default run mode (REQ-F-08).  It prints the target once, then loops:
+each pass recomputes the remaining seconds with \code{remaining\_secs},
+formats them with \code{fmt\_duration}, and reprints them over the previous
+line using a leading carriage return so the figure ticks in place without
+scrolling (REQ-F-09).  \code{fflush} forces each update out because the
+carriage-return writes carry no newline.  The loop ends when the target is
+reached, appending the arrival message and a newline.  It watches no file
+descriptor, so it uses \code{select} with a null descriptor set purely as a
+portable sub-second sleep, requiring no X~server.
+
+\subsection{Mode selection (\code{main})}
+
+\code{main} scans the command-line arguments in a small order-independent
+loop: the token \code{-gui} sets GUI mode, and any other token is taken as
+the target specification (REQ-F-03, REQ-F-08).  After parsing the target it
+dispatches to the GUI start-up sequence or to \code{run\_terminal}
+accordingly; terminal mode is the default when \code{-gui} is absent.
+
 % =================================================================
 \section{Control and timing design}
 % =================================================================
@@ -285,8 +312,10 @@ multiplexing with timeout), and \code{getenv} (called by Xlib to read
 
 \subsection{Command-line and environment interface}
 
-As specified in CD-SRS-001 \S3.6: optional target argument; exit codes
-0/1/2; \code{DISPLAY} and \code{TZ} environment variables.
+As specified in CD-SRS-001 \S3.6: optional \code{-gui} option selecting the
+window mode (terminal is the default) and optional target argument, in
+either order; exit codes 0/1/2; \code{DISPLAY} and \code{TZ} environment
+variables.
 
 % =================================================================
 \section{Design constraints and decisions}
@@ -305,6 +334,13 @@ As specified in CD-SRS-001 \S3.6: optional target argument; exit codes
         font is not fatal.
   \item \textbf{No toolkit (REQ-B-02).}  Keeps the program small,
         portable, and fully readable.
+  \item \textbf{Two run modes from shared code (REQ-F-08, REQ-F-09).}  The
+        terminal default and the \code{-gui} window reuse the same
+        \code{parse\_target}, \code{remaining\_secs}, and
+        \code{fmt\_duration} routines, so the two presentations cannot
+        disagree about the figure they show.  Terminal mode is the default
+        because it is the most portable (no X~server) and the more common
+        case over a shell.
 \end{enumerate}
 
 % =================================================================
@@ -316,8 +352,10 @@ The \code{Makefile} drives the CWEB tools through \code{cweb.sh}
 \code{countdown.c}; \code{make compile} builds it with \code{cc} against
 Xlib, supplying \code{-I}/\code{-L} for \code{/opt/X11} on macOS or the
 default paths on Linux; \code{make weave} and \code{make pdf} produce the
-typeset program.  The C, \TeX, and PDF outputs are artefacts; the source
-of record is \code{countdown.w} (REQ-D-04).
+typeset program; \code{make run} launches the default terminal countdown
+and \code{make run-gui} launches the \code{-gui} window.  The C, \TeX, and
+PDF outputs are artefacts; the source of record is \code{countdown.w}
+(REQ-D-04).
 
 \medskip\noindent
 \textbf{Containerised toolchain (REQ-B-03).}  Every target that invokes

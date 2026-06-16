@@ -2,15 +2,18 @@
 @* Countdown.
 
 This is a program written in Donald Knuth's {\it literate programming\/}
-paradigm.  It opens a window on the X~Window System and displays a live
-countdown --- days, hours, minutes, and seconds --- to a fixed future
-instant.  The default target is
+paradigm.  It displays a live countdown --- days, hours, minutes, and
+seconds --- to a fixed future instant.  By default it runs in the
+terminal that launched it; given the option \.{-gui} it instead opens a
+window on the X~Window System.  The default target is
 
 $$\.{2026-08-19 08:00:00}$$
 
 \noindent (the morning of 19~August 2026), but any target may be supplied
-on the command line.  The user starts the countdown with the keyboard or
-the mouse, may pause and resume it, and quits when finished.
+on the command line.  In GUI mode the user starts the countdown with the
+keyboard or the mouse, may pause and resume it, and quits when finished;
+in terminal mode the countdown runs immediately and the user quits with
+\.{Ctrl-C}.
 
 @ {\bf Literate programming.}
 Donald Knuth introduced literate programming in 1984 as a way of writing
@@ -46,6 +49,7 @@ below.  Each named section is elaborated in its own module further on.
 @<Render the display@>@/
 @<Handle one X event@>@/
 @<The event-and-timer loop@>@/
+@<Run the countdown in the terminal@>@/
 @<The |main| function@>
 
 @* Header files.
@@ -54,9 +58,9 @@ library, the POSIX operating-system interface, and the Xlib client
 library for the X~Window System.
 
 @<Header files@>=
-#include <stdio.h>      /* |printf|, |fprintf|, |snprintf|, |sscanf| */
+#include <stdio.h>      /* |printf|, |fprintf|, |snprintf|, |sscanf|, |fflush| */
 #include <stdlib.h>     /* |exit| */
-#include <string.h>     /* |memset|, |strlen| */
+#include <string.h>     /* |memset|, |strlen|, |strcmp| */
 #include <time.h>       /* |time|, |mktime|, |localtime|, |clock_gettime| */
 #include <unistd.h>     /* POSIX symbolic constants */
 #include <sys/select.h> /* |select|, |fd_set|, |FD_SET| */
@@ -384,20 +388,87 @@ acquisition, then leaves the program.
   exit(0);
 }
 
+@* Running in the terminal.
+When the program is invoked without \.{-gui} it counts down in the
+controlling terminal instead of opening a window.  This is the default
+mode: it needs no X~server and is convenient over a plain login shell or
+in a script.  The same |remaining_secs| and |fmt_duration| routines feed a
+single line that is rewritten in place once per second with a carriage
+return, so the terminal shows a steadily ticking figure without scrolling.
+
+@<Run the countdown in the terminal@>=
+static void run_terminal(App *a)
+{
+  char hdr[80], big[48];
+  struct tm *lt = localtime(&a->target);
+  strftime(hdr, sizeof hdr, "Target: %a %d %b %Y  %H:%M:%S", lt);
+  printf("%s\n", hdr);
+  @<Loop until the terminal countdown arrives@>@;
+}
+
+@ Each pass recomputes the remaining seconds, reprints the figure over the
+previous one, and sleeps a tick.  The loop ends once the target is reached;
+a final newline leaves the cursor on a fresh line.  |fflush| forces each
+update out, since standard output to a terminal is line-buffered and the
+carriage-return updates carry no newline.
+
+@<Loop until the terminal countdown arrives@>=
+for (;;) {
+  long secs = remaining_secs(a->target);
+  fmt_duration(secs, big, sizeof big);
+  printf("\rRemaining: %s   ", big);
+  fflush(stdout);
+  if (secs == 0) break;
+  @<Sleep one tick in the terminal@>@;
+}
+printf("\rRemaining: %s   -- THE MOMENT HAS ARRIVED\n", big);
+
+@ The terminal loop has no file descriptor to watch, so it simply sleeps a
+tick with |select| and a null descriptor set --- the same POSIX call used
+by the GUI loop, here serving only as a portable sub-second sleep.
+
+@<Sleep one tick in the terminal@>=
+{
+  struct timeval tv;
+  tv.tv_sec = 0;
+  tv.tv_usec = TICK_USEC;
+  select(0, NULL, NULL, NULL, &tv);
+}
+
 @* The main function.
-|main| selects the target (command-line argument or default), initialises
-the |App| record, brings up the GUI, paints once, and enters the loop.
+|main| selects the target (command-line argument or default), decides
+between terminal and GUI mode from the \.{-gui} option, initialises the
+|App| record, and dispatches accordingly.
 
 @<The |main| function@>=
 int main(int argc, char **argv)
 {
   App a;
-  const char *spec = (argc > 1) ? argv[1] : DEFAULT_TARGET;
+  int gui = 0;
+  const char *spec = DEFAULT_TARGET;
+  @<Scan the command-line arguments@>@;
   memset(&a, 0, sizeof a);
   a.target = parse_target(spec);
   a.frozen = remaining_secs(a.target);
-  @<Start the GUI and run@>@;
+  if (gui) { @<Start the GUI and run@>@; }
+  else run_terminal(&a);
   return 0;
+}
+
+@ The option \.{-gui} selects the windowed mode; any other non-option
+argument is taken as the target specification.  Scanning the arguments in
+a small loop keeps the option and the optional target independent of their
+order on the command line.
+
+@<Scan the command-line arguments@>=
+{
+  int i;
+  for (i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "-gui") == 0)
+      gui = 1;
+    else
+      spec = argv[i];
+  }
 }
 
 @ The startup sequence opens the server connection, creates the window

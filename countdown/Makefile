@@ -9,7 +9,8 @@
 #   make tangle     -> countdown.c         (ctangle, in container)
 #   make weave      -> countdown.tex       (cweave, in container)
 #   make compile    -> countdown           (cc + Xlib)
-#   make run        -> build and launch the GUI
+#   make run        -> build and launch the terminal countdown (default)
+#   make run-gui    -> build and launch the GUI countdown (-gui)
 #   make pdf        -> countdown.pdf        (woven program, in container)
 #   make docs       -> countdown.pdf + the four IEEE PDFs (in container)
 #   make install    -> install countdown into /usr/local/bin
@@ -68,7 +69,7 @@ LDFLAGS   = $(X11_LDFLAGS)
 PREFIX    ?= /usr/local
 BINDIR     = $(PREFIX)/bin
 
-.PHONY: all tangle weave compile pdf docs run install uninstall \
+.PHONY: all tangle weave compile pdf docs run run-gui install uninstall \
         clean distclean docker-check
 
 all: tangle compile
@@ -110,9 +111,13 @@ $(IEEE_PDF): %.pdf: %.tex
 # Build every document: the woven program listing and the IEEE set.
 docs: $(PROG_PDF) $(IEEE_PDF)
 
-# Build and run the GUI.
+# Build and run the terminal countdown (the default mode).
 run: $(PROGRAM)
 	./$(PROGRAM)
+
+# Build and run the GUI countdown (the -gui option).
+run-gui: $(PROGRAM)
+	./$(PROGRAM) -gui
 
 # Install the final executable into $(BINDIR) (default /usr/local/bin).
 # Use "sudo make install" if that directory is not writable.

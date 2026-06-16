@@ -58,16 +58,18 @@ cat <<'EOF'
 Perform these at a live X display (Linux/X11 or macOS/XQuartz).
 Mark each [ ] -> [P]ass or [F]ail.
 
-  [ ] MC-01 (REQ-G-01/02): `./countdown` opens a window showing the
+  [ ] MC-01 (REQ-G-01/02): `./countdown -gui` opens a window showing the
             target, remaining time, status line, and control hint.
-  [ ] MC-02 (REQ-F-01/T-01): with no argument it counts toward
-            2026-08-19 08:00:00, the seconds advancing once per second.
+  [ ] MC-02 (REQ-F-01/T-01): `./countdown -gui` with no target counts
+            toward 2026-08-19 08:00:00, the seconds advancing once per second.
   [ ] MC-03 (REQ-G-03): Space or a mouse click toggles running/paused;
             the figure freezes while paused.
   [ ] MC-04 (REQ-G-04): `q` or Escape closes the window (exit 0).
   [ ] MC-05 (REQ-G-05): resizing / re-exposing repaints correctly.
-  [ ] MC-06 (REQ-F-07): with a target a few seconds ahead, arrival
-            shows "THE MOMENT HAS ARRIVED" and reads 0 d 00:00:00.
+  [ ] MC-06 (REQ-F-07): with `-gui` and a target a few seconds ahead,
+            arrival shows "THE MOMENT HAS ARRIVED" and reads 0 d 00:00:00.
+  [ ] MC-07 (REQ-F-08): `./countdown` with no `-gui` counts down in the
+            terminal (no window), updating the line in place once a second.
 
 EOF
 

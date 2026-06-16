@@ -43,8 +43,8 @@
   {\normalsize Prepared by: J.\,R.\,Evans}\\[2em]
   \begin{tabular}{ll}
     Document identifier: & CD-CONOPS-001                                  \\
-    Revision:            & 1.0                                            \\
-    Date:                & June 13, 2026                                  \\
+    Revision:            & 1.1                                            \\
+    Date:                & June 15, 2026                                  \\
     Status:              & Released                                       \\
     Governing standard:  & IEEE Std 1362-1998 (ConOps)                    \\
   \end{tabular}
@@ -66,10 +66,12 @@
 \subsection{System identification}
 
 This Concept of Operations (ConOps) describes \code{countdown}, a small
-single-window graphical application for the X~Window System.  Given a
-fixed future instant --- by default \code{2026-08-19 08:00:00} in local
-time --- the program displays the time remaining until that instant and
-updates the display live until it is reached.
+graphical and terminal application for the X~Window System and POSIX
+hosts.  Given a fixed future instant --- by default \code{2026-08-19
+08:00:00} in local time --- the program displays the time remaining until
+that instant and updates the display live until it is reached.  By default
+it counts down in the controlling terminal; given the \code{-gui} option it
+opens a single X~window instead.
 
 \subsection{Document purpose}
 
@@ -171,38 +173,51 @@ single uncluttered window.  The justification for building
 
 \subsection{Overview}
 
-\code{countdown} is a single executable that opens one window on the
-X~Window System.  The window shows the target instant, the remaining time
-expressed as days and a \code{HH:MM:SS} clock, a status line, and a one-line
-hint listing the available keys.  The user starts and pauses the countdown
-from the keyboard or mouse and quits when finished.
+\code{countdown} is a single executable that displays a countdown to a
+target instant.  In its default \emph{terminal} mode it prints the target
+and then rewrites a single line showing the remaining time --- days and a
+\code{HH:MM:SS} clock --- in place once per second, needing no X~server.
+Given the \code{-gui} option it instead opens one window on the X~Window
+System showing the target instant, the remaining time, a status line, and
+a one-line hint listing the available keys; there the user starts and
+pauses the countdown from the keyboard or mouse and quits when finished.
 
 \subsection{Operational environment}
 
-The program runs on any POSIX host providing an X~server (Linux with an
-X~display, or macOS with XQuartz).  It links only against the core Xlib
-client library; no widget toolkit is required.  It consumes negligible CPU
-because it sleeps on \code{select} between updates rather than polling.
+In its default terminal mode the program runs on any POSIX host with a
+controlling terminal and needs no X~server.  In \code{-gui} mode it
+additionally requires an X~server (Linux with an X~display, or macOS with
+XQuartz) and links only against the core Xlib client library; no widget
+toolkit is required.  In either mode it consumes negligible CPU because it
+sleeps on \code{select} between updates rather than polling.
 
 \subsection{High-level capabilities}
 
 \begin{enumerate}[noitemsep]
   \item Count down to a default instant of \code{2026-08-19 08:00:00},
         or to any instant supplied on the command line.
+  \item Run in the controlling terminal by default, or in an X~window
+        when given the \code{-gui} option.
   \item Display the remaining time live, updating at least once per
         second.
-  \item Let the user start, pause, resume, and quit interactively.
+  \item Let the user start, pause, resume, and quit interactively
+        (in \code{-gui} mode).
   \item Announce arrival when the target instant is reached, and never
         display a negative remaining time.
 \end{enumerate}
 
 \subsection{Modes of operation}
 
-The program has three user-visible modes: \emph{armed} (started but not
-yet running --- the initial state, showing the full duration);
-\emph{running} (counting down live); and \emph{paused} (the figure is
-frozen at the value captured when the user paused).  A fourth, terminal
-condition, \emph{arrived}, is entered when the remaining time reaches zero.
+At the top level the program has two \emph{run modes}, chosen on the
+command line: \emph{terminal} (the default --- the countdown runs in the
+controlling terminal and ends when the target arrives or the user presses
+\code{Ctrl-C}) and \emph{GUI} (selected by \code{-gui} --- the countdown
+runs in an X~window).  Within GUI mode the program has three user-visible
+states: \emph{armed} (started but not yet running --- the initial state,
+showing the full duration); \emph{running} (counting down live); and
+\emph{paused} (the figure is frozen at the value captured when the user
+paused).  A fourth, terminal condition, \emph{arrived}, is entered in
+either run mode when the remaining time reaches zero.
 
 % =================================================================
 \section{Operational scenarios}
@@ -211,7 +226,7 @@ condition, \emph{arrived}, is entered when the remaining time reaches zero.
 \subsection{Scenario 1: Counting down to the default instant}
 
 Dana wants a visible countdown to the morning of 19~August 2026 left
-running on her desktop.  She launches \code{countdown} with no arguments.
+running on her desktop.  She launches \code{countdown -gui} with no target.
 A window appears showing \emph{Target: Wed 19 Aug 2026 08:00:00} and the
 full remaining duration with the status \emph{ready}.  She presses the
 space bar; the status changes to \emph{running} and the seconds begin to
@@ -220,10 +235,10 @@ tick down.  She leaves the window in a corner of her screen.
 \subsection{Scenario 2: A custom target}
 
 Raj is timing a 25-minute presentation rehearsal that should end at
-14:30.  He runs \code{countdown "2026-06-13 14:30:00"}.  The window opens
-with that instant as the target.  Part-way through he is interrupted; he
-clicks the window to pause, deals with the interruption, then clicks again
-to resume.
+14:30.  He runs \code{countdown -gui "2026-06-13 14:30:00"}.  The window
+opens with that instant as the target.  Part-way through he is
+interrupted; he clicks the window to pause, deals with the interruption,
+then clicks again to resume.
 
 \subsection{Scenario 3: Reaching the target}
 
@@ -237,6 +252,16 @@ and presses \code{q} to quit.
 A user runs \code{countdown "Aug 19"}.  Because the argument does not match
 \code{YYYY-MM-DD HH:MM:SS}, the program prints a diagnostic naming the
 expected form and exits with a non-zero status, without opening a window.
+
+\subsection{Scenario 5: A countdown over a remote shell}
+
+Sam is logged in to a headless server over SSH, with no X~display, and
+wants a quick countdown to a maintenance window.  He runs
+\code{countdown "2026-06-13 02:00:00"} with no \code{-gui}.  The program
+prints the target on one line and then rewrites a second line in place
+once per second, showing the remaining time without scrolling the
+terminal.  When the instant arrives the line ends with \emph{THE MOMENT
+HAS ARRIVED} and the program exits.
 
 % =================================================================
 \section{Summary of impacts}
@@ -265,9 +290,12 @@ documented in the program itself and in CD-SDD-001.
 
 \subsection{Alternatives considered}
 
-\textbf{A terminal (text) countdown.}  Simplest to build, but the ConOps
-calls explicitly for a window on the X~Window System, and a graphical
-artefact is more glanceable.  Rejected on requirement grounds.
+\textbf{A terminal-only countdown.}  Simplest to build and the most
+portable, since it needs no X~server.  Rather than reject it, the design
+adopts it as the \emph{default} mode (\code{countdown} with no option),
+which is ideal over a plain or remote shell; the graphical window, more
+glanceable on a desktop, is offered alongside it under the \code{-gui}
+option.  The two share the same time computation and formatting code.
 
 \medskip\noindent
 \textbf{A toolkit-based GUI (GTK, Qt, Motif).}  Would give buttons and

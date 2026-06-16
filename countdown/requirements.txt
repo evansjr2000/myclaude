@@ -12,4 +12,7 @@ and create all the documentation using the docker container called by either cwe
 
 6.  Install the final executable in /usr/local/bin from the Makefile.
 
+7.  Modify the countdown program to take the option "-gui", which means use an Xlib based window for the countdown;
+otherwise run the countdown in a terminal.
+
 

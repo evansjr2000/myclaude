@@ -45,8 +45,8 @@
   {\normalsize Prepared by: J.\,R.\,Evans}\\[2em]
   \begin{tabular}{ll}
     Document identifier: & CD-SRS-001                                     \\
-    Revision:            & 1.0                                            \\
-    Date:                & June 13, 2026                                  \\
+    Revision:            & 1.1                                            \\
+    Date:                & June 15, 2026                                  \\
     Status:              & Released                                       \\
     Governing standard:  & IEEE Std 830-1998 (SRS)                        \\
   \end{tabular}
@@ -75,12 +75,13 @@ automated harness verify the delivered program.
 
 \subsection{Scope}
 
-\code{countdown} is a single-window X~Window System application that
-displays the time remaining until a fixed future instant and updates that
-display live.  The SRS covers the program tangled from
-\code{countdown.w}.  It does not cover the X~server, the operating
-system's time-zone database, or the CWEB tools themselves, except to state
-the program's reliance on them.
+\code{countdown} is an X~Window System application that displays the time
+remaining until a fixed future instant and updates that display live.  It
+runs in two modes: by default it counts down in the controlling
+\emph{terminal}; given the \code{-gui} option it instead opens a single
+X~window.  The SRS covers the program tangled from \code{countdown.w}.  It
+does not cover the X~server, the operating system's time-zone database, or
+the CWEB tools themselves, except to state the program's reliance on them.
 
 \subsection{Definitions and acronyms}
 
@@ -93,6 +94,8 @@ Armed & Started but not yet running; shows the full remaining duration. \\
 Running & Counting down live. \\
 Paused & Display frozen at the value captured when the user paused. \\
 Arrived & The remaining time has reached zero. \\
+Terminal mode & The default mode: the countdown runs in the controlling terminal, no window. \\
+GUI mode & Selected by \code{-gui}: the countdown runs in an X~window. \\
 CWEB & Knuth's literate-programming system; \code{ctangle} extracts C, \code{cweave} extracts \TeX. \\
 Xlib & The C-language client interface to the X~Window System. \\
 POSIX & IEEE Std 1003.1 operating-system interface. \\
@@ -180,6 +183,14 @@ time-zone database reflects the rules in force for the target date.
   negative remaining time.}
 \rrow{REQ-F-07}{Upon arrival the program shall display a status message
   announcing that the target instant has been reached.}
+\rrow{REQ-F-08}{The program shall run in the controlling terminal by
+  default, and shall open an X~window instead when given the \code{-gui}
+  option as a command-line argument.  The \code{-gui} option and the
+  optional target argument may appear in any order.}
+\rrow{REQ-F-09}{In terminal mode the program shall update the remaining
+  time on a single line, rewriting it in place once per second (without
+  scrolling), and on arrival append the arrival message; it shall require
+  no X~server.}
 \bottomrule
 \end{longtable}
 
@@ -190,8 +201,9 @@ time-zone database reflects the rules in force for the target date.
 \textbf{ID} & \textbf{Requirement} \\
 \midrule
 \endhead
-\rrow{REQ-G-01}{The program shall present its output in a graphical window
-  on the X~Window System using the Xlib client interface.}
+\rrow{REQ-G-01}{In \code{-gui} mode the program shall present its output in
+  a graphical window on the X~Window System using the Xlib client
+  interface.}
 \rrow{REQ-G-02}{The window shall display, simultaneously, the target
   instant in human-readable form, the remaining time, a status line, and a
   one-line hint naming the available controls.}
@@ -274,11 +286,13 @@ time-zone database reflects the rules in force for the target date.
 
 \subsection{External interface requirements}
 
-\textbf{Command-line interface.}  \code{countdown [TARGET]}, where the
-optional \code{TARGET} is a string of the form \code{"YYYY-MM-DD HH:MM:SS"}
-(REQ-F-03).  Exit status is \code{0} on normal termination, \code{1} on
-inability to open the display, and \code{2} on a malformed target
-(REQ-F-04).
+\textbf{Command-line interface.}  \code{countdown [-gui] [TARGET]}, where
+the optional \code{-gui} option selects the X~window mode (the default is a
+terminal countdown, REQ-F-08) and the optional \code{TARGET} is a string
+of the form \code{"YYYY-MM-DD HH:MM:SS"} (REQ-F-03); the two may appear in
+either order.  Exit status is \code{0} on normal termination, \code{1} on
+inability to open the display (\code{-gui} mode only), and \code{2} on a
+malformed target (REQ-F-04).
 
 \medskip\noindent
 \textbf{User interface.}  One top-level X~window (REQ-G-01--REQ-G-05) with
@@ -313,6 +327,7 @@ REQ-F-01, REQ-F-02 & \S6.3 capabilities 1; \S7.1 Scenario~1 \\
 REQ-F-03 & \S7.2 Scenario~2 (custom target) \\
 REQ-F-04 & \S7.4 Scenario~4 (mistyped target) \\
 REQ-F-05--REQ-F-07 & \S6.3 capabilities 2 and 4; \S7.3 Scenario~3 \\
+REQ-F-08, REQ-F-09 & \S6.4 modes of operation; \S7.5 Scenario~5 (terminal) \\
 REQ-G-01--REQ-G-06 & \S6.1 overview; \S6.4 modes of operation \\
 REQ-T-01--REQ-T-04 & \S6.2 operational environment; \S8.2 trade-offs \\
 REQ-D-01--REQ-D-05 & \S4 justification (transparency); \S8 analysis \\

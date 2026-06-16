@@ -42,8 +42,8 @@
   {\normalsize Prepared by: J.\,R.\,Evans}\\[2em]
   \begin{tabular}{ll}
     Document identifier: & CD-STP-001                                      \\
-    Revision:            & 1.0                                             \\
-    Date:                & June 13, 2026                                   \\
+    Revision:            & 1.1                                             \\
+    Date:                & June 15, 2026                                   \\
     Status:              & Released                                        \\
     Governing standard:  & ISO/IEC/IEEE 29119-3:2021 (Test Documentation)  \\
   \end{tabular}
@@ -64,7 +64,7 @@
 
 \subsection{Document identifier}
 
-CD-STP-001 Rev.\,1.0, \textit{Software Test Plan: countdown}.
+CD-STP-001 Rev.\,1.1, \textit{Software Test Plan: countdown}.
 
 \subsection{Purpose}
 
@@ -156,9 +156,11 @@ TC-10 & REQ-F-05 & \code{fmt\_duration} emits the \code{d HH:MM:SS} form with ze
 TC-11 & REQ-F-06 & \code{remaining\_secs} clamps a past target to zero (verified via a past-dated target with status~2 guard / source inspection of the clamp). \\
 TC-12 & REQ-T-02, REQ-T-03 & The source computes remaining time with \code{time} and converts the target with \code{mktime} using \code{tm\_isdst = -1}. \\
 TC-13 & REQ-T-04 & The event loop blocks on \code{select} (no busy-wait). \\
-TC-14 & REQ-B-03 & The \code{Makefile} invokes \code{docker-check.sh} (via \code{DOCKER\_CHECK}) as the first command of every container recipe. \\
-TC-15 & REQ-B-04 & \code{make -n docs} drives \code{pdftex}/\code{pdflatex} inside the \code{cweb} container for the program listing and all four IEEE/ISO documents; \code{make clean} removes the C, \TeX, executable, and auxiliary artefacts. \\
-TC-16 & REQ-B-05 & \code{make -n install} installs the executable into \code{/usr/local/bin} (\code{\$(PREFIX)/bin}) with mode~755. \\
+TC-14 & REQ-F-08 & The source recognises the \code{-gui} option and provides a terminal runner; with no \code{-gui} and no \code{DISPLAY}, a near-future target counts down in the terminal, announces arrival, and exits~0 (needs no X~server). \\
+TC-15 & REQ-F-09 & Terminal mode rewrites the remaining time on a single line in place (leading carriage return). \\
+TC-16 & REQ-B-03 & The \code{Makefile} invokes \code{docker-check.sh} (via \code{DOCKER\_CHECK}) as the first command of every container recipe. \\
+TC-17 & REQ-B-04 & \code{make -n docs} drives \code{pdftex}/\code{pdflatex} inside the \code{cweb} container for the program listing and all four IEEE/ISO documents; \code{make clean} removes the C, \TeX, executable, and auxiliary artefacts. \\
+TC-18 & REQ-B-05 & \code{make -n install} installs the executable into \code{/usr/local/bin} (\code{\$(PREFIX)/bin}) with mode~755. \\
 \bottomrule
 \end{longtable}
 
@@ -171,12 +173,13 @@ TC-16 & REQ-B-05 & \code{make -n install} installs the executable into \code{/us
 \textbf{Case} & \textbf{Req.} & \textbf{Procedure / pass criterion} \\
 \midrule
 \endhead
-MC-01 & REQ-G-01, REQ-G-02 & Launch \code{countdown}; a window opens showing target, remaining time, status, and hint. \\
-MC-02 & REQ-F-01, REQ-T-01 & With no argument, the window counts down toward the default target, the seconds advancing once per second. \\
+MC-01 & REQ-G-01, REQ-G-02 & Launch \code{countdown -gui}; a window opens showing target, remaining time, status, and hint. \\
+MC-02 & REQ-F-01, REQ-T-01 & With \code{-gui} and no target, the window counts down toward the default target, the seconds advancing once per second. \\
 MC-03 & REQ-G-03 & Press space (or click): the status toggles running$\leftrightarrow$paused and the figure freezes when paused. \\
 MC-04 & REQ-G-04 & Press \code{q} or Escape: the window closes and the program exits with status~0. \\
 MC-05 & REQ-G-05 & Resize and re-expose the window: contents are repainted correctly. \\
-MC-06 & REQ-F-07 & Launch with a target a few seconds ahead; on arrival the status shows the arrival message and the figure reads \code{0 d 00:00:00}. \\
+MC-06 & REQ-F-07 & Launch with \code{-gui} and a target a few seconds ahead; on arrival the status shows the arrival message and the figure reads \code{0 d 00:00:00}. \\
+MC-07 & REQ-F-08, REQ-F-09 & Launch \code{countdown} with no \code{-gui} (optionally over a display-less shell); the countdown runs in the terminal, rewriting one line in place once per second, with no window. \\
 \bottomrule
 \end{longtable}
 
@@ -204,6 +207,8 @@ REQ-F-04 & TC-09 & Automated (dynamic) \\
 REQ-F-05 & TC-10 & Automated (static) \\
 REQ-F-06 & TC-11 & Automated (static) \\
 REQ-F-07 & MC-06 & Manual \\
+REQ-F-08 & TC-14, MC-07 & Automated (static + dynamic) + Manual \\
+REQ-F-09 & TC-15, MC-07 & Automated (static) + Manual \\
 REQ-G-01 & TC-03, MC-01 & Automated + Manual \\
 REQ-G-02 & MC-01 & Manual \\
 REQ-G-03 & MC-03 & Manual \\

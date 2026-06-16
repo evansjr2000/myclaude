@@ -1,14 +1,18 @@
 # countdown
 
-A literate-program X Window countdown timer. Given a fixed future instant
-— by default **2026-08-19 08:00:00** local time — it opens a window and
-displays the time remaining (days and `HH:MM:SS`), updating live. Start,
-pause, and resume with the **space bar** or a **mouse click**; quit with
-**q** or **Escape**.
+A literate-program countdown timer. Given a fixed future instant — by
+default **2026-08-19 08:00:00** local time — it displays the time
+remaining (days and `HH:MM:SS`), updating live. By default it runs in
+the terminal; with the **`-gui`** option it opens an X Window instead.
+In the GUI you start, pause, and resume with the **space bar** or a
+**mouse click**, and quit with **q** or **Escape**; in the terminal the
+countdown runs immediately and you quit with **Ctrl-C**.
 
 ```
-./countdown                       # count down to the default 2026-08-19 08:00
-./countdown "2026-12-31 23:59:59" # count down to a custom instant
+./countdown                            # terminal countdown to the default 2026-08-19 08:00
+./countdown "2026-12-31 23:59:59"      # terminal countdown to a custom instant
+./countdown -gui                       # X Window countdown to the default instant
+./countdown -gui "2026-12-31 23:59:59" # X Window countdown to a custom instant
 ```
 
 ## Source of record
@@ -32,7 +36,8 @@ make tangle        # ctangle countdown.w -> countdown.c
 make compile       # cc + Xlib           -> countdown
 make weave pdf     # cweave + pdftex      -> countdown.pdf (typeset program)
 make docs          # countdown.pdf + the four IEEE PDFs (all in-container)
-make run           # build and launch the GUI
+make run           # build and launch the terminal countdown
+make run-gui       # build and launch the GUI countdown
 sudo make install  # install ./countdown into /usr/local/bin
 make clean         # remove all intermediate build files
 make distclean     # clean + remove the generated PDFs
@@ -78,6 +83,8 @@ the table of contents).
 `test-countdown.sh` verifies the SRS requirements: it tangles and compiles
 the program, checks the literate-program constraints (module size, POSIX
 section and index), the default target, command-line and error handling,
-the time/format logic, and the `select`-based loop. GUI requirements are
-smoke-tested when a display is present and otherwise listed as the manual
-checklist that `run-stp.sh` prints.
+the time/format logic, the `select`-based loop, and the run-mode selection
+(default terminal countdown vs. the `-gui` window — the terminal path is
+exercised live with a near-future target). GUI requirements are
+smoke-tested with `-gui` when a display is present and otherwise listed as
+the manual checklist that `run-stp.sh` prints.
