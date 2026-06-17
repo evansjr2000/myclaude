@@ -52,3 +52,6 @@ multiple events to be specified on the same line.
 
 17.  Add events: 1000 FR SCY, 1650 FR SCY, and all long course meter events.
 
+18.  Make sure no "module" in the "*.w" contains more then 24 lines of code;
+otherwise it is "too long."  If a module is too long, break it up into sub-modules.
+

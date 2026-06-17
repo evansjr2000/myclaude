@@ -5,13 +5,13 @@ This is necessary for GNAT.
 @x
 The ``banner line'' defined here should be changed whenever \.{ATANGLE} is
 modified.
- 
-@d banner=="This is ATANGLE, Version 1.0"
+
+@d banner=="This is ATANGLE, Version 2.2 (Ada 2012)"
 @y
 The ``banner line'' defined here should be changed whenever \.{ATANGLE} is
 modified.
- 
-@d banner=="This is ATANGLE, Version 1.1 (NRaD Version)"
+
+@d banner=="This is ATANGLE, Version 2.2 (Ada 2012, GNAT)"
 @z
 
 

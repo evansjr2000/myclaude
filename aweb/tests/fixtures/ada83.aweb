@@ -1,0 +1,14 @@
+% Ada 83 regression fixture for the AWEB toolchain.
+% Demonstrates only Ada 83 reserved words.
+\input awebmac
+
+@* Ada 83 sample. This module exists to verify that an
+unmodified Ada 83 program still tangles and weaves correctly
+under release 2.0 of the toolchain.
+
+@a
+with TEXT_IO;
+procedure HELLO_83 is
+begin
+   TEXT_IO.PUT_LINE("hello, ada 83");
+end HELLO_83;

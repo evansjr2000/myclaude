@@ -1,6 +1,11 @@
 % This program originally by D. E. Knuth is not copyrighted and can be used
 % freely. Changes to ADA by U. Schweigert.
 % ADA-Version 1.0 was released in May, 1988
+% ADA-Version 2.0 (Ada 95 keyword support: abstract, aliased, protected,
+%                  requeue, tagged, until)
+% ADA-Version 2.1 (-v / --version command-line flag added)
+% ADA-Version 2.2 (Ada 2012 keyword support: interface, overriding,
+%                  synchronized, some)
 
 % Here is TeX material that gets inserted after \input webmac
 \def\hang{\hangindent 3em\indent\ignorespaces}
@@ -22,7 +27,7 @@
   \centerline{\titlefont The {\ttitlefont AWEAVE} processor}
   \vskip 15pt
   \centerline{(based on {\tt WEAVE} Version 2.8)}
-  \centerline{\ninerm[ADA-Version 1.0]}
+  \centerline{\ninerm[ADA-Version 2.2 --- Ada 2012 keywords]}
   \vfill}
 \pageno=\contentspagenumber \advance\pageno by 1
  
@@ -39,7 +44,7 @@ U. Schweigert in May, 1988.
 The ``banner line'' defined here should be changed whenever \.{AWEAVE}
 is modified.
  
-@d banner=="This is AWEAVE, Version 1.1 (NRaD Version)"
+@d banner=="This is AWEAVE, Version 2.2 (Ada 2012 keyword support)"
  
 @ The program consists of several packages that are declared right now;
 each of these packages and both the specification and the body of
@@ -944,10 +949,10 @@ to be treated when \ADA\ code is being formatted.
 @!pragma_like:constant INTEGER:=32; {\&{pragma}}
 @!private_like:constant INTEGER:=33; {\&{private}}
 @!proc_like:constant INTEGER:=34; {\&{entry}, \&{function}, \&{package},
-                                   \&{procedure}, \&{task}}
+                                   \&{procedure}, \&{protected}, \&{task}}
 @!range_like:constant INTEGER:=35; {\&{range}}
 @!record_like:constant INTEGER:=36; {\&{record}}
-@!return_like:constant INTEGER:=37; {\&{return}, \&{exit}}
+@!return_like:constant INTEGER:=37; {\&{return}, \&{exit}, \&{requeue}}
 @!separate_like:constant INTEGER:=38; {\&{separate}}
 @!then_like:constant INTEGER:=39; {\&{then}}
 @!type_like:constant INTEGER:=40; {\&{subtype}, \&{type}, \&{for}}
@@ -1299,13 +1304,23 @@ A few macros permit us to do the initialization with a compact program.
 @!cur_name:name_pointer; {points to the identifier just inserted}
  
 @ First we define the reserved words of \ADA.
+The list below corresponds to the reserved words of \ADA\ 2012 as enumerated
+in {\sl Ada Reference Manual --- ISO/IEC 8652:2012(E)}, section~2.9.
+With respect to the \ADA\ 83 list this adds the six \ADA\ 95 keywords
+\&{abstract}, \&{aliased}, \&{protected}, \&{requeue}, \&{tagged}, and
+\&{until}; the three \ADA\ 2005 keywords \&{interface}, \&{overriding},
+and \&{synchronized}; and the one \ADA\ 2012 keyword \&{some}.
+Each reserved word is mapped to the parser category (|*_like|) that
+controls how \.{AWEAVE} pretty-prints constructs starting with that word.
  
 @<Store all the reserved words@>=
 id_first:=1;@/
 id(5)(@'a',@'b',@'o',@'r',@'t')(goto_like);@/
 id(3)(@'a',@'b',@'s')(goto_like);@/
+id(8)(@'a',@'b',@'s',@'t',@'r',@'a',@'c',@'t')(goto_like);@/
 id(6)(@'a',@'c',@'c',@'e',@'p',@'t')(accept_like);@/
 id(6)(@'a',@'c',@'c',@'e',@'s',@'s')(goto_like);@/
+id(7)(@'a',@'l',@'i',@'a',@'s',@'e',@'d')(goto_like);@/
 id(3)(@'a',@'l',@'l')(all_like);@/
 id(3)(@'a',@'n',@'d')(and_like);@/
 id(5)(@'a',@'r',@'r',@'a',@'y')(array_like);@/
@@ -1331,6 +1346,7 @@ id(7)(@'g',@'e',@'n',@'e',@'r',@'i',@'c')(generic_like);@/
 id(4)(@'g',@'o',@'t',@'o')(goto_like);@/
 id(2)(@'i',@'f')(if_like);@/
 id(2)(@'i',@'n')(in_like);@/
+id(9)(@'i',@'n',@'t',@'e',@'r',@'f',@'a',@'c',@'e')(goto_like);@/
 id(2)(@'i',@'s')(is_like);@/
 id(7)(@'l',@'i',@'m',@'i',@'t',@'e',@'d')(goto_like);@/
 id(4)(@'l',@'o',@'o',@'p')(loop_like);@/
@@ -1343,8 +1359,10 @@ id(2)(@'o',@'r')(or_like);@/
 id(6)(@'o',@'t',@'h',@'e',@'r',@'s')(goto_like);
 @!@rabort@>
 @!@rabs@>
+@!@rabstract@>
 @!@raccept@>
 @!@raccess@>
+@!@raliased@>
 @!@rall@>
 @!@rand@>
 @!@rarray@>
@@ -1370,6 +1388,7 @@ id(6)(@'o',@'t',@'h',@'e',@'r',@'s')(goto_like);
 @!@rgoto@>
 @!@rif@>
 @!@rin@>
+@!@rinterface@>
 @!@ris@>
 @!@rlimited@>
 @!@rloop@>
@@ -1383,48 +1402,62 @@ id(6)(@'o',@'t',@'h',@'e',@'r',@'s')(goto_like);
 
 @ @<Store all the res...@>=
 id(3)(@'o',@'u',@'t')(goto_like);@/
+id(10)(@'o',@'v',@'e',@'r',@'r',@'i',@'d',@'i',@'n',@'g')(goto_like);@/
 id(7)(@'p',@'a',@'c',@'k',@'a',@'g',@'e')(proc_like);@/
 id(6)(@'p',@'r',@'a',@'g',@'m',@'a')(pragma_like);@/
 id(7)(@'p',@'r',@'i',@'v',@'a',@'t',@'e')(private_like);@/
 id(9)(@'p',@'r',@'o',@'c',@'e',@'d',@'u',@'r',@'e')(proc_like);@/
+id(9)(@'p',@'r',@'o',@'t',@'e',@'c',@'t',@'e',@'d')(proc_like);@/
 id(5)(@'r',@'a',@'i',@'s',@'e')(goto_like);@/
 id(5)(@'r',@'a',@'n',@'g',@'e')(range_like);@/
 id(6)(@'r',@'e',@'c',@'o',@'r',@'d')(record_like);@/
 id(3)(@'r',@'e',@'m')(mod_like);@/
 id(7)(@'r',@'e',@'n',@'a',@'m',@'e',@'s')(goto_like);@/
+id(7)(@'r',@'e',@'q',@'u',@'e',@'u',@'e')(return_like);@/
 id(6)(@'r',@'e',@'t',@'u',@'r',@'n')(return_like);@/
 id(7)(@'r',@'e',@'v',@'e',@'r',@'s',@'e')(goto_like);@/
 id(6)(@'s',@'e',@'l',@'e',@'c',@'t')(begin_like);@/
 id(8)(@'s',@'e',@'p',@'a',@'r',@'a',@'t',@'e')(separate_like);@/
+id(4)(@'s',@'o',@'m',@'e')(all_like);@/
 id(7)(@'s',@'u',@'b',@'t',@'y',@'p',@'e')(type_like);@/
+id(12)(@'s',@'y',@'n',@'c',@'h',@'r',@'o',@'n',@'i',@'z',@'e',@'d')(goto_like);@/
+id(6)(@'t',@'a',@'g',@'g',@'e',@'d')(goto_like);@/
 id(4)(@'t',@'a',@'s',@'k')(proc_like);@/
 id(9)(@'t',@'e',@'r',@'m',@'i',@'n',@'a',@'t',@'e')(all_like);@/
 id(4)(@'t',@'h',@'e',@'n')(then_like);@/
 id(4)(@'t',@'y',@'p',@'e')(type_like);@/
+id(5)(@'u',@'n',@'t',@'i',@'l')(goto_like);@/
 id(3)(@'u',@'s',@'e')(with_like);@/
 id(4)(@'w',@'h',@'e',@'n')(when_like);@/
 id(5)(@'w',@'h',@'i',@'l',@'e')(goto_like);@/
 id(4)(@'w',@'i',@'t',@'h')(with_like);@/
 id(3)(@'x',@'o',@'r')(mod_like)@;
 @!@rout@>
+@!@roverriding@>
 @!@rpackage@>
 @!@rpragma@>
 @!@rprivate@>
 @!@rprocedure@>
+@!@rprotected@>
 @!@rraise@>
 @!@rrange@>
 @!@rrecord@>
 @!@rrem@>
 @!@rrenames@>
+@!@rrequeue@>
 @!@rreturn@>
 @!@rreverse@>
 @!@rselect@>
 @!@rseparate@>
+@!@rsome@>
 @!@rsubtype@>
+@!@rsynchronized@>
+@!@rtagged@>
 @!@rtask@>
 @!@rterminate@>
 @!@rthen@>
 @!@rtype@>
+@!@runtil@>
 @!@ruse@>
 @!@rwhen@>
 @!@rwhile@>
@@ -6124,6 +6157,13 @@ procedure @!AWEAVE is
  ic : INTEGER := 0;
  yr_output_file : Ustring;
  begin
+  if Argument_Count >= 1 and then
+     (Argument(1) = "-v" or else Argument(1) = "--version") then
+    {Print just the banner and exit cleanly --- no input/output files
+     are touched and no statistics are produced.}
+    TEXT_IO.Put_Line(banner);
+    return;
+  end if;
   print_ln("Trying to open input file.");
   ac := Argument_Count;
   if ac < 1 then

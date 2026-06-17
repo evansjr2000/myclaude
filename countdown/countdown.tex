@@ -1,0 +1,577 @@
+\input cwebmac
+\datethis
+
+\N{1}{1}Countdown.
+
+This is a program written in Donald Knuth's {\it literate programming\/}
+paradigm.  It opens a window on the X~Window System and displays a live
+countdown --- days, hours, minutes, and seconds --- to a fixed future
+instant.  The default target is
+
+$$\.{2026-08-19 08:00:00}$$
+
+\noindent (the morning of 19~August 2026), but any target may be supplied
+on the command line.  The user starts the countdown with the keyboard or
+the mouse, may pause and resume it, and quits when finished.
+
+\fi
+
+\M{2}{\bf Literate programming.}
+Donald Knuth introduced literate programming in 1984 as a way of writing
+software meant to be read by human beings first and executed by computers
+second.  Rather than annotating code with comments, a literate program
+interweaves prose and code in a single source document (conventionally
+given the extension \.{.w}).  The prose explains the {\it why}; the code
+expresses the {\it how}.  Two companion tools separate them at build time:
+\.{ctangle} extracts the compilable C~source, and \.{cweave} produces the
+typeset documentation you are now reading.  In this project both are
+driven through the \.{cweb.sh} helper script:
+$$\.{./cweb.sh ctangle countdown.w}\qquad\.{./cweb.sh cweave countdown.w}$$
+
+\fi
+
+\M{3}{\bf A note on module size.}  By project convention every numbered
+module (the unit \.{cweave} typesets as one ``section'') contains fewer
+than twenty-four lines of code.  Long constructions are therefore split
+into several named sections that are stitched together at tangle time.
+This keeps each idea small enough to be grasped whole.
+
+\fi
+
+\M{4}{\bf Program structure.}  The tangled output is assembled in the order
+below.  Each named section is elaborated in its own module further on.
+
+\Y\B\X5:Header files\X\6
+\X6:Constants\X\6
+\X7:The application state \PB{\\{App}}\X\6
+\X8:Parse the target time\X\6
+\X10:Compute the remaining seconds\X\6
+\X11:Format a duration\X\6
+\X12:Open the display\X\6
+\X13:Create the window\X\6
+\X14:Create the graphics context\X\6
+\X15:Render the display\X\6
+\X17:Handle one X event\X\6
+\X20:The event-and-timer loop\X\6
+\X24:The \PB{\\{main}} function\X\par
+\fi
+
+\N{1}{5}Header files.
+The program draws on three families of declarations: the C~standard
+library, the POSIX operating-system interface, and the Xlib client
+library for the X~Window System.
+
+\Y\B\4\X5:Header files\X${}\E{}$\6
+\8\#\&{include} \.{<stdio.h>}\C{ \PB{\\{printf}}, \PB{\\{fprintf}}, \PB{%
+\\{snprintf}}, \PB{\\{sscanf}} }\6
+\8\#\&{include} \.{<stdlib.h>}\C{ \PB{\\{exit}} }\6
+\8\#\&{include} \.{<string.h>}\C{ \PB{\\{memset}}, \PB{\\{strlen}} }\6
+\8\#\&{include} \.{<time.h>}\C{ \PB{\\{time}}, \PB{\\{mktime}}, \PB{%
+\\{localtime}}, \PB{\\{clock\_gettime}} }\6
+\8\#\&{include} \.{<unistd.h>}\C{ POSIX symbolic constants }\6
+\8\#\&{include} \.{<sys/select.h>}\C{ \PB{\\{select}}, \PB{\\{fd\_set}}, \PB{%
+\.{FD\_SET}} }\6
+\8\#\&{include} \.{<X11/Xlib.h>}\C{ the core Xlib client interface }\6
+\8\#\&{include} \.{<X11/Xutil.h>}\C{ \PB{\\{XFontStruct}} and window-manager
+hints }\par
+\U4.\fi
+
+\N{1}{6}Constants.
+A handful of compile-time constants fix the default target instant, the
+geometry of the window, and the X11 font we ask the server to load.  The
+font \.{10x20} is a fixed-width bitmap font present on virtually every
+X~server; if it is unavailable we fall back to the server default.
+
+\Y\B\4\D$\.{DEFAULT\_TARGET}$ \5
+\.{"2026-08-19\ 08:00:00}\)\.{"}\C{ 19 August 2026, 8:00\thinspace AM }\par
+\B\4\D$\.{WIN\_W}$ \5
+\T{520}\C{ window width in pixels }\par
+\B\4\D$\.{WIN\_H}$ \5
+\T{220}\C{ window height in pixels }\par
+\B\4\D$\.{FONT\_NAME}$ \5
+\.{"10x20"}\C{ preferred fixed-width font }\par
+\B\4\D$\.{TICK\_USEC}$ \5
+\T{250000}\C{ event-loop wake-up interval, microseconds }\par
+\Y\B\4\X6:Constants\X${}\E{}$\C{ The constants above are expressed as
+preprocessor macros so that the    tangled C~source carries no separate
+definitions module. }\par
+\U4.\fi
+
+\N{1}{7}The application state.
+All mutable state lives in one \PB{\\{App}} structure that is threaded through
+the drawing and event-handling routines.  Keeping it in a single record
+(rather than in file-scope globals) makes the data flow explicit and the
+routines easy to test in isolation.
+
+\Y\B\4\X7:The application state \PB{\&{App}}\X${}\E{}$\6
+\&{typedef} \&{struct} ${}\{{}$\1\6
+${}\\{Display}*\\{dpy}{}$;\C{ connection to the X~server }\6
+\\{Window}\\{win};\C{ our top-level window }\6
+\.{GC}\\{gc};\C{ graphics context for text }\6
+${}\\{XFontStruct}*\\{font}{}$;\C{ loaded font, or \PB{$\NULL$} }\7
+\&{int} \\{screen};\C{ default screen number }\6
+\&{time\_t} \\{target};\C{ the instant we count down to }\6
+\&{int} \\{running};\C{ 1 while counting, 0 while paused or armed }\6
+\&{int} \\{started};\C{ 1 once the user has begun the countdown }\6
+\&{long} \\{frozen};\C{ remaining seconds captured at the last pause }\2\6
+${}\}{}$ \&{App};\par
+\U4.\fi
+
+\N{1}{8}Parsing the target time.
+The target is given as the calendar string \.{"YYYY-MM-DD HH:MM:SS"} in
+{\it local\/} time.  We decompose it with \PB{\\{sscanf}}, populate a \PB{%
+\&{struct} \\{tm}},
+and convert it to a \PB{\&{time\_t}} with the POSIX function \PB{\\{mktime}}.
+Setting
+\PB{\\{tm\_isdst}} to $-1$ asks \PB{\\{mktime}} to determine for itself whether
+daylight
+saving time is in effect on that date.
+
+\Y\B\4\X8:Parse the target time\X${}\E{}$\6
+\1\1\&{static} \&{time\_t} \\{parse\_target}(\&{const} \&{char} ${}{*}\|s)\2%
+\2{}$\6
+${}\{{}$\1\6
+\&{struct} \\{tm} \\{tm};\6
+\&{int} \\{yr}${},\39\\{mo},\39\\{dy},\39\\{hr},\39\\{mi},\39\\{se};{}$\7
+${}\\{memset}({\AND}\\{tm},\39\T{0},\39{}$\&{sizeof} \\{tm});\6
+\&{if} ${}(\\{sscanf}(\|s,\39\.{"\%d-\%d-\%d\ \%d:\%d:\%d"},\39{\AND}\\{yr},%
+\39{\AND}\\{mo},\39{\AND}\\{dy},\39{\AND}\\{hr},\39{\AND}\\{mi},\39{\AND}%
+\\{se})\I\T{6}){}$\5
+${}\{{}$\1\6
+${}\\{fprintf}(\\{stderr},\39\.{"countdown:\ bad\ targ}\)\.{et\ \\"\%s\\"\ "}%
+\.{"(want\ YYYY-MM-DD\ HH}\)\.{:MM:SS)\\n"},\39\|s);{}$\6
+\\{exit}(\T{2});\6
+\4${}\}{}$\2\6
+\X9:Fill the broken-down time and convert it\X\6
+\4${}\}{}$\2\par
+\U4.\fi
+
+\M{9}The fields of \PB{\&{struct} \\{tm}} count years from 1900 and months from
+zero,
+so we adjust accordingly before calling \PB{\\{mktime}}.  A return value of
+$(time_t)(-1)$ signals an unrepresentable date.
+
+\Y\B\4\X9:Fill the broken-down time and convert it\X${}\E{}$\6
+${}\{{}$\1\6
+\&{time\_t} \|t;\7
+${}\\{tm}.\\{tm\_year}\K\\{yr}-\T{1900};{}$\6
+${}\\{tm}.\\{tm\_mon}\K\\{mo}-\T{1};{}$\6
+${}\\{tm}.\\{tm\_mday}\K\\{dy};{}$\6
+${}\\{tm}.\\{tm\_hour}\K\\{hr};{}$\6
+${}\\{tm}.\\{tm\_min}\K\\{mi};{}$\6
+${}\\{tm}.\\{tm\_sec}\K\\{se};{}$\6
+${}\\{tm}.\\{tm\_isdst}\K{-}\T{1}{}$;\C{ let \PB{\\{mktime}} decide about DST }%
+\6
+${}\|t\K\\{mktime}({\AND}\\{tm});{}$\6
+\&{if} ${}(\|t\E(\&{time\_t})\,{-}\T{1}){}$\5
+${}\{{}$\1\6
+${}\\{fprintf}(\\{stderr},\39\.{"countdown:\ target\ i}\)\.{s\ not\ a\ valid\
+date\\n}\)\.{"});{}$\6
+\\{exit}(\T{2});\6
+\4${}\}{}$\2\6
+\&{return} \|t;\6
+\4${}\}{}$\2\par
+\U8.\fi
+
+\N{1}{10}Computing the remaining seconds.
+The number of whole seconds still to run is the difference between the
+target and the current instant, clamped at zero so the display never goes
+negative.  We read the wall clock with the POSIX \PB{\\{time}} call.
+
+\Y\B\4\X10:Compute the remaining seconds\X${}\E{}$\6
+\1\1\&{static} \&{long} \\{remaining\_secs}(\&{time\_t} \\{target})\2\2\6
+${}\{{}$\1\6
+\&{time\_t} \\{now}${}\K\\{time}(\NULL);{}$\6
+\&{double} \|d${}\K\\{difftime}(\\{target},\39\\{now});{}$\7
+\&{return} \|d${}>\T{0.0}\?(\&{long})\,\|d:\T{0\$L};{}$\6
+\4${}\}{}$\2\par
+\A19.
+\U4.\fi
+
+\N{1}{11}Formatting a duration.
+A count of seconds is rendered as days plus a 24-hour clock.  The result
+is written into a caller-supplied buffer with the bounds-checked
+\PB{\\{snprintf}}, so no overflow is possible regardless of the magnitude.
+
+\Y\B\4\X11:Format a duration\X${}\E{}$\6
+\1\1\&{static} \&{void} \\{fmt\_duration}(\&{long} \\{secs}${},\39{}$\&{char}
+${}{*}\\{buf},\39{}$\&{size\_t} \|n)\2\2\6
+${}\{{}$\1\6
+\&{long} \|d${}\K\\{secs}/\T{86400};{}$\6
+\&{long} \|r${}\K\\{secs}\MOD\T{86400};{}$\6
+\&{long} \|h${}\K\|r/\T{3600};{}$\6
+\&{long} \|m${}\K(\|r\MOD\T{3600})/\T{60};{}$\6
+\&{long} \|s${}\K\|r\MOD\T{60};{}$\7
+${}\\{snprintf}(\\{buf},\39\|n,\39\.{"\%ld\ d\ \ \%02ld:\%02ld:}\)\.{\%02ld"},%
+\39\|d,\39\|h,\39\|m,\39\|s);{}$\6
+\4${}\}{}$\2\par
+\U4.\fi
+
+\N{1}{12}Opening the display.
+Connecting to the X~server is the first Xlib act.  \PB{$\\{XOpenDisplay}(%
+\NULL)$}
+honours the \PB{\.{DISPLAY}} environment variable, which POSIX makes available
+through \PB{\\{getenv}} inside Xlib.  A null return means no server could be
+reached, which is fatal.
+
+\Y\B\4\X12:Open the display\X${}\E{}$\6
+\1\1\&{static} \&{void} \\{open\_display}(\&{App} ${}{*}\|a)\2\2{}$\6
+${}\{{}$\1\6
+${}\|a\MG\\{dpy}\K\\{XOpenDisplay}(\NULL);{}$\6
+\&{if} ${}(\|a\MG\\{dpy}\E\NULL){}$\5
+${}\{{}$\1\6
+${}\\{fprintf}(\\{stderr},\39\.{"countdown:\ cannot\ o}\)\.{pen\ X\ display\ "}%
+\.{"(is\ DISPLAY\ set\ and}\)\.{\ an\ X\ server\ running}\)\.{?)\\n"});{}$\6
+\\{exit}(\T{1});\6
+\4${}\}{}$\2\6
+${}\|a\MG\\{screen}\K\\{DefaultScreen}(\|a\MG\\{dpy});{}$\6
+\4${}\}{}$\2\par
+\U4.\fi
+
+\N{1}{13}Creating the window.
+We ask for a simple top-level window with a white background and a thin
+black border, give it a title for the window manager, and declare which
+event categories we wish to receive: exposures (redraw requests), key and
+button presses, and structure-change notifications (resizing).
+
+\Y\B\4\X13:Create the window\X${}\E{}$\6
+\1\1\&{static} \&{void} \\{create\_window}(\&{App} ${}{*}\|a)\2\2{}$\6
+${}\{{}$\1\6
+\&{unsigned} \&{long} \\{white}${}\K\\{WhitePixel}(\|a\MG\\{dpy},\39\|a\MG%
+\\{screen});{}$\6
+\&{unsigned} \&{long} \\{black}${}\K\\{BlackPixel}(\|a\MG\\{dpy},\39\|a\MG%
+\\{screen});{}$\7
+${}\|a\MG\\{win}\K\\{XCreateSimpleWindow}(\|a\MG\\{dpy},\39\\{RootWindow}(\|a%
+\MG\\{dpy},\39\|a\MG\\{screen}),\39\T{0},\39\T{0},\39\.{WIN\_W},\39\.{WIN\_H},%
+\39\T{2},\39\\{black},\39\\{white});{}$\6
+${}\\{XStoreName}(\|a\MG\\{dpy},\39\|a\MG\\{win},\39\.{"Countdown"});{}$\6
+${}\\{XSelectInput}(\|a\MG\\{dpy},\39\|a\MG\\{win},\39\\{ExposureMask}\OR%
+\\{KeyPressMask}\OR\\{ButtonPressMask}\OR\\{StructureNotifyMask});{}$\6
+${}\\{XMapWindow}(\|a\MG\\{dpy},\39\|a\MG\\{win});{}$\6
+\4${}\}{}$\2\par
+\U4.\fi
+
+\N{1}{14}Creating the graphics context.
+The graphics context (GC) holds the drawing attributes --- foreground
+colour and font --- used by every text-drawing call.  We load the
+preferred font and, if it is present, bind it to the GC; otherwise Xlib's
+default font is used.
+
+\Y\B\4\X14:Create the graphics context\X${}\E{}$\6
+\1\1\&{static} \&{void} \\{create\_gc}(\&{App} ${}{*}\|a)\2\2{}$\6
+${}\{{}$\1\6
+${}\|a\MG\\{gc}\K\\{XCreateGC}(\|a\MG\\{dpy},\39\|a\MG\\{win},\39\T{0},\39%
+\NULL);{}$\6
+${}\\{XSetForeground}(\|a\MG\\{dpy},\39\|a\MG\\{gc},\39\\{BlackPixel}(\|a\MG%
+\\{dpy},\39\|a\MG\\{screen}));{}$\6
+${}\|a\MG\\{font}\K\\{XLoadQueryFont}(\|a\MG\\{dpy},\39\.{FONT\_NAME});{}$\6
+\&{if} ${}(\|a\MG\\{font}\I\NULL){}$\1\5
+${}\\{XSetFont}(\|a\MG\\{dpy},\39\|a\MG\\{gc},\39\|a\MG\\{font}\MG\\{fid});{}$%
+\2\6
+\4${}\}{}$\2\par
+\U4.\fi
+
+\N{1}{15}Rendering the display.
+Each repaint clears the window, prints the target instant on the first
+line, the remaining time in large digits on the second, and a status and
+hint on the lower lines.  When the countdown has not yet started, or is
+paused, the figure is taken from \PB{\\{frozen}} rather than recomputed, so it
+holds still.
+
+\Y\B\4\X15:Render the display\X${}\E{}$\6
+\1\1\&{static} \&{void} \\{render}(\&{App} ${}{*}\|a)\2\2{}$\6
+${}\{{}$\1\6
+\&{static} \&{const} \&{char} ${}{*}\\{hint}\K\.{"[Space]\ or\ click:\ s}\)%
+\.{tart/pause\ \ \ \ [q]:\ q}\)\.{uit"};{}$\6
+\&{char} \\{hdr}[\T{80}]${},\39\\{big}[\T{48}],\39\\{status}[\T{64}];{}$\6
+\&{long} \\{secs}${}\K(\|a\MG\\{running})\?\\{remaining\_secs}(\|a\MG%
+\\{target}):\|a\MG\\{frozen};{}$\7
+\X16:Build the header and status strings\X\6
+${}\\{XClearWindow}(\|a\MG\\{dpy},\39\|a\MG\\{win});{}$\6
+${}\\{XDrawString}(\|a\MG\\{dpy},\39\|a\MG\\{win},\39\|a\MG\\{gc},\39\T{24},\39%
+\T{40},\39\\{hdr},\39\\{strlen}(\\{hdr}));{}$\6
+${}\\{XDrawString}(\|a\MG\\{dpy},\39\|a\MG\\{win},\39\|a\MG\\{gc},\39\T{24},\39%
+\T{110},\39\\{big},\39\\{strlen}(\\{big}));{}$\6
+${}\\{XDrawString}(\|a\MG\\{dpy},\39\|a\MG\\{win},\39\|a\MG\\{gc},\39\T{24},\39%
+\T{150},\39\\{status},\39\\{strlen}(\\{status}));{}$\6
+${}\\{XDrawString}(\|a\MG\\{dpy},\39\|a\MG\\{win},\39\|a\MG\\{gc},\39\T{24},\39%
+\T{195},\39\\{hint},\39\\{strlen}(\\{hint}));{}$\6
+${}\\{XFlush}(\|a\MG\\{dpy});{}$\6
+\4${}\}{}$\2\par
+\U4.\fi
+
+\M{16}The header restates the target in a human-readable form produced by
+\PB{\\{localtime}} and \PB{\\{strftime}}.  The status line names the current
+phase and,
+when the countdown has reached zero, announces that the moment has
+arrived.
+
+\Y\B\4\X16:Build the header and status strings\X${}\E{}$\6
+${}\{{}$\1\6
+\&{struct} \\{tm} ${}{*}\\{lt}\K\\{localtime}({\AND}\|a\MG\\{target});{}$\7
+${}\\{strftime}(\\{hdr},\39{}$\&{sizeof} \\{hdr}${},\39\.{"Target:\ \%a\ \%d\ %
+\%b\ \%Y}\)\.{\ \ \%H:\%M:\%S"},\39\\{lt});{}$\6
+${}\\{fmt\_duration}(\\{secs},\39\\{big},\39{}$\&{sizeof} \\{big});\6
+\&{if} ${}(\\{secs}\E\T{0}\W\|a\MG\\{started}){}$\1\5
+${}\\{snprintf}(\\{status},\39{}$\&{sizeof} \\{status}${},\39\.{"Status:\ THE\
+MOMENT\ }\)\.{HAS\ ARRIVED"});{}$\2\6
+\&{else} \&{if} ${}(\R\|a\MG\\{started}){}$\1\5
+${}\\{snprintf}(\\{status},\39{}$\&{sizeof} \\{status}${},\39\.{"Status:\ ready%
+\ --\ pr}\)\.{ess\ Space\ to\ start"});{}$\2\6
+\&{else}\1\5
+${}\\{snprintf}(\\{status},\39{}$\&{sizeof} \\{status}${},\39\.{"Status:\ %
+\%s"},\39\|a\MG\\{running}\?\.{"running"}:\.{"paused"});{}$\2\6
+\4${}\}{}$\2\par
+\U15.\fi
+
+\N{1}{17}Handling one X event.
+The dispatcher reacts to the four event categories we subscribed to.  An
+\PB{\\{Expose}} or \PB{\\{ConfigureNotify}} simply triggers a repaint.  A key
+press of
+\.{q} or \.{Escape} requests quit (by returning 0); the space bar toggles
+the run state.  A mouse click anywhere also toggles the run state.  Any
+other event leaves the loop running.
+
+\Y\B\4\X17:Handle one X event\X${}\E{}$\6
+\1\1\&{static} \&{int} \\{handle\_event}(\&{App} ${}{*}\|a,\39\\{XEvent}*%
+\\{ev})\2\2{}$\6
+${}\{{}$\1\6
+\&{switch} ${}(\\{ev}\MG\\{type}){}$\5
+${}\{{}$\1\6
+\4\&{case} \\{Expose}:\5
+\&{case} \\{ConfigureNotify}:\5
+\\{render}(\|a);\6
+\&{break};\6
+\4\&{case} \\{KeyPress}:\5
+\X18:React to a key press\X\6
+\&{break};\6
+\4\&{case} \\{ButtonPress}:\5
+\\{toggle\_run}(\|a);\6
+\\{render}(\|a);\6
+\&{break};\6
+\4${}\}{}$\2\6
+\&{return} \T{1};\C{ keep looping }\6
+\4${}\}{}$\2\par
+\U4.\fi
+
+\M{18}A key press is decoded to a \PB{\\{KeySym}}.  We treat \.{q} and the
+escape key
+as quit requests, and the space bar as the run/pause toggle.
+
+\Y\B\4\X18:React to a key press\X${}\E{}$\6
+${}\{{}$\1\6
+${}\\{KeySym}\|k\K\\{XLookupKeysym}({\AND}\\{ev}\MG\\{xkey},\39\T{0});{}$\6
+\&{if} ${}(\|k\E\\{XK\_q}\V\|k\E\\{XK\_Escape}){}$\1\5
+\&{return} \T{0};\C{ signal the caller to quit }\2\6
+\&{if} ${}(\|k\E\\{XK\_space}){}$\5
+${}\{{}$\1\6
+\\{toggle\_run}(\|a);\6
+\\{render}(\|a);\6
+\4${}\}{}$\2\6
+\4${}\}{}$\2\par
+\U17.\fi
+
+\M{19}Toggling the run state has three cases.  Starting for the first time
+arms the countdown and marks it started.  Pausing captures the current
+remaining seconds into \PB{\\{frozen}} so the display holds.  Resuming simply
+sets \PB{\\{running}} again.
+
+\Y\B\4\X10:Compute the remaining seconds\X${}\mathrel+\E{}$\6
+\1\1\&{static} \&{void} \\{toggle\_run}(\&{App} ${}{*}\|a)\2\2{}$\6
+${}\{{}$\1\6
+\&{if} ${}(\R\|a\MG\\{started}){}$\5
+${}\{{}$\1\6
+${}\|a\MG\\{started}\K\T{1};{}$\6
+${}\|a\MG\\{running}\K\T{1};{}$\6
+\4${}\}{}$\2\6
+\&{else} \&{if} ${}(\|a\MG\\{running}){}$\5
+${}\{{}$\1\6
+${}\|a\MG\\{frozen}\K\\{remaining\_secs}(\|a\MG\\{target});{}$\6
+${}\|a\MG\\{running}\K\T{0};{}$\6
+\4${}\}{}$\2\6
+\&{else}\5
+${}\{{}$\1\6
+${}\|a\MG\\{running}\K\T{1};{}$\6
+\4${}\}{}$\2\6
+\4${}\}{}$\2\par
+\fi
+
+\N{1}{20}The event-and-timer loop.
+A countdown must both react to user input {\it and\/} tick forward on its
+own.  Pure \PB{\\{XNextEvent}} would block until the next event, so the clock
+would freeze whenever the user sat still.  Instead we multiplex the X
+connection's file descriptor against a timer using the POSIX \PB{\\{select}}
+call: \PB{\\{select}} returns either when an event is readable or when the
+timeout lapses, and in the latter case we repaint to advance the clock.
+
+\Y\B\4\X20:The event-and-timer loop\X${}\E{}$\6
+\1\1\&{static} \&{void} \\{run\_loop}(\&{App} ${}{*}\|a)\2\2{}$\6
+${}\{{}$\1\6
+\&{int} \\{xfd}${}\K\\{ConnectionNumber}(\|a\MG\\{dpy});{}$\7
+\&{for} ( ;  ; \,)\5
+${}\{{}$\1\6
+\X21:Drain all pending X events; quit if asked\X\6
+\X22:Wait up to one tick for the next event\X\6
+\&{if} ${}(\|a\MG\\{running}){}$\1\5
+\\{render}(\|a);\2\6
+\4${}\}{}$\2\6
+\4${}\}{}$\2\par
+\U4.\fi
+
+\M{21}Before sleeping we must process every event already queued, because
+\PB{\\{select}} reports readability only for bytes still in the socket, not for
+events Xlib has already buffered.  \PB{\\{XPending}} reports the buffered
+count.
+
+\Y\B\4\X21:Drain all pending X events; quit if asked\X${}\E{}$\6
+\&{while} ${}(\\{XPending}(\|a\MG\\{dpy})>\T{0}){}$\5
+${}\{{}$\1\6
+\\{XEvent}\\{ev};\6
+${}\\{XNextEvent}(\|a\MG\\{dpy},\39{\AND}\\{ev});{}$\6
+\&{if} ${}(\R\\{handle\_event}(\|a,\39{\AND}\\{ev})){}$\5
+${}\{{}$\1\6
+\X23:Tear down and exit cleanly\X\6
+\4${}\}{}$\2\6
+\4${}\}{}$\2\par
+\U20.\fi
+
+\M{22}The timeout is rebuilt on every iteration because \PB{\\{select}} may
+modify
+the \PB{\\{timeval}} it is given.  A quarter-second tick keeps the seconds
+digit
+visually crisp without busy-waiting.  An interruption by a signal
+(\PB{\.{EINTR}}) is harmless: the loop simply comes round again.
+
+\Y\B\4\X22:Wait up to one tick for the next event\X${}\E{}$\6
+${}\{{}$\1\6
+\\{fd\_set}\\{rfds};\7
+\&{struct} \\{timeval} \\{tv};\7
+${}\.{FD\_ZERO}({\AND}\\{rfds});{}$\6
+${}\.{FD\_SET}(\\{xfd},\39{\AND}\\{rfds});{}$\6
+${}\\{tv}.\\{tv\_sec}\K\T{0};{}$\6
+${}\\{tv}.\\{tv\_usec}\K\.{TICK\_USEC};{}$\6
+${}\\{select}(\\{xfd}+\T{1},\39{\AND}\\{rfds},\39\NULL,\39\NULL,\39{\AND}%
+\\{tv});{}$\6
+\4${}\}{}$\2\par
+\U20.\fi
+
+\M{23}Quitting releases the resources we acquired, in the reverse order of
+acquisition, then leaves the program.
+
+\Y\B\4\X23:Tear down and exit cleanly\X${}\E{}$\6
+${}\{{}$\1\6
+\&{if} ${}(\|a\MG\\{font}){}$\1\5
+${}\\{XFreeFont}(\|a\MG\\{dpy},\39\|a\MG\\{font});{}$\2\6
+${}\\{XFreeGC}(\|a\MG\\{dpy},\39\|a\MG\\{gc});{}$\6
+${}\\{XDestroyWindow}(\|a\MG\\{dpy},\39\|a\MG\\{win});{}$\6
+${}\\{XCloseDisplay}(\|a\MG\\{dpy});{}$\6
+\\{exit}(\T{0});\6
+\4${}\}{}$\2\par
+\U21.\fi
+
+\N{1}{24}The main function.
+\PB{\\{main}} selects the target (command-line argument or default),
+initialises
+the \PB{\&{App}} record, brings up the GUI, paints once, and enters the loop.
+
+\Y\B\4\X24:The \PB{\\{main}} function\X${}\E{}$\6
+\1\1\&{int} \\{main}(\&{int} \\{argc}${},\39{}$\&{char} ${}{*}{*}\\{argv})\2%
+\2{}$\6
+${}\{{}$\1\6
+\&{App} \|a;\6
+\&{const} \&{char} ${}{*}\\{spec}\K(\\{argc}>\T{1})\?\\{argv}[\T{1}]:\.{DEFAULT%
+\_TARGET};{}$\7
+${}\\{memset}({\AND}\|a,\39\T{0},\39{}$\&{sizeof} \|a);\6
+${}\|a.\\{target}\K\\{parse\_target}(\\{spec});{}$\6
+${}\|a.\\{frozen}\K\\{remaining\_secs}(\|a.\\{target});{}$\6
+\X25:Start the GUI and run\X\6
+\&{return} \T{0};\6
+\4${}\}{}$\2\par
+\U4.\fi
+
+\M{25}The startup sequence opens the server connection, creates the window
+and its graphics context, draws the initial frame, and hands control to
+the loop, which never returns normally.
+
+\Y\B\4\X25:Start the GUI and run\X${}\E{}$\6
+${}\{{}$\1\6
+${}\\{open\_display}({\AND}\|a);{}$\6
+${}\\{create\_window}({\AND}\|a);{}$\6
+${}\\{create\_gc}({\AND}\|a);{}$\6
+${}\\{render}({\AND}\|a);{}$\6
+${}\\{run\_loop}({\AND}\|a);{}$\6
+\4${}\}{}$\2\par
+\U24.\fi
+
+\N{1}{26}POSIX system services.
+This program rests on a small, deliberately chosen set of POSIX operating
+system services.  They are gathered and explained here, and each is also
+entered in the index under the heading {\it system call}, so that a reader
+auditing the program's interaction with the operating system can find
+every one of them from a single place.
+
+\fi
+
+\M{27}\PB{\\{time}(\T{2})} --- {\it get the current calendar time.}
+\PB{$\\{time}(\NULL)$} returns the number of seconds since the Unix epoch
+(1970-01-01T00:00:00\thinspace UTC) as a \PB{\&{time\_t}}.  We use it in
+\PB{\\{remaining\_secs}} to learn how far the present is from the target.  It
+cannot fail when given a null argument on a conforming system.
+
+\fi
+
+\M{28}\PB{\\{mktime}(\T{3})} --- {\it convert broken-down local time to \PB{%
+\&{time\_t}}.}
+Given a \PB{\&{struct} \\{tm}} expressed in local time, \PB{\\{mktime}} returns
+the
+corresponding \PB{\&{time\_t}}, normalising out-of-range fields and consulting
+the
+\PB{\.{TZ}} timezone database to apply the correct UTC offset and
+daylight-saving
+rule.  We call it once, in \PB{\\{parse\_target}}, to turn the user's calendar
+string into an absolute instant.
+
+\fi
+
+\M{29}\PB{\\{localtime}(\T{3})} --- {\it convert \PB{\&{time\_t}} to
+broken-down local time.}
+\PB{\\{localtime}} is the inverse of \PB{\\{mktime}}: it explodes a \PB{\&{time%
+\_t}} into a
+\PB{\&{struct} \\{tm}} in the local zone, which \PB{\\{strftime}} then formats
+for the
+header line.  The returned pointer addresses a static buffer that may be
+overwritten by later calls; we consume it immediately.
+
+\fi
+
+\M{30}\PB{\\{select}(\T{2})} --- {\it synchronous I/O multiplexing with a
+timeout.}
+\PB{\\{select}} watches a set of file descriptors and returns when one becomes
+ready or when a timeout expires.  We watch the single descriptor returned
+by \PB{\\{ConnectionNumber}} (the socket to the X~server) with a quarter-second
+timeout, so the program wakes either to service user input or to advance
+the clock --- never busy-waiting, never sleeping through an event.  The
+\PB{\\{fd\_set}} is populated with the POSIX macros \PB{\.{FD\_ZERO}} and \PB{%
+\.{FD\_SET}}.
+
+\fi
+
+\M{31}\PB{\\{getenv}(\T{3})} --- {\it look up an environment variable.}
+We do not call \PB{\\{getenv}} directly, but Xlib calls it on our behalf inside
+\PB{\\{XOpenDisplay}} to read the \PB{\.{DISPLAY}} variable, which names the
+X~server to
+contact.  It is documented here for completeness because it governs which
+display the program attaches to.
+
+\fi
+
+\N{1}{32}Index.
+The cross-reference index is generated automatically by \.{cweave}.
+Identifiers appear in {\it italic}, named sections by the module in which
+they are defined, and the POSIX system services under the heading
+{\it system call} as described above.
+\fi
+
+\inx
+\fin
+\con

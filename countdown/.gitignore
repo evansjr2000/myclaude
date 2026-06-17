@@ -1,0 +1,12 @@
+# Compiled executable
+/countdown
+
+# CWEB intermediate index files (regenerable by cweave)
+*.idx
+*.scn
+
+# LaTeX / TeX auxiliary files
+*.aux
+*.log
+*.out
+*.toc

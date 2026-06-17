@@ -12,6 +12,49 @@ awebman.tex:    The aweb documentation in TeX format.
 awebman.ps:	The aweb documentation in PostScript format.
 
 
+Release 2.2 (Ada 2012)
+----------------------
+
+Both atangle and aweave have been upgraded to recognise programs written
+in Ada 2012 (ISO/IEC 8652:2012) in addition to Ada 83 and Ada 95.  Four
+reserved words have been added to aweave's lexical table so that they
+are pretty-printed as keywords rather than as ordinary identifiers:
+
+    interface, overriding, synchronized   (added in Ada 2005)
+    some                                  (added in Ada 2012)
+
+The lexical structure of Ada 2012 is unchanged from Ada 95 with respect
+to identifiers, so atangle requires no syntactic change; the new
+keywords are passed through verbatim and pretty-printed by aweave.
+
+Both programs print their version banner with the -v / --version flag:
+
+    $ atangle --version
+    This is ATANGLE, Version 2.2 (Ada 2012)
+
+    $ aweave --version
+    This is AWEAVE, Version 2.2 (Ada 2012 keyword support)
+
+
+Building locally
+----------------
+
 To build the aweb programs with GNAT, cd to the respective directory
-and type "gnatmake aweave" or "gnatmake atangle".  
+and type "gnatmake aweave" or "gnatmake atangle".
+
+
+Running in Docker
+-----------------
+
+A Docker image carrying the toolchain is available; the helper script
+aweb.sh will build it on first invocation and dispatch atangle/aweave
+inside the container:
+
+    ./aweb.sh atangle file.aweb [changefile]
+    ./aweb.sh aweave  file.aweb [changefile]
+    ./aweb.sh shell                       # interactive shell
+    ./aweb.sh test                        # run the STP harness
+    ./aweb.sh build                       # rebuild the image
+
+The image is tagged evansjr/aweb:2.2.
 

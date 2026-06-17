@@ -1,0 +1,390 @@
+% countdown-sdd.tex
+% Software Design Document for the countdown program.
+% Structure per IEEE Std 1016-2009 (Software Design Descriptions).
+% Compiled with: pdflatex countdown-sdd.tex
+
+\documentclass[12pt]{article}
+
+\usepackage{geometry}
+\geometry{letterpaper, margin=1in}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+
+\definecolor{cdteal}{RGB}{0,90,120}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small Countdown Project}
+\fancyhead[R]{\small SDD: countdown}
+\fancyfoot[C]{\thepage}
+
+\titleformat{\section}{\large\bfseries\color{cdteal}}{\thesection}{0.5em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\req}[1]{\texttt{#1}}
+
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\Huge\bfseries\color{cdteal} Software Design Document\\[0.5em]}
+  {\Large countdown: An X~Window Countdown Timer}\\[2em]
+  {\large Countdown Software Project}\\[0.5em]
+  {\normalsize Prepared by: J.\,R.\,Evans}\\[2em]
+  \begin{tabular}{ll}
+    Document identifier: & CD-SDD-001                                     \\
+    Revision:            & 1.1                                            \\
+    Date:                & June 15, 2026                                  \\
+    Status:              & Released                                       \\
+    Governing standard:  & IEEE Std 1016-2009 (SDD)                       \\
+  \end{tabular}
+  \vfill
+  {\small\textit{This document is prepared in accordance with the
+  principles of rational documentation articulated in
+  D.\,L.\,Parnas and P.\,C.\,Clements, ``A Rational Design Process:
+  How and Why to Fake It,'' \textit{IEEE Transactions on Software
+  Engineering}, vol.\,SE-12, no.\,2, pp.\,251--257, February 1986.}}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+% =================================================================
+\section{Introduction}
+% =================================================================
+
+\subsection{Purpose}
+
+This Software Design Document (SDD) describes how \code{countdown} is
+constructed so as to satisfy the requirements of CD-SRS-001.  It is the
+bridge between the SRS and the literate source \code{countdown.w}: every
+design decision here is realised by a named CWEB section there.
+
+\subsection{Scope}
+
+The SDD covers the internal structure of the single executable tangled
+from \code{countdown.w}: its decomposition into modules, the data it
+holds, the control flow of its event-and-timer loop, and its use of the
+Xlib and POSIX interfaces.
+
+\subsection{Rational-process note}
+
+Following Parnas and Clements, the design is presented as a clean
+decomposition derived from the requirements.  The genuine development was
+iterative; the idealised account is given because it is what a maintainer
+needs in order to understand and safely change the program.
+
+\subsection{Design rationale: literate programming}
+
+The overriding design constraint (REQ-D-01) is that the program be a
+literate document.  This shapes every other decision: the program is
+decomposed into many small named sections, each below twenty-four lines
+(REQ-D-02), so that the woven document reads as a sequence of digestible
+ideas.  The compilable C file is treated strictly as a regenerable
+artefact (REQ-D-04).
+
+% =================================================================
+\section{Design overview}
+% =================================================================
+
+\subsection{Architectural style}
+
+\code{countdown} is a single-threaded program offering two run modes
+selected on the command line.  In GUI mode (\code{-gui}) a central loop
+multiplexes two stimuli---X~events and the passage of time---using one
+POSIX \code{select} call, and repaints the window in response to either.
+In the default terminal mode a simpler loop recomputes and reprints the
+remaining time once per tick, using \code{select} purely as a sub-second
+sleep.  Both modes share the same time computation and formatting; all
+state lives in one record, and the routines are pure functions of that
+record plus the system clock.
+
+\subsection{Top-level decomposition}
+
+The tangled program is assembled in this order (the unnamed root section of
+\code{countdown.w}):
+
+\begin{enumerate}[noitemsep]
+  \item Header files
+  \item Constants
+  \item The application state \code{App}
+  \item Parse the target time
+  \item Compute the remaining seconds (and the run-state toggle)
+  \item Format a duration
+  \item Open the display / Create the window / Create the graphics context
+  \item Render the display
+  \item Handle one X event
+  \item The event-and-timer loop
+  \item Run the countdown in the terminal
+  \item The \code{main} function
+\end{enumerate}
+
+\subsection{Mapping to requirements}
+
+\begin{longtable}{p{0.34\textwidth}p{0.60\textwidth}}
+\toprule
+\textbf{Design element} & \textbf{Requirements satisfied} \\
+\midrule
+\code{parse\_target} & REQ-F-01, REQ-F-03, REQ-F-04, REQ-T-03 \\
+\code{DEFAULT\_TARGET} macro & REQ-F-02 \\
+\code{remaining\_secs} & REQ-F-06, REQ-T-02 \\
+\code{fmt\_duration} & REQ-F-05 \\
+\code{open\_display}/\code{create\_window}/\code{create\_gc} & REQ-G-01, REQ-G-06 \\
+\code{render} & REQ-F-05, REQ-F-07, REQ-G-02 \\
+\code{handle\_event}, \code{toggle\_run} & REQ-G-03, REQ-G-04, REQ-G-05 \\
+\code{run\_loop} & REQ-T-01, REQ-T-04 \\
+\code{run\_terminal} & REQ-F-08, REQ-F-09 \\
+\code{main} (argument scan) & REQ-F-03, REQ-F-08 \\
+Many small sections; POSIX section & REQ-D-01--REQ-D-03 \\
+\bottomrule
+\end{longtable}
+
+% =================================================================
+\section{Data design}
+% =================================================================
+
+\subsection{The \code{App} record}
+
+All mutable state is held in one structure, threaded by pointer through
+every routine.  This makes data flow explicit and keeps the routines
+individually testable.
+
+\begin{longtable}{p{0.20\textwidth}p{0.20\textwidth}p{0.50\textwidth}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Meaning} \\
+\midrule
+\code{dpy} & \code{Display *} & Connection to the X~server. \\
+\code{win} & \code{Window} & The top-level window. \\
+\code{gc} & \code{GC} & Graphics context for text. \\
+\code{font} & \code{XFontStruct *} & Loaded font, or \code{NULL}. \\
+\code{screen} & \code{int} & Default screen number. \\
+\code{target} & \code{time\_t} & The instant counted down to. \\
+\code{running} & \code{int} & 1 while counting, 0 while paused/armed. \\
+\code{started} & \code{int} & 1 once the user has begun. \\
+\code{frozen} & \code{long} & Remaining seconds captured at pause. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Representation of time}
+
+The target is stored as a \code{time\_t} (seconds since the Unix epoch),
+computed once by \code{mktime}.  The remaining time is recomputed on demand
+by differencing the target against \code{time(NULL)}, so the display can
+never drift relative to the system clock.  Clamping at zero (REQ-F-06)
+occurs in \code{remaining\_secs}.
+
+% =================================================================
+\section{Component design}
+% =================================================================
+
+\subsection{Target parsing (\code{parse\_target})}
+
+Decomposes a \code{"YYYY-MM-DD HH:MM:SS"} string with \code{sscanf},
+populates a \code{struct tm} in local time with \code{tm\_isdst = -1}, and
+converts it with \code{mktime}.  A field-count mismatch or an
+unrepresentable date causes a diagnostic and exit~2 (REQ-F-04).  Splitting
+the conversion into a sub-section keeps each below the line limit.
+
+\subsection{Remaining-time computation (\code{remaining\_secs})}
+
+Returns \code{max(0, target - now)} as whole seconds, where \code{now} is
+\code{time(NULL)}.  The clamp guarantees REQ-F-06.
+
+\subsection{Duration formatting (\code{fmt\_duration})}
+
+Converts a second count to days plus \code{HH:MM:SS} into a caller-supplied
+buffer using the bounds-checked \code{snprintf}, satisfying REQ-F-05 with
+no possibility of overflow.
+
+\subsection{GUI bring-up}
+
+\code{open\_display} connects via \code{XOpenDisplay(NULL)} (failure
+$\Rightarrow$ exit~1).  \code{create\_window} creates and maps a simple
+window and selects exposure, key, button, and structure events.
+\code{create\_gc} builds a graphics context and loads the preferred font,
+falling back gracefully if it is absent (REQ-G-06).
+
+\subsection{Rendering (\code{render})}
+
+Clears the window and draws four lines: the target (via \code{localtime}
+and \code{strftime}), the remaining time, a status line, and a control
+hint (REQ-G-02).  When not running it draws the frozen figure, so paused
+and armed displays hold still.
+
+\subsection{Event handling (\code{handle\_event}, \code{toggle\_run})}
+
+Dispatches on event type: expose/configure repaint (REQ-G-05);
+\code{q}/Escape request quit; space or mouse click toggle the run state via
+\code{toggle\_run}, which implements the armed$\rightarrow$running,
+running$\rightarrow$paused, and paused$\rightarrow$running transitions and
+captures \code{frozen} on pause.
+
+\subsection{The event-and-timer loop (\code{run\_loop})}
+
+The heart of the design.  Each iteration first drains all buffered events
+with \code{XPending}/\code{XNextEvent} (necessary because \code{select}
+reports only socket-level readability), then blocks on \code{select} over
+the X~connection descriptor with a quarter-second timeout, then repaints if
+running.  This yields sub-second visual updates (REQ-T-01) with negligible
+idle CPU (REQ-T-04).
+
+\subsection{Terminal countdown (\code{run\_terminal})}
+
+The default run mode (REQ-F-08).  It prints the target once, then loops:
+each pass recomputes the remaining seconds with \code{remaining\_secs},
+formats them with \code{fmt\_duration}, and reprints them over the previous
+line using a leading carriage return so the figure ticks in place without
+scrolling (REQ-F-09).  \code{fflush} forces each update out because the
+carriage-return writes carry no newline.  The loop ends when the target is
+reached, appending the arrival message and a newline.  It watches no file
+descriptor, so it uses \code{select} with a null descriptor set purely as a
+portable sub-second sleep, requiring no X~server.
+
+\subsection{Mode selection (\code{main})}
+
+\code{main} scans the command-line arguments in a small order-independent
+loop: the token \code{-gui} sets GUI mode, and any other token is taken as
+the target specification (REQ-F-03, REQ-F-08).  After parsing the target it
+dispatches to the GUI start-up sequence or to \code{run\_terminal}
+accordingly; terminal mode is the default when \code{-gui} is absent.
+
+% =================================================================
+\section{Control and timing design}
+% =================================================================
+
+\subsection{Why select, not XNextEvent}
+
+A bare \code{XNextEvent} blocks until input arrives, which would freeze the
+clock whenever the user sits still.  A busy-wait would burn CPU.  The
+chosen design---\code{select} on the X~file descriptor
+(\code{ConnectionNumber}) with a timeout---wakes on \emph{either} input or
+the timer, marrying responsiveness to a steadily ticking display.  The
+\code{timeval} is rebuilt every iteration because \code{select} may modify
+it; an \code{EINTR} return is benign and simply re-enters the loop.
+
+\subsection{State machine}
+
+\begin{longtable}{p{0.16\textwidth}p{0.30\textwidth}p{0.44\textwidth}}
+\toprule
+\textbf{State} & \textbf{Entered by} & \textbf{Display} \\
+\midrule
+Armed & program start & full duration, ``ready'' \\
+Running & space/click from armed or paused & live countdown, ``running'' \\
+Paused & space/click while running & frozen figure, ``paused'' \\
+Arrived & remaining reaches 0 while running & \code{0 d 00:00:00}, arrival message \\
+\bottomrule
+\end{longtable}
+
+% =================================================================
+\section{Interface design}
+% =================================================================
+
+\subsection{Xlib interface}
+
+The program uses only core Xlib (REQ-B-02): \code{XOpenDisplay},
+\code{XCreateSimpleWindow}, \code{XStoreName}, \code{XSelectInput},
+\code{XMapWindow}, \code{XCreateGC}, \code{XSetForeground},
+\code{XLoadQueryFont}, \code{XSetFont}, \code{XClearWindow},
+\code{XDrawString}, \code{XFlush}, \code{XPending}, \code{XNextEvent},
+\code{XLookupKeysym}, \code{ConnectionNumber}, and the teardown calls
+\code{XFreeFont}, \code{XFreeGC}, \code{XDestroyWindow},
+\code{XCloseDisplay}.
+
+\subsection{POSIX interface}
+
+The program rests on a deliberately small set of POSIX services, gathered
+and documented in the ``POSIX system services'' section of
+\code{countdown.w} and indexed there under \emph{system call} (REQ-D-03):
+\code{time} (current time), \code{mktime} (calendar$\rightarrow$instant,
+with DST), \code{localtime} (instant$\rightarrow$broken-down time for the
+header), \code{select} with \code{FD\_ZERO}/\code{FD\_SET} (I/O
+multiplexing with timeout), and \code{getenv} (called by Xlib to read
+\code{DISPLAY}).
+
+\subsection{Command-line and environment interface}
+
+As specified in CD-SRS-001 \S3.6: optional \code{-gui} option selecting the
+window mode (terminal is the default) and optional target argument, in
+either order; exit codes 0/1/2; \code{DISPLAY} and \code{TZ} environment
+variables.
+
+% =================================================================
+\section{Design constraints and decisions}
+% =================================================================
+
+\begin{enumerate}[noitemsep]
+  \item \textbf{Module-size limit (REQ-D-02).}  Long routines are split
+        into named sub-sections (e.g.\ ``Fill the broken-down time and
+        convert it'') so no woven section exceeds twenty-four code lines.
+        The largest section is sixteen lines.
+  \item \textbf{One state record, not globals.}  Improves testability and
+        makes the data flow auditable.
+  \item \textbf{Recompute, don't accumulate.}  Remaining time is always
+        \code{target - now}, so the display cannot drift.
+  \item \textbf{Graceful font fallback (REQ-G-06).}  A missing preferred
+        font is not fatal.
+  \item \textbf{No toolkit (REQ-B-02).}  Keeps the program small,
+        portable, and fully readable.
+  \item \textbf{Two run modes from shared code (REQ-F-08, REQ-F-09).}  The
+        terminal default and the \code{-gui} window reuse the same
+        \code{parse\_target}, \code{remaining\_secs}, and
+        \code{fmt\_duration} routines, so the two presentations cannot
+        disagree about the figure they show.  Terminal mode is the default
+        because it is the most portable (no X~server) and the more common
+        case over a shell.
+\end{enumerate}
+
+% =================================================================
+\section{Build and packaging design}
+% =================================================================
+
+The \code{Makefile} drives the CWEB tools through \code{cweb.sh}
+(REQ-B-01).  \code{make tangle} runs \code{ctangle} to produce
+\code{countdown.c}; \code{make compile} builds it with \code{cc} against
+Xlib, supplying \code{-I}/\code{-L} for \code{/opt/X11} on macOS or the
+default paths on Linux; \code{make weave} and \code{make pdf} produce the
+typeset program; \code{make run} launches the default terminal countdown
+and \code{make run-gui} launches the \code{-gui} window.  The C, \TeX, and
+PDF outputs are artefacts; the source of record is \code{countdown.w}
+(REQ-D-04).
+
+\medskip\noindent
+\textbf{Containerised toolchain (REQ-B-03).}  Every target that invokes
+the container first runs \code{docker-check.sh}, which probes
+\code{docker info} and, if the daemon is down, launches Docker Desktop and
+waits for it to come up.  In the \code{Makefile} this is the
+\code{DOCKER\_CHECK} variable (default \code{docker-check.sh}); it is the
+first command of each container recipe and may be overridden to \code{true}
+for a purely local toolchain.  Because GNU~make predefines \code{CTANGLE}
+and \code{CWEAVE} as built-in defaults, the \code{Makefile} assigns them
+with plain \code{=} (not \code{?=}) so the \code{cweb.sh} wrappers are not
+silently bypassed; command-line assignments still override them.
+
+\medskip\noindent
+\textbf{Documentation build (REQ-B-04).}  \code{make docs} typesets the
+entire document set inside the same \code{evansjr/cweb} image: the woven
+program listing via \code{pdftex countdown.tex}, and each IEEE/ISO
+specification (\code{conops}, \code{srs}, \code{sdd}, \code{stp}) via two
+\code{pdflatex} passes so tables of contents and cross-references resolve.
+No local \TeX{} installation is required.  \code{make clean} removes all
+intermediates (the tangled C, the woven \TeX, the executable, and the
+\TeX/CWEB auxiliary files), preserving the hand-written specification
+sources; \code{make distclean} additionally removes the generated PDFs.
+
+\medskip\noindent
+\textbf{Installation (REQ-B-05).}  \code{make install} places the compiled
+executable in \code{\$(PREFIX)/bin} (default \code{/usr/local/bin}) with
+mode \code{755}; \code{PREFIX} and \code{DESTDIR} support staged or
+relocated installs, and \code{make uninstall} removes it.  Writing to
+\code{/usr/local/bin} may require \code{sudo}.
+
+\end{document}
