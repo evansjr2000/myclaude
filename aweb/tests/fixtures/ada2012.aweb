@@ -1,0 +1,44 @@
+% Ada 2012 fixture for the AWEB toolchain.
+% Exercises every reserved word added in Ada 2005 and Ada 2012:
+%   interface, overriding, synchronized (Ada 2005)
+%   some                                (Ada 2012)
+\input awebmac
+
+@* Ada 2012 sample. Each new reserved word appears at least once
+in the program text below so that the weaver can be checked for
+correct classification, and the tangler for correct output.
+
+@a
+with TEXT_IO;
+package ADA2012_SAMPLE is
+
+   type PRINTABLE is interface;
+   procedure PRINT (X : PRINTABLE) is abstract;
+
+   type SYNCHRONOUS is synchronized interface;
+
+   type INT_VECTOR is array (POSITIVE range <>) of INTEGER;
+
+   function HAS_NEGATIVE (V : INT_VECTOR) return BOOLEAN is
+     (for some K in V'RANGE => V (K) < 0);
+
+   type SHAPE is tagged null record;
+
+   type CIRCLE is new SHAPE and PRINTABLE with record
+      RADIUS : FLOAT;
+   end record;
+
+   overriding
+   procedure PRINT (X : CIRCLE);
+
+end ADA2012_SAMPLE;
+
+package body ADA2012_SAMPLE is
+
+   overriding
+   procedure PRINT (X : CIRCLE) is
+   begin
+      TEXT_IO.PUT_LINE ("circle");
+   end PRINT;
+
+end ADA2012_SAMPLE;

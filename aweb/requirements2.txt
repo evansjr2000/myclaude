@@ -1,0 +1,7 @@
+1.  Upgrade aweave and atangle to properly parse and format Ada 2012.
+
+2.  Upgrade the documentation with all the changes.
+
+3.  Upgrade the Docker file to contain the new updated aweave and atangle binaries, and build an updated container.
+
+3.  Create a new aweb.sh file to use this new container.
