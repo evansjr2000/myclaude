@@ -1,0 +1,10 @@
+1.  Extract Stella Evans' five events from the psyche sheet file, and create PDF
+file of her events, and approximately what time they happen based on the information
+in the timeline pdf file.
+
+2.  Include in the PDF file you generate the agi-time-standard Stella has met, and the next time standard
+she needs to aim for.  Also include the sdi-agc-time-standard for her event.
+
+3.  Use the information for stella's best time from the stellas-best.csv file.
+
+ 
