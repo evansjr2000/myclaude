@@ -1,0 +1,28 @@
+1.  Write, in LaTeX format, a document to handout to OCIA students that includes:
+
+A.  Prayers:
+
+i.  Our Father
+ii. Hail Mary
+iii. Glory be
+iv.  The St. Michael prayer
+v.  The Apostles Creed
+
+B.  Dress Code for Catholics in church
+
+i.  Similar to what Catholics attending a Traditional (Tridentine) Mass should wear.
+ii.  What to wear for your baptism.
+iii.  Rules for headwear for men and woman.
+
+C.  The Ten Commandments
+
+D.  The Five laws of the Church.
+
+E.  The seven sacraments.
+
+F.  Rules for couples to be married in the Catholic Church, including
+sanguinity rules for relatives.
+
+2.  Take the LaTeX document and use it to create a PDF file.
+
+
