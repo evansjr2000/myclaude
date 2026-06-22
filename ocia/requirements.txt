@@ -21,7 +21,7 @@ D.  The Five laws of the Church.
 E.  The seven sacraments.
 
 F.  Rules for couples to be married in the Catholic Church, including
-sanguinity rules for relatives.
+consanguinity rules for relatives.
 
 2.  Take the LaTeX document and use it to create a PDF file.
 
