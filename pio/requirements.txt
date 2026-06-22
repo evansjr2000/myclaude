@@ -1,0 +1,12 @@
+1.  Padre Pio, Father Chad Ripinger, various Catholic mystics, have said that the
+"three days" of total darkness is coming. What is this prediction about?
+
+2.  Write a LaTeX document with an analysis of this prediction.
+
+3.  Include in the analysis what a person can do, if anything, to prepare
+for this.
+
+4. Using the LaTeX documen create a PDF document.
+
+
+
