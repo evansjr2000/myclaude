@@ -10,6 +10,13 @@
 --   swimmer, event, swim_time, swim_date, standard, meet
 -- plus sort_key, a numeric proxy (seconds) used to order times
 -- fastest-first.
+--
+-- swim_date, standard, and meet are nullable on purpose: the public
+-- anonymous best-times feed (GetBestTimesForMember) supplies only the
+-- event and the time, so db_insert_row writes SQL NULL for those three
+-- fields.  Rows loaded from the richer (signed-in) endpoints may carry
+-- them.  The natural-key UNIQUE constraint below treats NULLs as
+-- distinct per SQL semantics, which is acceptable here.
 
 CREATE TABLE IF NOT EXISTS swim_times (
     id         BIGSERIAL PRIMARY KEY,

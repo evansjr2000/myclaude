@@ -231,8 +231,11 @@ The program has two user classes:
 \begin{description}[style=nextline]
   \item[\req{REQ-F-01}] The program shall accept the option flag
         \code{-o} followed by a comma-separated list of one or more
-        of the keywords \code{stella}, \code{kalea}, \code{kenny},
-        \code{keith}, \code{fastest}, \code{csv}.
+        tokens.  Each token shall be either a \emph{behaviour keyword}
+        (\code{fastest}, \code{csv}, \code{store}, \code{offline}) or a
+        \emph{swimmer id} (alias) drawn from the roster of
+        \S\ref{sec:roster}.  Behaviour keywords and swimmer ids may be
+        freely intermixed within a single \code{-o} list.
   \item[\req{REQ-F-02}] The program shall accept the option flag
         \code{-e} followed by one or more comma-separated
         USA~Swimming event codes, and shall accept the \code{-e}
@@ -247,24 +250,20 @@ The program has two user classes:
 \subsubsection{Swimmer selection}
 
 \begin{description}[style=nextline]
-  \item[\req{REQ-F-10}] When at least one swimmer keyword is
-        supplied to \code{-o}, the program shall process only the
-        named swimmers.
-  \item[\req{REQ-F-11}] When no swimmer keyword is supplied to
-        \code{-o} but at least one event is supplied to \code{-e},
-        the program shall process every entry in
-        \texttt{SWIMMERS[]}: the four Evans/Benavente swimmers plus
-        the three age-windowed Ledecky entries
-        (\code{ledecky10}, \code{ledecky12}, \code{ledecky14}),
-        for seven entries in total.
-  \item[\req{REQ-F-12}] The set of selectable swimmers shall be
-        exactly: Stella Julianna Evans (\code{stella}),
-        Kalea Rose Benavente (\code{kalea}),
-        Kenneth Ray Evans (\code{kenny}),
-        Keith Santiago Evans (\code{keith}),
-        and Katie Genevieve Ledecky (selected via \code{ledecky10},
-        \code{ledecky12}, or \code{ledecky14} for the appropriate
-        age window).
+  \item[\req{REQ-F-10}] Each swimmer in \texttt{SWIMMERS[]} shall
+        carry a unique string \emph{id} (alias).  When one or more
+        swimmer ids are supplied to \code{-o}, the program shall
+        process only the swimmers whose id matches one of those
+        supplied.
+  \item[\req{REQ-F-11}] When no swimmer id is supplied to \code{-o}
+        (whether or not events are supplied to \code{-e}), the
+        program shall process every entry in \texttt{SWIMMERS[]} ---
+        the full roster of \S\ref{sec:roster}.
+  \item[\req{REQ-F-12}] The set of selectable swimmers and their ids
+        (aliases) shall be exactly the roster enumerated in
+        \S\ref{sec:roster} (\req{REQ-F-17}).  An unrecognised
+        \code{-o} token that matches no swimmer id and no behaviour
+        keyword shall select no swimmer and shall not be an error.
   \item[\req{REQ-F-13}] When any of the \code{ledecky10},
         \code{ledecky12}, or \code{ledecky14} keywords is
         supplied, the program shall resolve Katie Ledecky's
@@ -286,6 +285,65 @@ The program has two user classes:
         \code{2010-03-17} through \code{2012-03-16}
         (Katie Ledecky's thirteenth and fourteenth years).
 \end{description}
+
+\subsubsection{Swimmer roster (names and aliases)}
+\label{sec:roster}
+
+\begin{description}[style=nextline]
+  \item[\req{REQ-F-17}] The program shall be designed to fetch times
+        for exactly the swimmers listed in Table~\ref{tab:roster}.
+        Each row gives the swimmer's full name, the unique id (alias)
+        by which she is selected on the command line, and the
+        person-search query and lower-cased match substring used to
+        resolve her USA~Swimming \code{PersonKey}.  ``Evans, Stella~J''
+        in the source roster request is the same swimmer as
+        \code{stella} and is not duplicated.
+\end{description}
+
+\begin{longtable}{@{}l l l l@{}}
+  \caption{Swimmer roster: names and aliases.}\label{tab:roster}\\
+  \toprule
+  \textbf{Full name} & \textbf{id (alias)} & \textbf{Search query}
+    & \textbf{Match substr} \\
+  \midrule
+  \endfirsthead
+  \toprule
+  \textbf{Full name} & \textbf{id (alias)} & \textbf{Search query}
+    & \textbf{Match substr} \\
+  \midrule
+  \endhead
+  \bottomrule
+  \endfoot
+  Stella Julianna Evans   & \code{stella}              & Julianna Evans  & stella \\
+  Kalea Rose Benavente    & \code{kalea}               & Benavente       & kalea \\
+  Kenneth Ray Evans       & \code{kenny}               & Ray Evans       & kenneth ray \\
+  Keith Santiago Evans    & \code{keith}               & Santiago Evans  & keith santiago \\
+  Katie Genevieve Ledecky & \code{ledecky10}           & Ledecky         & katie \\
+  Katie Genevieve Ledecky & \code{ledecky12}           & Ledecky         & katie \\
+  Katie Genevieve Ledecky & \code{ledecky14}           & Ledecky         & katie \\
+  Emma Katherine Bothwell & \code{bothwell-emma}       & Emma Bothwell        & emma \\
+  Wally Baris Coombs      & \code{coombs-wally}        & Wally Coombs         & wally \\
+  Eva Cruz Rae Cruz       & \code{cruz-eva}            & Eva Cruz             & cruz rae \\
+  Zoe Elizabeth Darrow    & \code{darrow-zoe}          & Zoe Darrow           & zoe \\
+  Eva Doan                & \code{doan-eva}            & Eva Doan             & eva doan \\
+  Nova Larue Ellis        & \code{ellis-nova}          & Nova Ellis           & nova \\
+  Liliya Penny Fedyshyn   & \code{fedyshyn-liliya}     & Liliya Fedyshyn      & liliya \\
+  Layla Emmanuelle Glass  & \code{glass-layla}         & Layla Glass          & layla \\
+  Logan Wiley Glass       & \code{glass-logan}         & Logan Glass          & wiley \\
+  Hannah Francis Gosser   & \code{gosser-hannah}       & Hannah Gosser        & gosser \\
+  Diamond Khaan Huynh     & \code{huynh-diamond}       & Diamond Huynh        & diamond \\
+  Hannah Leigh Knuth      & \code{knuth-hannah}        & Hannah Knuth         & knuth \\
+  Cleo L Lefebvre-Bailey  & \code{lefebvre-bailey-cleo}& Cleo Lefebvre-Bailey & cleo \\
+  Gia N Mendez            & \code{mendez-giavanna}     & Giavanna Mendez      & mendez \\
+  Sofia Elizabeth Mulvaney& \code{mulvaney-sofia}      & Sofia Mulvaney       & sofia \\
+  Naia Lamb Shay          & \code{shay-naia}           & Naia Shay            & naia \\
+  Briar Reece Simmons     & \code{simmons-briar}       & Briar Simmons        & briar \\
+  Presley Aspen Simmons   & \code{simmons-presley}     & Presley Simmons      & aspen \\
+  Lucas Erick Soto        & \code{soto-lucas}          & Lucas Soto           & erick \\
+  Vivi Edith Soto         & \code{soto-vivienne}       & Vivienne Soto        & vivi \\
+  Addison Marie Wittmershaus & \code{wittmershaus-addison}& Addison Wittmershaus & addison \\
+  Elsie Marguerite Zahner & \code{zahner-elsie}        & Elsie Zahner         & elsie \\
+\end{longtable}
 
 \subsubsection{Event selection}
 

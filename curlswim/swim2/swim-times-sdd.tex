@@ -162,19 +162,40 @@ formatter to standard output.  Each stage is a CWEB chunk
   \item[D-3: String-scanning JSON parser.]
         A purpose-built scanner (\code{scan\_string},
         \code{scan\_long}) is used in place of a third-party
-        JSON library.  This satisfies \req{REQ-D-04} and is
-        adequate because the Sisense JAQL response shape is
-        stable and well-understood.
+        JSON library.  This satisfies \req{REQ-D-04}.  The same
+        generic ``find key, take the following value'' scanner
+        served the old Sisense JAQL responses and now serves the
+        named-field REST responses unchanged (see D-6).
 
-  \item[D-4: Static bearer token.]
-        The Sisense bearer token is a compile-time constant.
-        Token rotation is a maintenance event, not a runtime
-        operation; this matches \req{REQ-A-02}.
+  \item[D-4: Dynamic anonymous credentials (no bearer token).]
+        The program no longer embeds a bearer token.  The USA
+        Swimming times service authenticates anonymous callers
+        with three headers --- \code{Usas-Sub-Id: Anonymous},
+        \code{AppName: DataHub}, and a client-minted
+        \code{Device-Id}.  \code{device\_id()} generates the
+        \code{Device-Id} at run time in the format the server
+        validates, so the ``token'' is obtained dynamically on
+        every run.  See \S\ref{sec:why-anon}.
 
   \item[D-5: Insertion sort.]
         Per-event row counts rarely exceed a few dozen, so
         $O(n^2)$ insertion sort is used in preference to a more
         complex algorithm.  Simpler code, fewer failure modes.
+
+  \item[D-6: REST times API, not Sisense JAQL.]
+        The data hub retired the Sisense analytics endpoint this
+        program originally targeted.  The fetch path was migrated
+        to the public \code{times-api.usaswimming.org} REST
+        service: \code{GetMembersForFilters} resolves a name to a
+        \code{memberId}, and \code{GetBestTimesForMember} returns
+        that member's best time per event.  See
+        \S\ref{sec:why-rest}.
+
+  \item[D-7: Id-based swimmer selection.]
+        Swimmers are selected by a unique string \code{id} carried
+        on each \code{SWIMMERS} entry rather than by a per-swimmer
+        option bit, so the roster can grow past the width of the
+        flag word.  See \S\ref{sec:why-ids}.
 \end{description}
 
 % =================================================================
@@ -188,15 +209,15 @@ formatter to standard output.  Each stage is a CWEB chunk
 \begin{itemize}
   \item \textbf{Operator} --- a coach, parent, or maintainer
         invoking the binary from a shell.
-  \item \textbf{Sisense JAQL endpoint} --- the upstream HTTPS
-        service at \texttt{usaswimming.sisense.com}.
+  \item \textbf{USA~Swimming times API} --- the upstream HTTPS
+        service at \texttt{times-api.usaswimming.org}.
   \item \textbf{Standard output / standard error} --- the
         downstream sinks that receive table or CSV output and
         diagnostics, respectively.
 \end{itemize}
 
 \paragraph{Trust boundary.}
-The only trusted external system is the Sisense endpoint, which
+The only trusted external system is the times API, which
 serves only public competitive records.  No user-supplied data
 crosses a trust boundary; command-line arguments are consumed
 internally.
@@ -213,7 +234,7 @@ chunks (the order in which they appear in the tangled output):
   \textbf{Chunk} & \textbf{Responsibility} \\
   \midrule\endhead
   \code{Includes}                 & Standard headers, \code{<curl/curl.h>}, \code{<libpq-fe.h>} \\
-  \code{Global constants}         & Numeric limits, Sisense token, event table     \\
+  \code{Global constants}         & Numeric limits, \code{TIMES\_API} base URL, event table \\
   \code{Option flags}             & \code{OPT\_*} bitmasks and global option state \\
   \code{Type definitions}         & \code{Buffer}, \code{TimeRow}, \code{Swimmer}
                                     structs                                          \\
@@ -286,10 +307,11 @@ typedef struct {
 \end{lstlisting}
 
 \paragraph{\code{TimeRow}.}
-One swim-time record.  \code{sort\_key} is the Sisense numeric
-sort key parsed as a \code{double}; the remaining fields are
-fixed-size character arrays sized to comfortably exceed the
-longest values observed in production data.
+One swim-time record.  \code{sort\_key} is the swim time in seconds
+(\code{time\_to\_seconds}) used to order rows fastest-first; the
+remaining fields are fixed-size character arrays.  Under the
+best-times feed (\S\ref{sec:why-bestonly}) only \code{time} is
+populated and \code{date}/\code{standard}/\code{meet} stay empty.
 
 \begin{lstlisting}
 typedef struct {
@@ -303,20 +325,21 @@ typedef struct {
 
 \paragraph{\code{Swimmer}.}
 A static configuration record describing how to identify each
-tracked swimmer in the Sisense Persons table and, optionally,
-the inclusive ISO date window to which results are restricted
-(used by \code{ledecky10}, \code{ledecky12}, \code{ledecky14}).
-The same physical swimmer may appear in \code{SWIMMERS[]} more
-than once with distinct date windows --- this is how the three
-Ledecky age-group views are realised.
+tracked swimmer.  \code{id} is the unique command-line selection
+token (\S\ref{sec:why-ids}); \code{search\_query} and
+\code{match\_substr} resolve the member via \code{GetMembersForFilters};
+\code{date\_min}/\code{date\_max} are the now-vestigial age window
+(\S\ref{sec:why-bestonly}).  The same physical swimmer may appear in
+\code{SWIMMERS[]} more than once with distinct ids --- this is how the
+three Ledecky age-group views are declared.
 
 \begin{lstlisting}
 typedef struct {
-    const char *search_query;  /* Sisense person-search "contains" */
-    const char *match_substr;  /* lowercase substring filter       */
-    int         flag;          /* OPT_STELLA, OPT_KALEA, ...       */
-    const char *date_min;      /* "YYYY-MM-DD" inclusive (or NULL) */
-    const char *date_max;      /* "YYYY-MM-DD" inclusive (or NULL) */
+    const char *id;            /* unique selection id, e.g. "stella" */
+    const char *search_query;  /* member-search "name" value         */
+    const char *match_substr;  /* lowercase substring filter         */
+    const char *date_min;      /* "YYYY-MM-DD" inclusive (or NULL)    */
+    const char *date_max;      /* "YYYY-MM-DD" inclusive (or NULL)    */
 } Swimmer;
 \end{lstlisting}
 
@@ -333,14 +356,19 @@ Two indexes (\texttt{(swimmer, event)} and
 event code and orders by \texttt{sort\_key}.
 
 \paragraph{Global state.}
-Three module-level variables hold parsed command-line state:
+Module-level variables hold parsed command-line state and the
+best-times cache:
 
 \begin{itemize}
-  \item \code{g\_opts} --- bitmask of \code{OPT\_*} flags.
-  \item \code{g\_events[NUM\_EVENTS][32]} --- user-requested
-        event codes.
-  \item \code{g\_nevents} --- count of valid entries in
-        \code{g\_events}.
+  \item \code{g\_opts} --- bitmask of behaviour \code{OPT\_*} flags
+        (\code{fastest}, \code{csv}, \code{store}, \code{offline}).
+  \item \code{g\_sel[MAX\_SEL]}, \code{g\_nsel} --- selected swimmer
+        ids; empty means ``all swimmers''.
+  \item \code{g\_events[NUM\_EVENTS][32]}, \code{g\_nevents} ---
+        user-requested event codes and their count.
+  \item \code{g\_bt\_member}, \code{g\_bt\_resp} --- memberId and
+        cached \code{GetBestTimesForMember} body for the swimmer
+        currently being processed.
 \end{itemize}
 
 % --------------------------- 4.5 ---------------------------------
@@ -348,22 +376,26 @@ Three module-level variables hold parsed command-line state:
 
 \paragraph{Command-line interface.}
 \begin{itemize}
-  \item \code{-o keyword[,keyword\ldots]} --- swimmer and output options.
+  \item \code{-o token[,token\ldots]} --- behaviour keywords and/or
+        swimmer ids (see \S\ref{sec:why-ids}).
   \item \code{-e event[,event\ldots]} --- restrict to event codes;
         repeatable.
 \end{itemize}
 
 \paragraph{HTTP interface.}
-Two POST endpoints are consumed (skipped under \code{offline}):
+Two endpoints on \code{https://times-api.usaswimming.org/swims/%
+TimesSearch} are consumed (skipped under \code{offline}):
 \begin{itemize}
-  \item \texttt{.../aPublicIAAaPersonIAAaSearch/jaql}
-        --- person search.
-  \item \texttt{.../aUSAIAAaSwimmingIAAaTimesIAAaElasticube/jaql}
-        --- times query.
+  \item \code{POST /GetMembersForFilters} --- resolve a name to a
+        \code{memberId} (body \code{\{"name":"\dots"\}}).
+  \item \code{GET /GetBestTimesForMember/\{memberId\}} --- best time
+        per event for that member.
 \end{itemize}
 
-Both carry the headers \code{Content-Type: application/json} and
-\code{Authorization: Bearer \{SISENSE\_TOKEN\}}.
+Every request carries \code{Content-Type: application/json} plus the
+anonymous data-hub auth headers \code{Usas-Sub-Id: Anonymous},
+\code{AppName: DataHub}, and a run-time-generated \code{Device-Id}
+(\S\ref{sec:why-anon}); there is no bearer token.
 
 \paragraph{Database interface.}
 Postgres is reached \emph{programmatically} through the
@@ -412,18 +444,17 @@ A typical invocation flows through the following sequence:
         statement.  Failure under \code{offline} is fatal;
         failure under \code{store} only is logged and persistence
         is silently disabled.
-  \item For each entry in \code{SWIMMERS} not masked out by
-        \code{g\_opts}, the dispatcher chooses the online or
-        offline path:
+  \item For each entry in \code{SWIMMERS} selected by
+        \code{g\_sel} (all, if none), the dispatcher chooses the
+        online or offline path:
         \begin{enumerate}
-          \item \emph{Online.} \code{lookup\_person\_key} issues
-                one POST and returns the \code{PersonKey}.  For
-                each requested event (or all default events),
-                \code{fetch\_times} issues one POST, parses the
-                response into a \code{TimeRow} array, applies the
-                \code{Swimmer}'s optional date window, sorts the
-                rows, and emits them to stdout, the DB pipe, or
-                both per the option mask.
+          \item \emph{Online.} \code{lookup\_member\_id} issues
+                one POST and returns the \code{memberId}.
+                \code{fetch\_times} fetches that member's best-times
+                set once (cached), then for each requested event (or
+                all default events) selects the matching best time
+                into a \code{TimeRow}, sorts, and emits to stdout,
+                the DB, or both per the option mask.
           \item \emph{Offline.} \code{offline\_fetch} runs a
                 parameterised \texttt{SELECT \dots\ FROM swim\_times}
                 via \code{PQexecParams} for each event, copies
@@ -471,14 +502,17 @@ $\code{MAX\_TIMES} \times \mathtt{sizeof}(\code{TimeRow})$
 across events.
 
 \paragraph{Network.}
-Each invocation issues at most $4 + (4 \times 31) = 128$ HTTPS
-POSTs.  All connections are short-lived; libcurl manages connection
-reuse internally where the easy-interface allows.
+Each invocation issues at most one member-search POST plus one
+best-times GET per selected swimmer (the best-times response is
+cached and reused across that swimmer's events).  All connections are
+short-lived; libcurl manages connection reuse internally where the
+easy-interface allows.
 
 \paragraph{Credentials.}
-The Sisense bearer token is a static const string in the binary.
-Token rotation requires editing \code{swim-times.w} and
-recompiling.  No filesystem-level credential storage is used.
+No credential is stored anywhere.  The anonymous data-hub headers
+(\S\ref{sec:why-anon}) are assembled on each request and the
+\code{Device-Id} is generated at run time by \code{device\_id()};
+there is no static token to store or rotate.
 
 % =================================================================
 \section{Design Rationale}
@@ -497,18 +531,102 @@ Parnas--Clements paper warns against.
 
 Adding \code{cJSON} or \code{jansson} would introduce a build
 dependency and would obscure the small, focused parsing logic
-that actually serves the program.  The Sisense response shape is
+that actually serves the program.  The response shape is
 stable and the scanner has fewer than fifty lines of code; the
 cost of a custom scanner is therefore lower than the cost of a
-third-party dependency.
+third-party dependency.  The scanner is deliberately format-agnostic:
+it locates a quoted key and returns the value immediately following.
+That contract held for the old Sisense JAQL arrays of
+\code{\{"text":\dots\}}/\code{\{"data":\dots\}} cells and holds equally
+for the current REST responses of named fields
+(\code{"memberId"}, \code{"fullName"}, \code{"swimTime"}, \dots),
+so the migration of \S\ref{sec:why-rest} reused it verbatim.
 
-\subsection{Why static bearer token?}
+\subsection{Why the REST times API, not Sisense JAQL?}
+\label{sec:why-rest}
 
-The token is read-only against a public dataset; embedding it
-matches the actual security posture (low) and avoids the
-operational complexity of credential injection.  When USA~Swimming
-rotates the token (an event observed only twice in the past two
-years), the maintainer recompiles and redeploys.
+The program was originally built against the Sisense JAQL analytics
+API at \code{usaswimming.sisense.com} (a person-search cube and a
+times Elasticube, each queried with a bearer token).  The USA~Swimming
+data hub has since been rebuilt as a single-page app that talks to a
+family of first-party REST services
+(\code{times-api}, \code{person-api}, \code{meet-api},
+\code{security-api}) behind an Azure API-management gateway; the
+Sisense path is decommissioned for public use --- its embedded token
+now returns \code{401 db\_unauthorized} and the current front-end
+exposes no Sisense credential at all.  The fetch path was therefore
+migrated to the public times service:
+
+\begin{itemize}
+  \item \code{POST /swims/TimesSearch/GetMembersForFilters} with body
+        \code{\{"name":"\dots"\}} resolves a name to a member record
+        carrying a \code{memberId} (an alphanumeric token such as
+        \code{6CD35348E5824C}, replacing the old numeric
+        \code{PersonKey});
+  \item \code{GET /swims/TimesSearch/GetBestTimesForMember/\{memberId\}}
+        returns that member's best time in every event.
+\end{itemize}
+
+\noindent The endpoint contract was recovered from the site's
+OpenAPI specification
+(\code{https://times-api.usaswimming.org/swagger/v1/swagger.json})
+and from its front-end bundle, then confirmed against the live service.
+
+\subsection{Why anonymous headers, not a bearer token?}
+\label{sec:why-anon}
+
+The REST services do not use a bearer token for public data.  The
+front-end's fetch wrapper authenticates every call with three custom
+headers: \code{Usas-Sub-Id} (the caller's subject id, or the literal
+\code{Anonymous} when not signed in), \code{AppName: DataHub}, and a
+\code{Device-Id}.  The \code{Device-Id} is the only non-trivial part:
+the server rejects a bare UUID (``\code{Invalid Device-Id format}''),
+requiring the exact shape the browser produces --- base64 of
+\code{"<platform> - <vendor> - <fingerprint> - <millis>"}, with the
+first five base64 characters repeated after the fifteenth.
+\code{device\_id()} reproduces that transformation over a per-run
+fingerprint (process id plus clock); the server validates only the
+format, not that the id is registered, so this is sufficient.  Because
+the credential is generated at run time, there is nothing to embed and
+nothing to rotate: the ``dynamically obtained valid token''
+requirement is met by construction, and the failure mode of the old
+static token (silent \code{401} after rotation) cannot recur.
+
+\subsection{Why best-times-only, and why \code{date}/\code{meet}/\code{standard} are empty?}
+\label{sec:why-bestonly}
+
+\code{GetBestTimesForMember} is reachable anonymously and returns one
+row per event (stroke, distance, course, time).  The richer endpoints
+that also carry meet name, swim date, and motivational standard
+(\code{GetAllTimesForFilters}, \code{GetSwimmerMeets}, and
+\code{person-api}'s \code{Person/search}) return \code{403} to
+anonymous callers --- they require a signed-in subject.  The design
+therefore populates the \code{event} and \code{time} of each
+\code{TimeRow} and leaves \code{date}, \code{meet}, and
+\code{standard} empty.  The response for a member is fetched once and
+cached (\code{g\_bt\_resp}, keyed by \code{g\_bt\_member}) so that the
+per-event loop in \code{main} costs a single network call per swimmer,
+not one per event.  Consequently \code{db\_insert\_row} passes an
+empty \code{date}/\code{standard}/\code{meet} as SQL \code{NULL} (a
+\code{NULL} pointer in the value array), and \code{schema.sql} leaves
+those columns nullable.  A signed-in variant that recovers the richer
+fields is a natural future extension.
+
+\subsection{Why id-based swimmer selection?}
+\label{sec:why-ids}
+
+The original design mapped each swimmer to a distinct bit
+(\code{OPT\_STELLA}, \code{OPT\_KALEA}, \dots) in a single \code{int}
+option word shared with the behaviour flags.  Extending the roster to
+the full CAST squad would have overflowed that word.  Each
+\code{Swimmer} now carries a unique string \code{id}; any \code{-o}
+token that is not one of the four behaviour keywords (\code{fastest},
+\code{csv}, \code{store}, \code{offline}) is treated as a swimmer id
+and collected in \code{g\_sel}.  Selection is then a string match
+against \code{SWIMMERS[].id}, with an empty selection meaning ``all''.
+The roster can grow without touching the flag word, and the legacy
+keywords (\code{stella}, \code{kalea}, \dots) continue to work because
+they are simply the ids of the original entries.
 
 \subsection{Why insertion sort?}
 
@@ -569,21 +687,21 @@ millisecond against the local container.
 
 \subsection{Why a date-window field on \texttt{Swimmer}?}
 
-\code{ledecky10}, \code{ledecky12}, and \code{ledecky14} all
-demand age-bracket filtering that the USA~Swimming JAQL
-endpoint does not directly express.  Storing the date window on
-the \code{Swimmer} record (rather than as a separate
-command-line flag) keeps the per-swimmer policy in one place
-and makes new historical comparisons additive: another swimmer
-(or another age window for the same swimmer, as the three
-Ledecky entries demonstrate) can be added by appending a single
-row to \code{SWIMMERS} with no change to \code{main} ---
-exactly the path used to satisfy
-requirements4.txt~\#1 and \#1a.
+\code{ledecky10}, \code{ledecky12}, and \code{ledecky14} originally
+demanded age-bracket filtering, expressed as a \code{date\_min}/%
+\code{date\_max} window on each \code{Swimmer} record rather than as a
+separate command-line flag, so the per-swimmer policy lived in one
+place and new historical comparisons were additive.  The fields are
+retained on the record and in the \code{fetch\_times} signature for
+compatibility, but they are now \emph{vestigial}: the anonymous
+best-times feed (\S\ref{sec:why-bestonly}) carries no swim date to
+filter on, so the three Ledecky entries currently resolve to the same
+best-times set.  Restoring date-window filtering depends on the
+signed-in richer-times endpoint noted in \S\ref{sec:why-bestonly}.
 
 \vfill
 \begin{center}
-  \small\textit{End of document CAST-SDD-001 Rev.\,1.0}
+  \small\textit{End of document CAST-SDD-001 Rev.\,2.0}
 \end{center}
 
 \end{document}

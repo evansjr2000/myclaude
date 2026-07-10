@@ -1,7 +1,12 @@
+% Limbo: inline-code macro for prose (cwebmac is plain TeX, so \code
+% must be defined here rather than relying on a LaTeX definition).
+\def\code#1{\.{#1}}
+
 @* Swim Times.
 
 This is a program written using Donald Knuth's literate programming paradigm (see more below).
-It fetches best short-course yard (SCY) times for four particular swimmers:
+It fetches best short-course yard (SCY) and long-course meter (LCM) times
+for a roster of swimmers.  The roster began with four family swimmers:
 
 \medskip
 $${\vbox{
@@ -15,6 +20,11 @@ $${\vbox{
 }}$$
 
 \medskip\noindent
+and now also covers Katie Ledecky (as age-group windows) and the full
+College~Area Swim~Team (CAST) roster listed in the |SWIMMERS| table of
+the main program.  Each swimmer carries a unique {\it id\/} used to
+select her on the command line; the ids are enumerated in the software
+requirements specification (\.{swim-times-srs.tex}).
 Thirty-one events are reported for each swimmer.
 Short-course yard (SCY) events: 50, 100, 200, 500, 1000, and 1650~Freestyle;
 50 and 100~Butterfly; 50 and 100~Backstroke; 50 and 100~Breaststroke;
@@ -22,20 +32,22 @@ and 100 and 200~Individual Medley.
 Long-course meter (LCM) events: 50, 100, 200, 400, 800, and 1500~Freestyle;
 50, 100, and 200~Butterfly; 50, 100, and 200~Backstroke;
 50, 100, and 200~Breaststroke; and 200 and 400~Individual Medley.
-Each time record includes the swim date and motivational standard
-attained (B, BB, A, \dots).  Data is fetched live from the USA~Swimming
-data hub, which is powered by the Sisense analytics platform.
+Data is fetched live from the USA~Swimming data hub's public REST
+services at \.{times-api.usaswimming.org}.
 
-@ {\bf How it works.}  The USA~Swimming data hub exposes a Sisense
-JAQL~API.  We make two kinds of requests:
+@ {\bf How it works.}  The data hub was formerly powered by a Sisense
+JAQL analytics API; it has since moved to first-party REST services,
+and this program follows.  We make two kinds of requests:
 
-\medskip\item{1.} A {\it person search\/} to resolve the swimmer's internal
-  |PersonKey|, given a search string and a substring to match the full name.
+\medskip\item{1.} A {\it member search\/} (\.{GetMembersForFilters}) to
+  resolve the swimmer's |memberId|, given a name string and a substring
+  to match the returned full name.
 
-\item{2.} A {\it times query\/} for each event, filtered by |PersonKey|
-  and event code (e.g.\ \.{100 FR SCY}).  Each row delivers five cells:
-  swim time, sort key, meet name, swim date (as \.{YYYYMMDD}), and
-  motivational standard.
+\item{2.} A {\it best-times fetch\/} (\.{GetBestTimesForMember}) that
+  returns the member's best time in every event at once; each record
+  delivers a stroke, distance, course, and formatted time, from which
+  the event code (e.g.\ \.{100 FR SCY}) is reassembled.  The anonymous
+  feed carries no swim date, meet, or standard.
 \medskip
 
 All HTTP communication is handled by \.{libcurl}.  JSON responses are
@@ -103,12 +115,12 @@ output is:
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <signal.h>
+#include <time.h>
 #include <curl/curl.h>
 #include <libpq-fe.h>
 
-@ The Sisense bearer token authenticates us against the analytics
-instance that backs \.{data.usaswimming.org}.  |EVENTS| lists all
+@ |TIMES_API| is the base URL of the USA~Swimming public times service
+that backs \.{data.usaswimming.org}.  |EVENTS| lists all
 event codes we query: twelve short-course yard (SCY) events plus
 two additional SCY distance events (1000~FR and 1650~FR) and seventeen
 long-course meter (LCM) events, for a total of thirty-one.
@@ -118,7 +130,7 @@ single module exceeds twenty-four lines.
 
 @<Global constants@>=
 @<Numeric constants@>
-@<Sisense credentials@>
+@<Data hub credentials@>
 @<Event table@>
 
 @ The two numeric limits used throughout the program.
@@ -127,19 +139,21 @@ single module exceeds twenty-four lines.
 #define NUM_EVENTS 31
 #define MAX_TIMES  200
 
-@ The Sisense bearer token and base API URL.
+@ The base URL of the times service.  Note there is deliberately no
+hard-coded bearer token here.  The USA~Swimming data hub retired the
+Sisense JAQL API this program originally targeted (its embedded token
+now returns \.{401 db\_unauthorized}, and the current front-end no
+longer exposes any Sisense credential).  The replacement REST services
+at \.{times-api.usaswimming.org} authenticate anonymous callers not
+with a bearer token but with three custom headers --- |Usas-Sub-Id:
+Anonymous|, |AppName: DataHub|, and a client-generated |Device-Id|.
+The |Device-Id| is minted at run time by |build_device_id| (see the
+HTTP utilities), so the ``token'' is obtained dynamically on every run
+rather than baked into the source.
 
-@<Sisense credentials@>=
-static const char SISENSE_TOKEN[] =
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-    ".eyJ1c2VyIjoiNjY0YmE2NmE5M2ZiYTUwMDM4NWIyMWQwIiwiYXBpU2VjcmV0Ijo"
-    "iNDQ0YTE3NWQtM2I1OC03NDhhLTVlMGEtYTVhZDE2MmRmODJlIiwiYWxsb3dlZFRl"
-    "bmFudHMiOlsiNjRhYzE5ZTEwZTkxNzgwMDFiYzM5YmVhIl0sInRlbmFudElkIjoiN"
-    "jRhYzE5ZTEwZTkxNzgwMDFiYzM5YmVhIn0"
-    ".izSIvaD2udKTs3QRngla1Aw23kZVyoq7Xh23AbPUw1M";
-
-static const char SISENSE_API[] =
-    "https://usaswimming.sisense.com/api/datasources";
+@<Data hub credentials@>=
+static const char TIMES_API[] =
+    "https://times-api.usaswimming.org/swims/TimesSearch";
 
 @ The event-code table is split into SCY and LCM sub-lists so the
 array initialiser fits within the line limit.
@@ -172,16 +186,10 @@ static const char *EVENTS[NUM_EVENTS] = {
 
 @ The program accepts two optional flags on the command line.
 
-The \.{-o} flag takes a comma-separated list of one or more keywords.
-Nine keywords are recognised:
+The \.{-o} flag takes a comma-separated list of one or more tokens.
+A token is either one of four {\it behaviour keywords\/} or a
+{\it swimmer id\/}:
 \medskip
-\item{$\bullet$} \.{stella} --- output only Stella Julianna Evans' events.
-\item{$\bullet$} \.{kalea} --- output only Kalea Rose Benavente's events.
-\item{$\bullet$} \.{kenny} --- output only Kenneth Ray Evans' events.
-\item{$\bullet$} \.{keith} --- output only Keith Santiago Evans' events.
-\item{$\bullet$} \.{ledecky10} --- output only Katie Ledecky's times as a 9- or 10-year-old.
-\item{$\bullet$} \.{ledecky12} --- output only Katie Ledecky's times as an 11- or 12-year-old.
-\item{$\bullet$} \.{ledecky14} --- output only Katie Ledecky's times as a 13- or 14-year-old.
 \item{$\bullet$} \.{fastest} --- print only the single fastest time per event.
 \item{$\bullet$} \.{csv} --- emit CSV lines (swimmer name on every line) instead of a table.
 \item{$\bullet$} \.{store} --- write each row to the local Postgres
@@ -190,7 +198,10 @@ Nine keywords are recognised:
 \item{$\bullet$} \.{offline} --- skip all network calls; read times from
     the local Postgres \.{swim-times} database instead.
 \medskip\noindent
-Keywords may be combined, e.g.\ \.{-o stella,fastest} or
+Any other token is treated as a swimmer id (e.g.\ \.{stella}, \.{kalea},
+\.{ledecky14}, \.{glass-layla}); see the |SWIMMERS| roster for the full
+list.  When no swimmer id is given every swimmer is processed.
+Tokens may be combined, e.g.\ \.{-o stella,fastest} or
 \.{-o kalea,csv,store}.
 When no swimmer keyword is specified all swimmers (subject to mode) are shown.
 
@@ -202,19 +213,25 @@ When \.{-e} is omitted all thirty-one events are reported.
 If no options are given at all the program prints a usage message and exits.
 
 @<Option flags@>=
-#define OPT_STELLA    (1<<0)  /* restrict output to Stella's events       */
-#define OPT_KALEA     (1<<1)  /* restrict output to Kalea's events        */
-#define OPT_FASTEST   (1<<2)  /* print only the single fastest time       */
-#define OPT_CSV       (1<<3)  /* emit CSV lines instead of a table        */
-#define OPT_KENNY     (1<<4)  /* restrict output to Kenneth Ray Evans     */
-#define OPT_KEITH     (1<<5)  /* restrict output to Keith Santiago Evans  */
-#define OPT_LEDECKY10 (1<<6)  /* restrict to Katie Ledecky 9-10 yr times  */
-#define OPT_STORE     (1<<7)  /* also persist rows to Postgres            */
-#define OPT_OFFLINE   (1<<8)  /* read from Postgres, skip network         */
-#define OPT_LEDECKY12 (1<<9)  /* restrict to Katie Ledecky 11-12 yr times */
-#define OPT_LEDECKY14 (1<<10) /* restrict to Katie Ledecky 13-14 yr times */
+#define OPT_FASTEST   (1<<0)  /* print only the single fastest time       */
+#define OPT_CSV       (1<<1)  /* emit CSV lines instead of a table        */
+#define OPT_STORE     (1<<2)  /* also persist rows to Postgres            */
+#define OPT_OFFLINE   (1<<3)  /* read from Postgres, skip network         */
 
-static int  g_opts    = 0;  /* output-selection flags; 0 = show everything */
+@ These are the behaviour flags (how to render or where to read/write).
+Swimmer {\it selection\/}---which people to fetch---is no longer encoded
+as one bit per swimmer, because the roster now holds several dozen
+entries and would overflow the flag word.  Instead each swimmer carries
+a unique string |id| (see the |Swimmer| record) and any \.{-o} token
+that is not one of the four behaviour keywords above is treated as a
+swimmer id and pushed onto |g_sel|.  When |g_nsel| is zero every swimmer
+is processed; otherwise only those whose |id| appears in |g_sel|.
+
+@<Option flags@>+=
+#define MAX_SEL 64            /* max distinct swimmer ids selectable at once */
+static int         g_opts    = 0;  /* behaviour flags; see above            */
+static const char *g_sel[MAX_SEL]; /* selected swimmer ids (heap copies)    */
+static int         g_nsel    = 0;  /* number of entries in |g_sel|          */
 static char g_events[NUM_EVENTS][32]; /* event codes requested via \.{-e}  */
 static int  g_nevents = 0;  /* number of entries in |g_events|             */
 
@@ -229,13 +246,13 @@ typedef struct {
     size_t size;
 } Buffer;
 
-@ A |TimeRow| records one swim result.  |sort_key| is a numeric proxy
-for the swim time (smaller is faster); |time| is the formatted string
-(e.g.\ \.{1:02.45}); |date| is the swim date formatted as
-\.{YYYY-MM-DD}; |standard| is the motivational standard attained
-(e.g.\ \.{B}, \.{BB}, \.{A}, \.{Slower Than B}); and |meet| is the
-meet name.  The Sisense API returns the sort key as a quoted decimal
-string such as \.{"1010007029.00"}, so we store it as a |double|.
+@ A |TimeRow| records one swim result.  |sort_key| is the swim time in
+seconds (smaller is faster), computed by |time_to_seconds|; |time| is
+the formatted string (e.g.\ \.{1:02.45}); |date| is the swim date
+formatted as \.{YYYY-MM-DD}; |standard| is the motivational standard
+attained (e.g.\ \.{B}, \.{BB}, \.{A}); and |meet| is the meet name.
+Under the anonymous best-times feed only |time| and |sort_key| are
+populated; |date|, |standard|, and |meet| are left empty.
 
 @<Type definitions@>+=
 typedef struct {
@@ -256,9 +273,9 @@ forward declaration.
 
 @<Type definitions@>+=
 typedef struct {
+    const char *id;            /* unique selection id, e.g.\ "stella"   */
     const char *search_query;  /* Name string to search for             */
     const char *match_substr;  /* Lower-case substring to match         */
-    int         flag;          /* |OPT_STELLA|, |OPT_KALEA|, etc.       */
     const char *date_min;      /* NULL or "YYYY-MM-DD" inclusive lower  */
     const char *date_max;      /* NULL or "YYYY-MM-DD" inclusive upper  */
 } Swimmer;
@@ -283,19 +300,70 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *ud)
     return n;
 }
 
-@ |post_json| performs a single HTTP~POST with a JSON body and returns
-the response as a null-terminated heap string, or |NULL| on failure.
-The caller is responsible for freeing the returned string.  The function
-body is split into two sub-modules so that neither exceeds twenty-four lines.
+@ |base64| encodes a null-terminated string into standard base64.  It is
+used only to shape the |Device-Id| header, so a compact implementation
+that never overflows |out| is all that is required.
 
 @<HTTP utilities@>+=
-static char *post_json(const char *url, const char *body)
+static const char B64[] =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static void base64(const char *in, char *out, size_t out_sz)
+{
+    size_t len = strlen(in), i = 0, o = 0;
+    while (i + 3 <= len && o + 4 < out_sz) {
+        unsigned t = ((unsigned char)in[i]   << 16) |
+                     ((unsigned char)in[i+1] <<  8) |
+                      (unsigned char)in[i+2];
+        out[o++] = B64[(t>>18)&63]; out[o++] = B64[(t>>12)&63];
+        out[o++] = B64[(t>> 6)&63]; out[o++] = B64[t&63];
+        i += 3;
+    }
+    if (len > i && o + 4 < out_sz) {
+        size_t rem = len - i;
+        unsigned t = (unsigned char)in[i] << 16;
+        if (rem == 2) t |= (unsigned char)in[i+1] << 8;
+        out[o++] = B64[(t>>18)&63];        out[o++] = B64[(t>>12)&63];
+        out[o++] = rem==2 ? B64[(t>>6)&63] : '='; out[o++] = '=';
+    }
+    out[o] = '\0';
+}
+
+@ |device_id| returns the cached |Device-Id| value the times service
+requires, building it once on first use.  We reproduce the shape the
+data hub's front-end produces: base64 of \.{"platform - vendor -
+fingerprint - millis"}, then the first five characters repeated after
+the fifteenth.  The server validates only the format, so a per-run
+fingerprint (process id plus clock) is sufficient.
+
+@<HTTP utilities@>+=
+static const char *device_id(void)
+{
+    static char id[512];
+    if (id[0]) return id;
+    char raw[128], n[256];
+    long now = (long)time(NULL);
+    snprintf(raw, sizeof raw, "Linux - curlswim - %lx%lx - %ld000",
+             (unsigned long)getpid(), (unsigned long)now, now);
+    base64(raw, n, sizeof n);
+    snprintf(id, sizeof id, "%.15s%.5s%s", n, n, n + 15);
+    return id;
+}
+
+@ |http_request| performs one request --- a |GET| when |body| is |NULL|,
+otherwise a |POST| carrying |body| --- and returns the response as a
+null-terminated heap string, or |NULL| on failure.  The caller frees the
+result.  Every request carries the anonymous data-hub headers instead of
+a bearer token.
+
+@<HTTP utilities@>+=
+static char *http_request(const char *url, const char *body)
 {
     @<Initialize curl handle@>
     @<Issue HTTP request and return@>
 }
 
-@ The easy handle is created, the bearer-token header is assembled,
+@ The easy handle is created, the anonymous auth headers are assembled,
 and all curl options are configured before the request is issued.
 
 @<Initialize curl handle@>=
@@ -304,17 +372,18 @@ if (!curl) return NULL;
 
 Buffer buf = {NULL, 0};
 
-char auth_hdr[1600];
-snprintf(auth_hdr, sizeof auth_hdr,
-         "Authorization: Bearer %s", SISENSE_TOKEN);
+char dev_hdr[560];
+snprintf(dev_hdr, sizeof dev_hdr, "Device-Id: %s", device_id());
 
 struct curl_slist *hdrs = NULL;
 hdrs = curl_slist_append(hdrs, "Content-Type: application/json");
-hdrs = curl_slist_append(hdrs, auth_hdr);
+hdrs = curl_slist_append(hdrs, "AppName: DataHub");
+hdrs = curl_slist_append(hdrs, "Usas-Sub-Id: Anonymous");
+hdrs = curl_slist_append(hdrs, dev_hdr);
 
 curl_easy_setopt(curl, CURLOPT_URL,           url);
 curl_easy_setopt(curl, CURLOPT_HTTPHEADER,    hdrs);
-curl_easy_setopt(curl, CURLOPT_POSTFIELDS,    body);
+if (body) curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
 curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
 curl_easy_setopt(curl, CURLOPT_WRITEDATA,     &buf);
 
@@ -331,14 +400,16 @@ return buf.data;
 
 @* JSON scanner.
 
-@ Sisense JAQL responses contain a top-level |"values"| array.  Each
-element is itself an array of objects, each holding either a |"text"|
-key (string value) or a |"data"| key (numeric value).  A typical
-person-search row looks like:
-$$\hbox{\.{[{"text":"Stella Julianna Evans"},{"data":12345},{"text":"CAST"}]}}$$
+@ The REST responses are JSON arrays of objects with named fields.  A
+member-search row looks like
+$$\hbox{\.{{"memberId":"6CD35348E5824C","fullName":"Katie Genevieve Ledecky",\dots}}}$$
+and a best-times row like
+$$\hbox{\.{{"strokeAbbreviation":"FR","distance":50,"courseCode":"SCY","swimTime":"22.64r"}}}$$
 
-Rather than build a full parse tree we scan forward for a key and
+Rather than build a full parse tree we scan forward for a named key and
 extract the immediately following value, advancing a position pointer.
+The scanner is format-agnostic: it served the old Sisense
+|"text"|/|"data"| cells and serves these named fields unchanged.
 
 @ |scan_string| finds the first |"key"| at or after |*pos|, copies the
 string value that follows into |out| (at most |max_len-1| bytes), and
@@ -390,7 +461,7 @@ static int scan_long(const char *key, const char **pos, long *out)
 
 @ The \.{store} option streams rows into the local Postgres database
 \.{swim-times}; the \.{offline} option reads previously-stored rows
-back.  Both reach Postgres \emph{programmatically} via the standard
+back.  Both reach Postgres {\it programmatically\/} via the standard
 client library \.{libpq} --- no \.{psql} child process or wrapper
 script is involved (this is requirement~\#3 of \.{requirements4.txt}:
 ``Access the Postgres database programmatically, not through scripts'').
@@ -483,7 +554,10 @@ PQclear(r);
 @ |db_insert_row| executes the prepared statement once for one
 \code{TimeRow}.  A duplicate hits the \.{ON CONFLICT DO NOTHING}
 branch and is silently absorbed; any other failure logs a warning
-but does not abort the run.
+but does not abort the run.  An empty |date|, |standard|, or |meet| is
+passed as a SQL |NULL| (a |NULL| pointer in the value array) so the
+\.{\$4::date} cast does not choke on an empty string; the best-times
+feed leaves these fields empty.
 
 @<Insert one row@>=
 static void db_insert_row(const char *swimmer, const char *event,
@@ -493,7 +567,10 @@ static void db_insert_row(const char *swimmer, const char *event,
     char sk[64];
     snprintf(sk, sizeof sk, "%g", r->sort_key);
     const char *vals[7] = {
-        swimmer, event, r->time, r->date, r->standard, r->meet, sk
+        swimmer, event, r->time,
+        r->date[0]     ? r->date     : NULL,
+        r->standard[0] ? r->standard : NULL,
+        r->meet[0]     ? r->meet     : NULL, sk
     };
     PGresult *res = PQexecPrepared(db_conn, DB_INSERT_STMT,
                                    7, vals, NULL, NULL, 0);
@@ -503,17 +580,19 @@ static void db_insert_row(const char *swimmer, const char *event,
     PQclear(res);
 }
 
-@* Person lookup. |lookup_person_key| posts a search for |search_query| and scans
-the result rows for one whose full name contains |match_substr| (after
-lower-casing).  It returns a heap-allocated decimal |PersonKey| string
-and, optionally, the swimmer's full name in |*out_name|.  Returns |NULL|
-on failure.  The function body is split into five sub-modules.
+@* Person lookup. |lookup_member_id| posts a member search for
+|search_query| and scans the result records for one whose full name
+contains |match_substr| (after lower-casing).  It returns the
+matching swimmer's |memberId| as a heap string (an alphanumeric token
+such as \.{6CD35348E5824C}, {\it not\/} the old numeric PersonKey) and,
+optionally, the full name in |*out_name|.  Returns |NULL| on failure.
+The function body is split into five sub-modules.
 
 @
 @<Person lookup@>=
-static char *lookup_person_key(const char *search_query,
-                                const char *match_substr,
-                                const char **out_name)
+static char *lookup_member_id(const char *search_query,
+                              const char *match_substr,
+                              const char **out_name)
 {
     @<Build person-search URL@>
     @<Build person-search body@>
@@ -522,67 +601,52 @@ static char *lookup_person_key(const char *search_query,
     @<Return person-search result@>
 }
 
-@ The URL addresses the person-search JAQL endpoint.
+@ The URL addresses the member-search endpoint.
 
 @<Build person-search URL@>=
 char url[512];
-snprintf(url, sizeof url,
-         "%s/aPublicIAAaPersonIAAaSearch/jaql", SISENSE_API);
+snprintf(url, sizeof url, "%s/GetMembersForFilters", TIMES_API);
 
-@ The request body queries the |Persons| table with a |contains| filter
-on |FullName| and requests three output columns.
+@ The request body is a |SFPersonSearchFilters| object; only the free-text
+|name| field is needed.  The service matches |name| against member full
+names, so a distinctive surname keeps the result set small.
 
 @<Build person-search body@>=
-char body[1024];
-snprintf(body, sizeof body,
-  "{"
-    "\"datasource\":{"
-      "\"title\":\"Public Person Search\","
-      "\"fullname\":\"LocalHost/Public Person Search\"},"
-    "\"metadata\":["
-      "{\"jaql\":{\"table\":\"Persons\",\"column\":\"FullName\","
-        "\"dim\":\"[Persons.FullName]\",\"datatype\":\"text\","
-        "\"title\":\"Name\","
-        "\"filter\":{\"contains\":\"%s\"}}},"
-      "{\"jaql\":{\"table\":\"Persons\",\"column\":\"PersonKey\","
-        "\"dim\":\"[Persons.PersonKey]\",\"datatype\":\"numeric\","
-        "\"title\":\"PersonKey\"}},"
-      "{\"jaql\":{\"table\":\"Persons\",\"column\":\"ClubName\","
-        "\"dim\":\"[Persons.ClubName]\",\"datatype\":\"text\","
-        "\"title\":\"Club\"}}"
-    "],\"count\":100,\"offset\":0}",
-  search_query);
+char body[512];
+snprintf(body, sizeof body, "{\"name\":\"%s\"}", search_query);
 
 @ The HTTP POST is issued; a |NULL| response is a fatal error.
 
 @<Issue person-search request@>=
-char *resp = post_json(url, body);
+char *resp = http_request(url, body);
 if (!resp) {
     fputs("Error: person lookup request failed\n", stderr);
     return NULL;
 }
 
-@ Rows are scanned until one whose lower-cased name contains
-|match_substr| is found; its |PersonKey| is extracted and duplicated.
-The body of the while-loop is split into a separate sub-chunk so the
-outer scanner stays inside the twenty-four line limit.
+@ The response is a JSON array of member objects.  Records are scanned
+until one whose lower-cased full name contains |match_substr| is found;
+its |memberId| is duplicated.  The loop body is a separate sub-chunk so
+the outer scanner stays inside the twenty-four line limit.
 
 @<Scan person-search result@>=
 char *key  = NULL;
 char *name = NULL;
-const char *p = strstr(resp, "\"values\"");
+const char *p = resp;
 
 while (p) {
     @<Match one person row@>
 }
 
-@ For each row we extract the full name, lower-case it, and test the
-substring match.  When a match is found the |PersonKey| is converted
-to a heap string and the loop terminates.
+@ Within each record |memberId| precedes |fullName|, so we read the id
+first, then the name; if the name matches we keep the id already in hand.
 
 @<Match one person row@>=
+char member[64];
+if (!scan_string("memberId", &p, member, sizeof member)) break;
+
 char full_name[256];
-if (!scan_string("text", &p, full_name, sizeof full_name)) break;
+if (!scan_string("fullName", &p, full_name, sizeof full_name)) break;
 
 char lower[256];
 size_t flen = strlen(full_name);
@@ -591,18 +655,13 @@ for (size_t i = 0; i <= flen; i++)
                       ? full_name[i] + 32 : full_name[i]);
 
 if (strstr(lower, match_substr)) {
-    long pk;
-    if (scan_long("data", &p, &pk)) {
-        char tmp[32];
-        snprintf(tmp, sizeof tmp, "%ld", pk);
-        key  = strdup(tmp);
-        name = strdup(full_name);
-    }
+    key  = strdup(member);
+    name = strdup(full_name);
     break;
 }
 
 @ The response buffer is freed, a diagnostic is printed on failure, and
-the key (or |NULL|) is returned.
+the |memberId| (or |NULL|) is returned.
 
 @<Return person-search result@>=
 free(resp);
@@ -632,181 +691,95 @@ static void insertion_sort(TimeRow *rows, int n)
     }
 }
 
-@ |format_date| converts an 8-digit \.{YYYYMMDD} string (such as
-\.{20230305}) to \.{YYYY-MM-DD} format in |out| (which must be at
-least 11 bytes).
+@ |time_to_seconds| converts a formatted swim time (\.{"22.64r"},
+\.{"1:40.36"}, \.{"14:59.62"}) to a |double| number of seconds, used as
+the sort key.  Colon-separated groups are accumulated sexagesimally; any
+trailing flag character (such as the \.{r} marking a relay lead-off) is
+ignored.
 
 @<Times fetch@>+=
-static void format_date(const char *ymd8, char *out)
+static double time_to_seconds(const char *t)
 {
-    if (strlen(ymd8) == 8) {
-        out[0]=ymd8[0]; out[1]=ymd8[1]; out[2]=ymd8[2]; out[3]=ymd8[3];
-        out[4]='-';
-        out[5]=ymd8[4]; out[6]=ymd8[5];
-        out[7]='-';
-        out[8]=ymd8[6]; out[9]=ymd8[7];
-        out[10]='\0';
-    } else {
-        strncpy(out, ymd8, 10);
-        out[10] = '\0';
+    double total = 0;
+    char buf[32];
+    size_t bi = 0;
+    for (const char *s = t; ; s++) {
+        if (*s == ':' || *s == '\0') {
+            buf[bi] = '\0';
+            total = total * 60 + strtod(buf, NULL);
+            bi = 0;
+            if (*s == '\0') return total;
+        } else if (((*s >= '0' && *s <= '9') || *s == '.')
+                   && bi < sizeof buf - 1) {
+            buf[bi++] = *s;
+        }
     }
 }
 
-@ |fetch_times| retrieves all SCY times for |person_key| in
-|event_code|, sorts them fastest-first, and prints them.  Each JAQL
-result row delivers five cells in order: time, sort key, meet name,
-swim date (as \.{YYYYMMDD}), and motivational standard type.
-The sort key (a decimal float string such as \.{"1010007029.00"}) is
-converted to |double| with |strtod|.  The date is reformatted from
-\.{YYYYMMDD} to \.{YYYY-MM-DD} by |format_date|.  |swimmer_name| is
-the resolved full name of the swimmer (used in CSV output).
-When |opts| has |OPT_CSV| set the output is a comma-separated line per
-time record with the swimmer name on every line; when |OPT_FASTEST| is
-set only the single fastest time is printed.  The function body is
-broken into five sub-modules.
+@ |fetch_times| reports |member_id|'s best time in |event_code|.  The
+public times service returns a member's whole best-times set in one
+\.{GetBestTimesForMember} call, so the response is fetched once and
+cached in |g_bt_resp| (keyed by |g_bt_member|); subsequent per-event
+calls reuse it.  The best-times feed carries only the event and the
+time, so |date|, |meet|, and |standard| are left empty --- those fields
+are not exposed to anonymous callers.  The |date_min| and |date_max|
+age-window parameters are retained for signature compatibility but no
+longer apply.  The body is broken into three sub-modules.
 
 @<Times fetch@>+=
-static void fetch_times(const char *person_key, const char *event_code,
+static char  g_bt_member[64] = "";  /* memberId of the cached response */
+static char *g_bt_resp        = NULL;/* cached GetBestTimesForMember body */
+
+static void fetch_times(const char *member_id, const char *event_code,
                         const char *swimmer_name, int opts,
                         const char *date_min, const char *date_max)
 {
-    @<Build times-query URL@> @/
-    @<Build times-query body@> @/
-    @<Fetch times response@> @/
-    @<Parse times response@> @/
-    @<Print times results@> @/
+    (void)date_min; (void)date_max;
+    @<Load best-times cache@>
+    @<Select best time for event@>
+    @<Sort and emit rows@>
 }
 
-@ The URL addresses the times-query JAQL endpoint.
+@ The cache is (re)filled whenever the requested member differs from the
+one currently held.  A failed fetch leaves |g_bt_resp| null and the
+function returns without emitting.
 
-@<Build times-query URL@>=
-char url[512];
-snprintf(url, sizeof url,
-         "%s/aUSAIAAaSwimmingIAAaTimesIAAaElasticube/jaql", SISENSE_API);
-
-@ The JSON body is assembled in three passes via a write pointer so
-that no single sub-module exceeds twenty-four lines.
-
-@<Build times-query body@>=
-char body[2048];
-char *bp = body;
-size_t rem = sizeof body;
-int n;
-@<Append times-query datasource@>
-@<Append times-query scope filters@>
-@<Append times-query output columns@>
-
-@ The first pass writes the datasource object and opens the metadata array.
-
-@<Append times-query datasource@>=
-n = snprintf(bp, rem,
-    "{\"datasource\":{"
-      "\"title\":\"USA Swimming Times Elasticube\","
-      "\"fullname\":\"LocalHost/USA Swimming Times Elasticube\"},"
-    "\"metadata\":[");
-bp += n; rem -= (size_t)n;
-
-@ The second pass appends the two scope-filter columns (|PersonKey| and
-|EventCode|).
-
-@<Append times-query scope filters@>=
-n = snprintf(bp, rem,
-    "{\"jaql\":{\"table\":\"UsasSwimTime\",\"column\":\"PersonKey\","
-      "\"dim\":\"[UsasSwimTime.PersonKey]\",\"datatype\":\"numeric\","
-      "\"title\":\"PersonKey\","
-      "\"filter\":{\"equals\":%s}},\"panel\":\"scope\"},"
-    "{\"jaql\":{\"table\":\"SwimEvent\",\"column\":\"EventCode\","
-      "\"dim\":\"[SwimEvent.EventCode]\",\"datatype\":\"text\","
-      "\"title\":\"Event\","
-      "\"filter\":{\"equals\":\"%s\"}},\"panel\":\"scope\"},",
-    person_key, event_code);
-bp += n; rem -= (size_t)n;
-
-@ The third pass appends the five output columns and closes the JSON object.
-
-@<Append times-query output columns@>=
-snprintf(bp, rem,
-    "{\"jaql\":{\"table\":\"UsasSwimTime\","
-      "\"column\":\"SwimTimeFormatted\","
-      "\"dim\":\"[UsasSwimTime.SwimTimeFormatted]\","
-      "\"datatype\":\"text\",\"title\":\"Time\"}},"
-    "{\"jaql\":{\"table\":\"UsasSwimTime\",\"column\":\"SortKey\","
-      "\"dim\":\"[UsasSwimTime.SortKey]\",\"datatype\":\"numeric\","
-      "\"title\":\"SortKey\"}},"
-    "{\"jaql\":{\"table\":\"Meet\",\"column\":\"MeetName\","
-      "\"dim\":\"[Meet.MeetName]\",\"datatype\":\"text\","
-      "\"title\":\"Meet\"}},"
-    "{\"jaql\":{\"table\":\"UsasSwimTime\","
-      "\"column\":\"SeasonCalendarKey\","
-      "\"dim\":\"[UsasSwimTime.SeasonCalendarKey]\","
-      "\"datatype\":\"numeric\",\"title\":\"Date\"}},"
-    "{\"jaql\":{\"table\":\"TimeStandard\","
-      "\"column\":\"StandardType\","
-      "\"dim\":\"[TimeStandard.StandardType]\","
-      "\"datatype\":\"text\",\"title\":\"Standard\"}}"
-    "],\"count\":100,\"offset\":0}");
-
-@ The HTTP POST is issued; failure is reported to standard error and the
-function returns early.
-
-@<Fetch times response@>=
-char *resp = post_json(url, body);
-if (!resp) {
-    fprintf(stderr, "Error: times request failed for %s\n", event_code);
-    return;
+@<Load best-times cache@>=
+if (strcmp(g_bt_member, member_id) != 0) {
+    free(g_bt_resp);
+    char url[512];
+    snprintf(url, sizeof url,
+             "%s/GetBestTimesForMember/%s", TIMES_API, member_id);
+    g_bt_resp = http_request(url, NULL);
+    snprintf(g_bt_member, sizeof g_bt_member, "%s", member_id);
 }
+if (!g_bt_resp) return;
 
-@ Five text fields are scanned from each result row into a |TimeRow|
-record.  The inner work is split into two further sub-modules.
+@ Each best-times record supplies, in order, a stroke abbreviation, a
+numeric distance, a course code, and the formatted time.  The event code
+is reassembled as \.{"<distance> <stroke> <course>"} (e.g.\ \.{"50 FR
+SCY"}) and compared with the requested |event_code|; the one match (if
+any) becomes a single |TimeRow|.
 
-@<Parse times response@>=
+@<Select best time for event@>=
 TimeRow rows[MAX_TIMES];
-int     nrows = 0;
-const char *p = strstr(resp, "\"values\"");
-
-while (p && nrows < MAX_TIMES) {
-    @<Scan one times row@>
+int nrows = 0;
+const char *p = g_bt_resp;
+char abbr[8], course[8], stime[32];
+long dist;
+while (nrows < MAX_TIMES &&
+       scan_string("strokeAbbreviation", &p, abbr, sizeof abbr)) {
+    if (!scan_long("distance", &p, &dist)) break;
+    if (!scan_string("courseCode", &p, course, sizeof course)) break;
+    if (!scan_string("swimTime", &p, stime, sizeof stime)) break;
+    char code[32];
+    snprintf(code, sizeof code, "%ld %s %s", dist, abbr, course);
+    if (strcmp(code, event_code) != 0) continue;
+    rows[nrows].sort_key = time_to_seconds(stime);
+    snprintf(rows[nrows].time, sizeof rows[nrows].time, "%s", stime);
+    rows[nrows].date[0] = rows[nrows].standard[0] = rows[nrows].meet[0] = '\0';
+    nrows++;
 }
-
-@ Each row delivers five consecutive |"text"| values: time string, sort
-key, meet name, swim date (\.{YYYYMMDD}), and motivational standard.
-
-@<Scan one times row@>=
-char time_str[32], sort_str[64], meet_str[256], date_str[16], std_str[48];
-if (!scan_string("text", &p, time_str, sizeof time_str)) break;
-if (time_str[0] == '\0') break;
-if (!scan_string("text", &p, sort_str, sizeof sort_str)) break;
-if (!scan_string("text", &p, meet_str, sizeof meet_str)) break;
-if (!scan_string("text", &p, date_str, sizeof date_str)) break;
-if (!scan_string("text", &p, std_str,  sizeof std_str))  break;
-@<Store one times row@>
-
-@ The date is reformatted first so it can be tested against the
-swimmer's optional age window.  Rows that fall outside the window
-are skipped; \.{YYYY-MM-DD} sorts lexically so a plain |strcmp|
-suffices.  Surviving rows are copied into |rows[nrows]| and the row
-count advances.
-
-@<Store one times row@>=
-format_date(date_str, rows[nrows].date);
-if (date_min && strcmp(rows[nrows].date, date_min) < 0) continue;
-if (date_max && strcmp(rows[nrows].date, date_max) > 0) continue;
-rows[nrows].sort_key = strtod(sort_str, NULL);
-strncpy(rows[nrows].time, time_str, sizeof rows[nrows].time - 1);
-rows[nrows].time[sizeof rows[nrows].time - 1] = '\0';
-strncpy(rows[nrows].standard, std_str, sizeof rows[nrows].standard - 1);
-rows[nrows].standard[sizeof rows[nrows].standard - 1] = '\0';
-strncpy(rows[nrows].meet, meet_str, sizeof rows[nrows].meet - 1);
-rows[nrows].meet[sizeof rows[nrows].meet - 1] = '\0';
-nrows++;
-
-@ After all rows are collected the response buffer is freed and the
-common sort/emit chunk is invoked.  The emitter is shared with the
-offline path, which has no |resp| to free.
-
-@<Print times results@>=
-free(resp);
-@<Sort and emit rows@>
 
 @ The sort runs once and then up to three emitters are dispatched
 according to the option mask: CSV to stdout, DB pipe write, or the
@@ -958,11 +931,11 @@ nrows++;
 @* Main program.
 
 @ We define a small |Swimmer| record to hold the person-search
-parameters for each swimmer.  Each entry supplies a |search_query| string
-sent to the database (ideally distinctive enough to return a small set),
-a |match_substr| (lower-cased) used to identify the correct row, and
-a |flag| bit used to filter output when the user passes a swimmer keyword
-to \.{-o}.  The optional |date_min| and |date_max| fields restrict
+parameters for each swimmer.  Each entry supplies a unique |id| string
+(the token the user passes to \.{-o} to select her), a |search_query|
+string sent to the database (ideally distinctive enough to return a
+small set), and a |match_substr| (lower-cased) used to identify the
+correct row among the results.  The optional |date_min| and |date_max| fields restrict
 output to swims whose date falls in $[\hbox{|date_min|}, \hbox{|date_max|}]$
 (inclusive, ISO~\.{YYYY-MM-DD}).  These are used to express age-group
 windows---for example Katie Ledecky's 9- and 10-year-old swims fall
@@ -982,16 +955,40 @@ through \.{2012-03-16} for the 13- and 14-year-old window
 
 @<Main function@>=
 static const Swimmer SWIMMERS[] = {
-    { "Julianna Evans",  "stella",         OPT_STELLA,    NULL, NULL },
-    { "Benavente",       "kalea",          OPT_KALEA,     NULL, NULL },
-    { "Ray Evans",       "kenneth ray",    OPT_KENNY,     NULL, NULL },
-    { "Santiago Evans",  "keith santiago", OPT_KEITH,     NULL, NULL },
-    { "Ledecky",         "katie",          OPT_LEDECKY10,
-      "2006-03-17", "2008-03-16" },
-    { "Ledecky",         "katie",          OPT_LEDECKY12,
-      "2008-03-17", "2010-03-16" },
-    { "Ledecky",         "katie",          OPT_LEDECKY14,
-      "2010-03-17", "2012-03-16" }
+  { "stella",     "Julianna Evans",  "stella",         NULL, NULL },
+  { "kalea",      "Benavente",       "kalea",          NULL, NULL },
+  { "kenny",      "Ray Evans",       "kenneth ray",    NULL, NULL },
+  { "keith",      "Santiago Evans",  "keith santiago", NULL, NULL },
+  { "ledecky10",  "Ledecky",         "katie",          "2006-03-17", "2008-03-16" },
+  { "ledecky12",  "Ledecky",         "katie",          "2008-03-17", "2010-03-16" },
+  { "ledecky14",  "Ledecky",         "katie",          "2010-03-17", "2012-03-16" },
+  /* Roster added per requirements (all College Area Swim Team, LSC SI).  */
+  /* The query is "First Last"; the match token is a lower-case substring */
+  /* that uniquely picks the CAST member among the search results ---     */
+  /* chosen to sidestep nicknames and same-name swimmers in other LSCs.   */
+  { "bothwell-emma",        "Emma Bothwell",        "emma",       NULL, NULL },
+  { "coombs-wally",         "Wally Coombs",         "wally",      NULL, NULL },
+  { "cruz-eva",             "Eva Cruz",             "cruz rae",   NULL, NULL },
+  { "darrow-zoe",           "Zoe Darrow",           "zoe",        NULL, NULL },
+  { "doan-eva",             "Eva Doan",             "eva doan",   NULL, NULL },
+  { "ellis-nova",           "Nova Ellis",           "nova",       NULL, NULL },
+  /* Evans, Stella J is the same swimmer as ``stella'' above.            */
+  { "fedyshyn-liliya",      "Liliya Fedyshyn",      "liliya",     NULL, NULL },
+  { "glass-layla",          "Layla Glass",          "layla",      NULL, NULL },
+  { "glass-logan",          "Logan Glass",          "wiley",      NULL, NULL },
+  { "gosser-hannah",        "Hannah Gosser",        "gosser",     NULL, NULL },
+  { "huynh-diamond",        "Diamond Huynh",        "diamond",    NULL, NULL },
+  { "knuth-hannah",         "Hannah Knuth",         "knuth",      NULL, NULL },
+  { "lefebvre-bailey-cleo", "Cleo Lefebvre-Bailey", "cleo",       NULL, NULL },
+  { "mendez-giavanna",      "Giavanna Mendez",      "mendez",     NULL, NULL },
+  { "mulvaney-sofia",       "Sofia Mulvaney",       "sofia",      NULL, NULL },
+  { "shay-naia",            "Naia Shay",            "naia",       NULL, NULL },
+  { "simmons-briar",        "Briar Simmons",        "briar",      NULL, NULL },
+  { "simmons-presley",      "Presley Simmons",      "aspen",      NULL, NULL },
+  { "soto-lucas",           "Lucas Soto",           "erick",      NULL, NULL },
+  { "soto-vivienne",        "Vivienne Soto",        "vivi",       NULL, NULL },
+  { "wittmershaus-addison", "Addison Wittmershaus", "addison",    NULL, NULL },
+  { "zahner-elsie",         "Elsie Zahner",         "elsie",      NULL, NULL }
 };
 #define NUM_SWIMMERS ((int)(sizeof SWIMMERS / sizeof SWIMMERS[0]))
 
@@ -1008,17 +1005,11 @@ static void parse_opts_str(const char *s)
     if (!buf) return;
     char *tok = strtok(buf, ",");
     while (tok) {
-        if      (strcmp(tok, "stella")    == 0) g_opts |= OPT_STELLA;
-        else if (strcmp(tok, "kalea")     == 0) g_opts |= OPT_KALEA;
-        else if (strcmp(tok, "kenny")     == 0) g_opts |= OPT_KENNY;
-        else if (strcmp(tok, "keith")     == 0) g_opts |= OPT_KEITH;
-        else if (strcmp(tok, "ledecky10") == 0) g_opts |= OPT_LEDECKY10;
-        else if (strcmp(tok, "ledecky12") == 0) g_opts |= OPT_LEDECKY12;
-        else if (strcmp(tok, "ledecky14") == 0) g_opts |= OPT_LEDECKY14;
-        else if (strcmp(tok, "fastest")   == 0) g_opts |= OPT_FASTEST;
+        if      (strcmp(tok, "fastest")   == 0) g_opts |= OPT_FASTEST;
         else if (strcmp(tok, "csv")       == 0) g_opts |= OPT_CSV;
         else if (strcmp(tok, "store")     == 0) g_opts |= OPT_STORE;
         else if (strcmp(tok, "offline")   == 0) g_opts |= OPT_OFFLINE;
+        else if (g_nsel < MAX_SEL)              g_sel[g_nsel++] = strdup(tok);
         tok = strtok(NULL, ",");
     }
     free(buf);
@@ -1057,32 +1048,43 @@ static void print_usage(const char *prog)
     @<Print usage examples@>
 }
 
-@ The options section is split into two further sub-modules so each
+@ The options section is split into three sub-modules so each
 fprintf stays inside the twenty-four line limit.
 
 @<Print usage options@>=
 @<Print usage flags@>
+@<Print usage swimmers@>
 @<Print usage event codes@>
 
-@ The \.{-o} keyword list.
+@ The \.{-o} keyword list.  A token is either one of the four behaviour
+keywords below or a swimmer {\it id\/}; behaviour keywords and ids may be
+freely mixed.  With no swimmer id every swimmer on the roster is
+processed.
 
 @<Print usage flags@>=
 fprintf(stderr,
-    "Usage: %s -o option[,option...] [-e event[,event...]]\n\n"
-    "  -o option,...   comma-separated output options:\n"
-    "       stella      restrict output to Stella Julianna Evans\n"
-    "       kalea       restrict output to Kalea Rose Benavente\n"
-    "       kenny       restrict output to Kenneth Ray Evans\n"
-    "       keith       restrict output to Keith Santiago Evans\n"
-    "       ledecky10   Katie Ledecky's 9- and 10-year-old times\n"
-    "       ledecky12   Katie Ledecky's 11- and 12-year-old times\n"
-    "       ledecky14   Katie Ledecky's 13- and 14-year-old times\n"
+    "Usage: %s -o token[,token...] [-e event[,event...]]\n\n"
+    "  -o token,...    comma-separated; each token is a behaviour keyword\n"
+    "                  or a swimmer id.  Behaviour keywords:\n"
     "       fastest     print only the single fastest time per event\n"
     "       csv         emit CSV output (header + one line per time)\n"
     "       store       persist each row to Postgres swim-times via libpq\n"
     "       offline     read times from the Postgres swim-times DB\n"
-    "                   instead of querying USA Swimming over the network\n\n",
+    "                   instead of querying USA Swimming over the network\n"
+    "  Any other token selects a swimmer by id; with none, all are shown.\n\n",
     prog);
+
+@ The swimmer ids are listed straight from the |SWIMMERS| roster so the
+help text can never drift out of sync with the table.
+
+@<Print usage swimmers@>=
+fprintf(stderr, "  swimmer ids (%d):\n", NUM_SWIMMERS);
+for (int i = 0; i < NUM_SWIMMERS; i++)
+    fprintf(stderr, "%s%-22s%s",
+            (i % 3 == 0) ? "       " : "",
+            SWIMMERS[i].id,
+            (i % 3 == 2 || i == NUM_SWIMMERS - 1) ? "\n" : " ");
+fputc('\n', stderr);
 
 @ The \.{-e} event-code menu.
 
@@ -1117,8 +1119,8 @@ fprintf(stderr,
     prog, prog, prog, prog, prog, prog, prog, prog);
 
 @ We initialise the global \.{libcurl} state, parse the optional
-\.{-o} and \.{-e} flags, then for each swimmer (subject to swimmer-selection
-bits) resolve her |PersonKey| and iterate over events.  If one or more
+\.{-o} and \.{-e} flags, then for each swimmer (subject to the selected
+swimmer ids in |g_sel|) resolve her |memberId| and iterate over events.  If one or more
 \.{-e} codes were given only those events are fetched; otherwise all thirty-one
 are processed.  In CSV mode a single header line is printed before the first
 data row.  If no options at all are supplied, the usage message is printed
@@ -1157,7 +1159,7 @@ exits.  Otherwise global curl state is initialised (skipped under
 needed, and the DB pipe is opened if \.{store} was requested.
 
 @<Check for empty invocation@>=
-if (g_opts == 0 && g_nevents == 0) {
+if (g_opts == 0 && g_nevents == 0 && g_nsel == 0) {
     print_usage(argv[0]);
     return 1;
 }
@@ -1177,13 +1179,10 @@ if (g_opts & (OPT_STORE | OPT_OFFLINE)) {
 }
 
 @ Each swimmer is visited in turn.  The swimmer-filter mask is applied
-before the expensive |PersonKey| lookup.  The DB pipe (if any) is
+before the expensive |memberId| lookup.  The DB pipe (if any) is
 flushed and closed before \.{libcurl} is torn down.
 
 @<Fetch and print swimmer times@>=
-int swimmer_mask = OPT_STELLA | OPT_KALEA | OPT_KENNY | OPT_KEITH
-                 | OPT_LEDECKY10 | OPT_LEDECKY12 | OPT_LEDECKY14;
-
 for (int s = 0; s < NUM_SWIMMERS; s++) {
     @<Process one swimmer@>
 }
@@ -1193,13 +1192,17 @@ if (!(g_opts & OPT_OFFLINE)) curl_global_cleanup();
 return 0;
 
 @ One swimmer is resolved and all requested events are fetched.
-Under \.{offline} the network |PersonKey| lookup is bypassed and the
+Under \.{offline} the network |memberId| lookup is bypassed and the
 swimmer's display name is taken from the database in |offline_fetch|.
 The online branch is split into its own sub-chunk.
 
 @<Process one swimmer@>=
-if ((g_opts & swimmer_mask) && !(g_opts & SWIMMERS[s].flag))
-    continue;
+if (g_nsel > 0) {
+    int selected = 0;
+    for (int k = 0; k < g_nsel; k++)
+        if (strcmp(g_sel[k], SWIMMERS[s].id) == 0) { selected = 1; break; }
+    if (!selected) continue;
+}
 
 if (g_opts & OPT_OFFLINE) {
     @<Fetch events offline@>
@@ -1208,15 +1211,15 @@ if (g_opts & OPT_OFFLINE) {
 
 @<Online swimmer dispatch@>
 
-@ The online path resolves a |PersonKey| and dispatches the per-event
+@ The online path resolves a |memberId| and dispatches the per-event
 fetcher.  A failed lookup is fatal; the DB pipe is closed and curl is
 torn down before exit.
 
 @<Online swimmer dispatch@>=
 const char *name = NULL;
-char *key = lookup_person_key(SWIMMERS[s].search_query,
-                              SWIMMERS[s].match_substr,
-                              &name);
+char *key = lookup_member_id(SWIMMERS[s].search_query,
+                             SWIMMERS[s].match_substr,
+                             &name);
 if (!key) {
     db_close();
     curl_global_cleanup();
@@ -1224,7 +1227,7 @@ if (!key) {
 }
 
 if (!(g_opts & OPT_CSV))
-    printf("Swimmer: %s  (PersonKey: %s)\n\n",
+    printf("Swimmer: %s  (MemberId: %s)\n\n",
            name ? name : "(unknown)", key);
 
 @<Fetch events for swimmer@>
@@ -1250,7 +1253,7 @@ if (g_nevents > 0) {
 }
 
 @ The offline counterpart calls |offline_fetch| once per event.  No
-HTTP request is performed, no |PersonKey| is resolved, and the DB
+HTTP request is performed, no |memberId| is resolved, and the DB
 pipe is irrelevant (\.{store} composes only with online runs).
 
 @<Fetch events offline@>=
@@ -1271,106 +1274,51 @@ The following terms and interfaces appear throughout this program.
 \def\gitem#1{\medskip\noindent{\bf #1.}\enspace\ignorespaces}
 \def\sig#1{\par\noindent\quad{\tt #1}\par\noindent}
 
-\gitem{JAQL (JSON Analytics Query Language)}
-The query language used by the Sisense Analytic Engine to describe data
-requests.  A JAQL query is a JSON object posted to the endpoint
-\.{/api/datasources/\{name\}/jaql}.  Its \.{metadata} array specifies
-the columns (dimensions or measures) to retrieve; \.{filter} objects
-restrict row membership; and \.{count}/\.{offset} control pagination.
-The Sisense back-end translates JAQL to an internal columnar query,
-executes it against the ElastiCube, and returns results in a
-\.{values} array whose rows are parallel to the \.{metadata} array.
+\gitem{USA Swimming times API}
+The first-party REST service at \.{times-api.usaswimming.org} that
+backs the public data hub at \.{data.usaswimming.org}.  It replaced the
+Sisense JAQL analytics API this program originally used (now
+decommissioned for public callers).  Requests are ordinary HTTP
+\.{GET}/\.{POST} calls returning JSON; the OpenAPI description is
+published at \.{.../swagger/v1/swagger.json}.
 
-\gitem{Sisense Analytic Engine (ElastiCube)}
-A columnar, in-memory analytics database developed by Sisense.
-USA Swimming hosts a Sisense instance at
-\.{usaswimming.sisense.com} that powers the public data hub at
-\.{data.usaswimming.org}.  The engine stores swim-time, meet, person,
-and time-standard data in compressed column stores called
-{\it ElastiCubes}; this program queries two of them---``Public Person
-Search'' and ``USA Swimming Times Elasticube''---via their JAQL
-endpoints, authenticating with a bearer token in the
-\.{Authorization} HTTP header.
+\gitem{Anonymous data-hub authentication}
+The times API uses no bearer token for public data.  Every request
+instead carries three headers: \.{Usas-Sub-Id} (the caller's subject,
+or the literal \.{Anonymous} when not signed in), \.{AppName: DataHub},
+and a \.{Device-Id}.  The server validates the {\it format\/} of the
+\.{Device-Id}---base64 of \.{"<platform> - <vendor> - <fingerprint> -
+<millis>"} with the first five base64 characters repeated after the
+fifteenth---so |device_id| mints a conforming value at run time.
 
-@ {\bf Sisense JAQL API Calls.}
-All requests are HTTP POST to \.{https://usaswimming.sisense.com/api/datasources/\{ds\}/jaql}
-with headers \.{Content-Type: application/json} and
-\.{Authorization: Bearer \{token\}}.
-The JSON request body has the following top-level fields:
+\gitem{memberId}
+The service's identifier for a swimmer, an alphanumeric token such as
+\.{6CD35348E5824C} (it replaces the old numeric \.{PersonKey}).
 
-\medskip
-\item{$\bullet$} \.{datasource} (object).
-  Identifies the ElastiCube to query.
-  \par\noindent Fields:
-  \itemitem{--} \.{title} (string): human-readable name,
-    e.g.\ \.{"Public Person Search"}.
-  \itemitem{--} \.{fullname} (string): internal path used by the server,
-    e.g.\ \.{"LocalHost/Public Person Search"}.
-
-\item{$\bullet$} \.{metadata} (array of objects).
-  Each element describes one column of the result.
-  \par\noindent Per-element fields:
-  \itemitem{--} \.{jaql.table} (string): the ElastiCube table name
-    (e.g.\ \.{"Persons"}, \.{"UsasSwimTime"}, \.{"Meet"},
-    \.{"SwimEvent"}, \.{"TimeStandard"}).
-  \itemitem{--} \.{jaql.column} (string): the column name within the table
-    (e.g.\ \.{"FullName"}, \.{"PersonKey"}, \.{"SwimTimeFormatted"},
-    \.{"SortKey"}, \.{"MeetName"}, \.{"SeasonCalendarKey"},
-    \.{"EventCode"}, \.{"StandardType"}).
-  \itemitem{--} \.{jaql.dim} (string): the bracketed dimension path
-    \.{"[Table.Column]"} used by the query engine.
-  \itemitem{--} \.{jaql.datatype} (string): \.{"text"} or \.{"numeric"}.
-  \itemitem{--} \.{jaql.title} (string): label for the column in the response.
-  \itemitem{--} \.{jaql.filter} (object, optional): restricts rows.
-    This program uses two filter types:
-    \.{\{"contains": "..."\}} for substring matches on text columns
-    (person search) and \.{\{"equals": value\}} for exact matches
-    ({\tt PersonKey} and {\tt EventCode} scope filters).
-  \itemitem{--} \.{panel} (string, optional): when set to \.{"scope"}
-    the column acts as a {\it scope filter}---it narrows the result set
-    without appearing as an output column.
-
-\item{$\bullet$} \.{count} (integer).
-  Maximum number of rows to return.
-  This program uses 10 for quick existence checks and 100 for full
-  result sets.
-
-\item{$\bullet$} \.{offset} (integer).
-  Zero-based row offset for pagination.
-
-\medskip\noindent
-The response body is a JSON object.  Relevant fields:
+@ {\bf USA Swimming REST API Calls.}
+Both endpoints live under
+\.{https://times-api.usaswimming.org/swims/TimesSearch} and carry
+\.{Content-Type: application/json} plus the anonymous auth headers
+above.
 
 \medskip
-\item{$\bullet$} \.{values} (array of arrays).
-  Each inner array is one result row; its elements correspond
-  positionally to the non-scope entries in \.{metadata}.
-  Each element is an object with two keys: \.{data} (the raw value,
-  number or string) and \.{text} (the formatted string representation).
-  This program always reads the \.{text} field.
+\item{$\bullet$} {\bf Member search.}
+  \.{POST /GetMembersForFilters} with body
+  \.{\{"name":"<query>"\}}.  Returns a JSON array of member objects,
+  each with (among others) \.{memberId}, \.{fullName}, \.{clubName},
+  and \.{lscCode}.  This program scans the array for the first member
+  whose lower-cased \.{fullName} contains the match substring and keeps
+  that record's \.{memberId}.
 
-\item{$\bullet$} \.{error} (boolean, present on failure).
-  When true, \.{details} contains an error message.
-
-\medskip\noindent
-{\bf Person search call.}
-Endpoint: \.{.../aPublicIAAaPersonIAAaSearch/jaql}.
-Queries the \.{Persons} table with a \.{contains} filter on
-\.{FullName}.  Returns \.{FullName} (text) and \.{PersonKey} (numeric)
-columns.  This program sends \.{count:100} and scans rows until it
-finds one whose lower-cased name contains the match substring.
-
-\medskip\noindent
-{\bf Times query call.}
-Endpoint: \.{.../aUSAIAAaSwimmingIAAaTimesIAAaElasticube/jaql}.
-Uses two scope filters (\.{PersonKey} equals and \.{EventCode} equals)
-and retrieves five output columns in order:
-\.{SwimTimeFormatted} (formatted time string),
-\.{SortKey} (numeric sort key as decimal string, smaller = faster),
-\.{MeetName} (meet name),
-\.{SeasonCalendarKey} (swim date as \.{YYYYMMDD} integer), and
-\.{StandardType} from the \.{TimeStandard} table
-(motivational level: \.{"B"}, \.{"BB"}, \.{"A"}, \.{"Slower Than B"}, etc.).
+\item{$\bullet$} {\bf Best-times fetch.}
+  \.{GET /GetBestTimesForMember/\{memberId\}}.  Returns a JSON array
+  with one object per event, each carrying \.{strokeAbbreviation},
+  \.{distance} (numeric), \.{courseCode}, and \.{swimTime} (formatted).
+  The event code is reassembled as \.{"<distance> <stroke> <course>"}
+  and matched against the requested event.  The anonymous feed does not
+  include swim date, meet name, or motivational standard; the richer
+  endpoints that do (\.{GetAllTimesForFilters}, \.{GetSwimmerMeets})
+  require a signed-in subject and return \.{403} otherwise.
 
 @ {\bf libcurl API Calls.}
 This program uses the libcurl ``easy'' interface for synchronous HTTP.
@@ -1395,7 +1343,7 @@ noted.
 \item{$\bullet$} {\tt curl\_easy\_init(void)}.
   Allocates and returns a new easy handle (a \.{CURL *}).
   Returns \.{NULL} on failure.
-  Each call to |post_json| creates its own handle and destroys it
+  Each call to |http_request| creates its own handle and destroys it
   before returning, so handles are never shared between requests.
 
 \item{$\bullet$} {\tt curl\_easy\_setopt(handle, option, value)}.
@@ -1405,10 +1353,11 @@ noted.
     the behaviour to configure.  Options used here:
     \itemitem{} \.{CURLOPT\_URL} ({\tt char *}) --- the request URL.
     \itemitem{} \.{CURLOPT\_HTTPHEADER} ({\tt struct curl\_slist *}) ---
-      linked list of extra HTTP headers
-      (\.{Content-Type} and \.{Authorization}).
+      linked list of extra HTTP headers (\.{Content-Type} and the
+      anonymous \.{Usas-Sub-Id}, \.{AppName}, \.{Device-Id} headers).
     \itemitem{} \.{CURLOPT\_POSTFIELDS} ({\tt char *}) ---
-      the POST body; setting this also switches the method to POST.
+      the POST body; set only when a body is supplied, which also
+      switches the method to POST (best-times fetches are plain GETs).
     \itemitem{} \.{CURLOPT\_WRITEFUNCTION} (function pointer) ---
       callback invoked for each response chunk; signature
       {\tt size\_t cb(void*,size\_t,size\_t,void*)}.
@@ -1422,7 +1371,7 @@ noted.
   Executes the configured request synchronously, invoking the write
   callback for each received chunk.
   Returns \.{CURLE\_OK} on success or a non-zero error code; on failure
-  |post_json| frees the partial buffer and returns \.{NULL}.
+  |http_request| frees the partial buffer and returns \.{NULL}.
 
 \item{$\bullet$} {\tt curl\_easy\_cleanup(handle)}.
   \par\noindent Parameter: {\tt handle} ({\tt CURL *}).
@@ -1538,16 +1487,15 @@ description of each parameter, and a note on how the program uses it.
   \itemitem{--} {\tt s}: null-terminated string to duplicate.
   Allocates a new heap block of {\tt strlen(s)+1} bytes, copies
   {\tt s} into it, and returns the pointer; returns \.{NULL} on failure.
-  Used in |lookup_person_key| to persist the swimmer's full name and
-  PersonKey string across the lifetime of a query.
+  Used in |lookup_member_id| to persist the swimmer's full name and
+  memberId string across the lifetime of a query.
 
 \item{$\bullet$} {\tt size\_t strlen(const char *s)}.
   \par\noindent Parameter:
   \itemitem{--} {\tt s}: null-terminated string.
   Returns the number of bytes before the null terminator.
-  Used to compute loop bounds when lower-casing names, to advance
-  past a search needle in |scan_string| and |scan_long|, and to
-  validate the 8-character date string in |format_date|.
+  Used to compute loop bounds when lower-casing names and to advance
+  past a search needle in |scan_string| and |scan_long|.
 
 \item{$\bullet$} {\tt char *strncpy(char *dst, const char *src, size\_t n)}.
   \par\noindent Parameters:
@@ -1560,7 +1508,8 @@ description of each parameter, and a note on how the program uses it.
   Returns {\tt dst}.
   This program always writes {\tt dst[sizeof dst - 1] = '\char`\\0'}
   after the call to guarantee termination.
-  Used to copy time, standard, and meet strings into {\tt TimeRow}.
+  Used to copy the swimmer name and requested event codes; fixed
+  {\tt TimeRow} fields are filled with |snprintf| instead.
 
 \item{$\bullet$} {\tt char *strstr(const char *hay, const char *needle)}.
   \par\noindent Parameters:
@@ -1569,8 +1518,8 @@ description of each parameter, and a note on how the program uses it.
   Returns a pointer to the first occurrence of {\tt needle} in
   {\tt hay}, or \.{NULL} if not found.
   The workhorse of the JSON scanner: used to locate key names
-  (\.{"text"}, \.{"data"}, \.{"values"}) and to advance through
-  the raw Sisense response text.
+  (\.{"memberId"}, \.{"fullName"}, \.{"swimTime"}, \dots) and to
+  advance through the raw REST response text.
 
 \item{$\bullet$} {\tt double strtod(const char *s, char **endptr)}.
   \par\noindent Parameters:
@@ -1579,8 +1528,8 @@ description of each parameter, and a note on how the program uses it.
     first character not consumed by the conversion.
   Returns the parsed {\tt double}; sets {\tt *endptr} past the
   converted text.
-  Used to convert the Sisense sort-key string
-  (e.g.\ \.{"1010007029.00"}) to a {\tt double} for the insertion sort.
+  Used by |time_to_seconds| to convert each colon-separated group of a
+  formatted time (e.g.\ \.{"1:40.36"}) to a {\tt double} sort key.
 
 \item{$\bullet$} {\tt long strtol(const char *s, char **endptr, int base)}.
   \par\noindent Parameters:
@@ -1590,7 +1539,7 @@ description of each parameter, and a note on how the program uses it.
   \itemitem{--} {\tt base}: numeric base (2--36), or 0 for auto-detection
     from a \.{0x} or \.{0} prefix.  This program passes 10 (decimal).
   Returns the parsed {\tt long}; sets {\tt *endptr} past the converted
-  text.  Used in |scan_long| to read the \.{PersonKey} integer from
-  the JSON person-search response.
+  text.  Used in |scan_long| to read the numeric \.{distance} field
+  from the JSON best-times response.
 
 @* Index.
