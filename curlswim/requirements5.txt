@@ -33,3 +33,5 @@ for each user and put their times in the local Postgres database.
 
 4. Update the SRS with the names and "aliases" of all the swimmers this program is designed to fetch.
 
+5.  Add the option "list", i.e., swim-times -o list, to list out all the named swimmers in the database.
+

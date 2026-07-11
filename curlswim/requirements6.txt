@@ -1,0 +1,7 @@
+1.  Make sure that along with the times of the named swimmer, we include the date of the time, the swim meet, and wether
+the time was a "B", "BB", "A", "AA", "AAA" or "AAAA" time.
+
+2. Figure out how to retrieve all the data asked for in option 1 above.
+
+
+

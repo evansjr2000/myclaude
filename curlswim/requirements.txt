@@ -1,11 +1,3 @@
-1. Create a bash script to fetch Stella Julianna Evans' latest 100 free time from the usa swim database.  Stella is ten years old and swims for the College Area Swim team.
-
-2. Create a bash script to fetch Stella Julianna Evans' latest 50 free time from the usa swim database.  Stella is ten years old and swims for the College Area Swim team.
-
-3. Create a bash script to fetch Stella Julianna Evans' latest 200 free time from the usa swim database.  Stella is ten years old and swims for the College Area Swim team.
-
-4.  Create a "C" literate program, using Donald Knuth's literate programming paradigm, and the cweb.sh script
-in this directory, that programmatically accesses the USA Swim Database and gets Stella Julianna Evans' latest 50, 100, and 200 swim times.
 
 5. Create a Makefile to build the documentation, extract the "C" code, and compile and build the  program.
 
@@ -13,17 +5,12 @@ in this directory, that programmatically accesses the USA Swim Database and gets
 
 7. Create a ".tex" file from the ".w" file, using cweb.sh.  Then run pdftex on the ".tex" file and figure out why I am getting errors when I run "pdftex".  Fix errors.
 
-8. Add the the 50 butterfly, 100 butterfly, 50 back, 100 back, 50 breaststroke, 100 breaststroke, 100 IM and 200 IM to the events fetched for Stella Julianna Evans.
-
-9.  Add Kalea Rose Benavente, Kenneth Ray Evans, and Keith Santiago Evans to the list of swimmers to fetch times for.  Also include the 500 yard freestyle time.
-
 10.  Add the date of the swim meet to the output.
 
 11.  Add the level obtained in the swim, i.e., "B", or "BB", or "A", etc. to the output.
 
-12.  Add a glossary to the documentation.  Define JAQL and Sisense Analytic Engine and all POSIX system calls in
-the glossary. Include a description of the parameters used in the POSIX system calls.  Also describe the API calls
-and their parameters for all JAQL and Sisense calls.
+12.  Add a glossary to the documentation.  Document all POSIX system calls in
+the glossary. Include a description of the parameters used in the POSIX system calls.  
 
 12a. Add a description near the top of the documentation on what literate programming is.  Also add descriptions
 of the ctangle and cweave programs, and describe how they work.
