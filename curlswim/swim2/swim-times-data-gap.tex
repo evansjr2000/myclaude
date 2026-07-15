@@ -1,0 +1,300 @@
+% swim-times-data-gap.tex
+% Technical report: reachability of swim date, meet, and time standard
+% Compiled with: pdflatex swim-times-data-gap.tex
+
+\documentclass[12pt]{article}
+
+\usepackage{geometry}
+\geometry{letterpaper, margin=1in}
+
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+\usepackage{listings}
+
+\definecolor{castblue}{RGB}{0,48,135}
+\definecolor{lightgray}{gray}{0.95}
+\definecolor{okgreen}{RGB}{0,120,0}
+\definecolor{badred}{RGB}{170,0,0}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{lightgray},
+  frame=single,
+  framesep=4pt,
+  rulecolor=\color{lightgray},
+  breaklines=true,
+  showstringspaces=false,
+  language=,
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small College Area Swim Team}
+\fancyhead[R]{\small Data-Gap Report: swim-times}
+\fancyfoot[C]{\thepage}
+
+\titleformat{\section}{\large\bfseries\color{castblue}}{\thesection}{0.5em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\yes}{\textcolor{okgreen}{\textbf{200 OK}}}
+\newcommand{\no}{\textcolor{badred}{\textbf{403}}}
+
+\begin{document}
+
+% -----------------------------------------------------------------
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\Huge\bfseries\color{castblue} Technical Report\\[0.5em]}
+  {\Large Retrieving Swim Date, Meet, and Time Standard\\[0.3em]
+   from the USA~Swimming Data Hub}\\[2em]
+  {\large College Area Swim Team (CAST)}\\[0.5em]
+  {\normalsize Prepared for: J.~Evans (project owner)}\\[0.5em]
+  {\normalsize Prepared by: CAST Technology Working Group}\\[2em]
+  \begin{tabular}{ll}
+    Document identifier: & CAST-TR-002                                 \\
+    Revision:            & 1.1                                         \\
+    Date:                & July 13, 2026                               \\
+    Status:              & Released                                    \\
+    Subject program:     & \code{swim2/swim-times.w}                    \\
+  \end{tabular}
+  \vfill
+  {\small\textit{All endpoint behaviour reported here was probed live against
+  the production API on 13~July~2026 using the program's own anonymous
+  authentication headers.}}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+% =================================================================
+\section{Executive Summary}
+% =================================================================
+
+The \code{swim-times} program fetches each swimmer's best time per event
+from the USA~Swimming data hub, but leaves three columns empty: the
+\textbf{swim date}, the \textbf{meet name}, and the \textbf{motivational /
+age-group time standard} (B, BB, A, \dots). This report determines whether
+those fields can be obtained and, where they cannot, explains why and lays
+out alternatives.
+
+\medskip
+\noindent\textbf{Verdict.}
+\begin{itemize}[leftmargin=1.4em]
+  \item The three fields \emph{do} exist in the API and are even returned
+        \emph{anonymously} by one endpoint
+        (\code{AllTimes/SwimTime/\{swimTimeId\}}), which yields
+        \code{swimDate}, \code{meetName}, and \code{timeStandard} together.
+  \item \textbf{They cannot be reached anonymously for a given swimmer's
+        best times}, because the only anonymous per-swimmer endpoint returns
+        a \code{swimTimeRecognitionId} that lives in a \emph{different id
+        space} than the \code{swimTimeId} the detail endpoint requires, and
+        every endpoint that would enumerate a member's \code{swimTimeId}s
+        (full-times, meets, per-member standards) rejects the anonymous
+        caller with HTTP~403.
+  \item \textbf{The time-standard column is fully solvable offline} with data
+        already in the repository, independent of the API.
+  \item \textbf{Date and meet are obtainable only with an authenticated
+        USA~Swimming session}, which is the sole complete fix.
+\end{itemize}
+
+% =================================================================
+\section{Background: What Is Missing and Why}
+% =================================================================
+
+The anonymous best-times feed the program relies on
+(\code{GetBestTimesForMember}) returns exactly six fields per event:
+
+\begin{lstlisting}
+{ "swimTimeRecognitionId": 170567980, "strokeName": "Freestyle",
+  "strokeAbbreviation": "FR", "distance": 50,
+  "courseCode": "SCY", "swimTime": "22.64r" }
+\end{lstlisting}
+
+There is no date, no meet, and no standard in this record. The program
+therefore prints those columns empty, and the automated test suite records
+the corresponding failures (\code{REQ-F-42}, \code{REQ-F-14/15/16} for the
+Ledecky age-window filters, and \code{REQ-F-73} for de-duplication, whose
+\code{UNIQUE} key includes the absent \code{swim\_date}).
+
+% =================================================================
+\section{Investigation Method}
+% =================================================================
+
+The production times API at \code{times-api.usaswimming.org} authenticates
+anonymous callers with three headers --- \code{Usas-Sub-Id: Anonymous},
+\code{AppName: DataHub}, and a format-validated \code{Device-Id} --- exactly
+as the program does. Using those headers, every endpoint in the published
+OpenAPI description (\code{/swagger/v1/swagger.json}, 122 paths) that could
+plausibly carry date, meet, or standard was exercised with representative
+parameters. Katie Ledecky (member \code{6CD35348E5824C}) was used as a
+stable, public test subject.
+
+% =================================================================
+\section{Findings}
+% =================================================================
+
+\subsection{Endpoint reachability (anonymous)}
+
+\begin{center}
+\begin{longtable}{@{}p{6.9cm} l p{4.6cm}@{}}
+  \toprule
+  \textbf{Endpoint} & \textbf{Status} & \textbf{Carries date/meet/std?} \\
+  \midrule\endhead
+  \code{GetMembersForFilters} (search)      & \yes & no (identity only) \\
+  \code{GetMember/\{memberId\}}             & \yes & no \\
+  \code{GetBestTimesForMember/\{memberId\}} & \yes & \textbf{no} --- time only \\
+  \code{AllTimes/SwimTime/\{swimTimeId\}}   & \yes & \textbf{YES --- all three} \\
+  \code{GetAllEvents}, \code{GetCompetitionGenders} & \yes & reference data \\
+  \code{GetAllTimeStandards}, \code{GetSeasons}     & \yes & reference data \\
+  \midrule
+  \code{GetAllTimesForFilters} (full history) & \no & would, but blocked \\
+  \code{Time/search}, \code{Time/TopTimes/search} & \no & would, but blocked \\
+  \code{GetSwimmerMeets/\{memberId\}}       & \no & would, but blocked \\
+  \code{GetSwimmerCourses/\{memberId\}}     & \no & blocked \\
+  \code{GetSwimmerEvents/\{memberId\}}      & \no & blocked \\
+  \code{GetSwimmerTimeStandards/\{memberId\}} & \no & blocked \\
+  \code{Time/Recognition/\{id\}}, \code{Time/\{id\}} & \no & blocked \\
+  \code{BiqQuery/GetBestTimesForMember}     & \no & blocked \\
+  \bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{The complete-detail endpoint works anonymously}
+
+\code{AllTimes/SwimTime/\{swimTimeId\}} returns everything the program is
+missing, without any credential:
+
+\begin{lstlisting}
+GET /swims/TimesSearch/AllTimes/SwimTime/170567980   ->  200 OK
+{ "meetName": "2019 OZ CFAC MLK Invitational",
+  "eventCode": "100 BK SCY", "swimDate": "Jan 19, 2019",
+  "fullName": "Brendan Worster", "swimTime": "1:01.61",
+  "timeStandard": "A", "timeDrop": -4.02,
+  "finishPosition": 2, "powerPoints": 591 }
+\end{lstlisting}
+
+\subsection{The core obstacle: two different id spaces}
+
+The trap is subtle. Ledecky's best 50~FR~SCY record above carries
+\code{swimTimeRecognitionId = 170567980}. Feeding that number to the detail
+endpoint returns \emph{a different swimmer entirely} (Brendan Worster's
+100~BK~SCY, shown above). The \code{swimTimeRecognitionId} from the
+best-times feed and the \code{swimTimeId} the detail endpoint consumes are
+\textbf{distinct identifier spaces that merely overlap numerically.} There
+is no anonymous endpoint that converts one to the other, and no anonymous
+endpoint that lists a member's \code{swimTimeId}s. The endpoints that would
+(\code{GetAllTimesForFilters}, \code{Time/search}, \code{GetSwimmerMeets})
+all answer \no\ regardless of the request body --- the rejection is on the
+\code{Anonymous} subject, not on parameters.
+
+\medskip
+\noindent\textbf{Conclusion:} the detail endpoint is a locked room with the
+data inside it; the anonymous tier hands us the wrong key and withholds the
+directory that would tell us which key to cut.
+
+% =================================================================
+\section{Options and Alternatives}
+% =================================================================
+
+\subsection{Option A --- Authenticated access (the only complete fix)}
+
+Log in with a USA~Swimming account through \code{security-api} and use the
+real subject id instead of \code{Anonymous}. With a valid sub,
+\code{GetAllTimesForFilters} returns the full swim history --- each row
+carrying \code{swimTimeId}, \code{swimDate}, \code{meetName}, and
+\code{timeStandard} --- which closes all three gaps at once and also revives
+the Ledecky age-window filters (\code{REQ-F-14/15/16}) and de-duplication
+(\code{REQ-F-73}).
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Effort:} medium. Add a login step (\code{Account/Login} ->
+        token), send the token / real \code{Usas-Sub-Id}, and switch the
+        fetch path from best-times to \code{GetAllTimesForFilters}.
+  \item \textbf{Cost to you:} your USA~Swimming credentials, stored/entered
+        securely (e.g.\ an environment variable, never in the source).
+  \item \textbf{Caveat:} confirm that automated retrieval from
+        logged-in endpoints is within USA~Swimming's acceptable-use terms
+        before deploying it.
+\end{itemize}
+
+\subsection{Option B --- Compute the standard locally (do this regardless)}
+
+The \emph{time standard} column needs no API at all. The repository already
+contains \code{motivational-time-standards.pdf} (B/BB/A/\dots) and
+\code{sdi-agc-time-standards.pdf}. Given a best time plus the swimmer's age
+and gender and the event, the attained standard is a deterministic table
+lookup. This fully closes the standard column offline and would make
+\code{REQ-F-32}'s standard field meaningful even in anonymous mode.
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Effort:} low--medium. Encode the two standards tables (they
+        already exist as PDFs) and compare.
+  \item \textbf{Limitation:} solves standard only; date and meet still
+        require Option~A.
+\end{itemize}
+
+\subsection{Option C --- Enrich by swimTimeId when one is available}
+
+Because \code{AllTimes/SwimTime/\{swimTimeId\}} is anonymous and complete,
+\emph{any} route that yields a real \code{swimTimeId} makes date, meet, and
+standard a single extra GET away. The practical routes to a
+\code{swimTimeId} are Option~A (login) or scraping (Option~E) --- so this is
+an enrichment step layered on another option, not a standalone solution.
+
+\subsection{Option D --- Public leaderboard (partial, ranked swims only)}
+
+\code{GetTopTimesLeaderBoard} is public in principle and its rows include a
+\code{swimTimeId}. In testing it required an exact combination of season,
+LSC, and zone parameters and otherwise returned ``no records,'' and it only
+covers \emph{top-ranked} swims per event. It is therefore unusable for
+arbitrary age-group swimmers and is not recommended as the primary path.
+
+\subsection{Option E --- Read the website / manual lookup}
+
+The data hub website renders date, meet, and standard for anonymous
+visitors. A person can read them directly (the manual process the program
+was built to replace), or a browser-automation scraper could drive the
+JavaScript single-page app. Scraping was rejected earlier as brittle
+(JS-rendered content, no stable contract) and is a last resort.
+
+% =================================================================
+\section{Recommendation}
+% =================================================================
+
+\textbf{Implementation status (Rev.~1.1).} Option~B has since been
+implemented for the motivational standard: the official standards are loaded
+into a \code{motivational\_standard} Postgres table (seeded from the PDF by
+\code{tools/parse-motivational.py}), and the program computes each best
+time's standard with one \code{libpq} query, keyed on the swimmer's gender
+and the age group derived from the live member search. The standard column
+is now populated; date and meet remain empty pending the Option~A decision.
+
+\begin{enumerate}[leftmargin=1.6em]
+  \item \textbf{Option~B --- done.} The motivational standard is computed
+        locally from a Postgres table seeded from the official standards,
+        closing one of the three columns with no credentials or network risk.
+  \item \textbf{Decide on Option~A for date and meet.} If those two columns
+        matter, authenticated access is the only complete route; it also
+        restores the age-window and de-duplication requirements. If they do
+        not, leave them empty and mark \code{REQ-F-42} and \code{REQ-F-14/15/16}
+        as \emph{out of scope for the anonymous build}, which the SRS and SDD
+        already document as a known limitation.
+  \item \textbf{Do not pursue Options~D or~E} except as a fallback; neither
+        is a reliable general solution.
+\end{enumerate}
+
+\medskip
+\noindent In short: the standard is a quick offline win; the date and meet
+are gated behind a USA~Swimming login and require a product decision about
+whether to authenticate.
+
+\end{document}

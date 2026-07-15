@@ -85,8 +85,9 @@ successful test run prior to release.
 
 This STP covers verification of the swim-times executable that
 is tangled out of \code{swim2/swim-times.w}.  It does not cover
-verification of upstream USA~Swimming data, the Sisense back-end,
-or the unrelated Pandoc-based PDF report at \code{swim/swim-times.md}.
+verification of upstream USA~Swimming data, the back-end REST
+services, or the unrelated Pandoc-based PDF report at
+\code{swim/swim-times.md}.
 
 \subsection{References}
 
@@ -115,7 +116,7 @@ or the unrelated Pandoc-based PDF report at \code{swim/swim-times.md}.
 \subsection{Project background}
 
 swim-times is a single-binary command-line utility that retrieves
-swim times from the USA~Swimming data hub via the Sisense JAQL API.
+swim times from the USA~Swimming data hub via its public REST times service.
 The full operational context is described in CAST-CONOPS-001.
 
 \subsection{Test items}
@@ -149,8 +150,8 @@ All requirements tagged \req{REQ-F-*}, \req{REQ-I-*}, \req{REQ-P-*},
 
 \begin{itemize}
   \item The test host has outbound HTTPS access to
-        \texttt{usaswimming.sisense.com}.
-  \item The Sisense bearer token embedded in the source is valid
+        \texttt{times-api.usaswimming.org}.
+  \item The public times service accepts anonymous requests
         on the day the test is executed.
   \item The four tracked swimmers continue to exist in the
         USA~Swimming Persons table.
@@ -194,10 +195,10 @@ project repository.
   \textbf{Risk} & \textbf{Likeli-} & \textbf{Impact} & \textbf{Mitigation} \\
                 & \textbf{hood}     &                  & \\
   \midrule\endhead
-  Sisense token rotation invalidates auth
-            & Med  & High & Re-embed token, recompile, retest;
+  Anonymous auth scheme changes
+            & Med  & High & Update auth headers, recompile, retest;
                             trigger STP re-run. \\
-  Sisense response schema change
+  Times-service response schema change
             & Low  & High & Test script's \req{REQ-F-32} probe
                             detects parse failure on first run. \\
   Network outage during test
@@ -235,7 +236,7 @@ by \code{test-swim-times.sh}:
         \req{REQ-F-04}) require no network.
   \item[Online behaviour sub-process.]
         Functional, performance, and reliability checks issue real
-        JAQL requests against the Sisense back-end.  Skipped
+        HTTP requests against the times REST service.  Skipped
         cleanly when network is unreachable or the operator sets
         \code{SWIM\_TIMES\_SKIP\_NETWORK=1}.
   \item[Database persistence sub-process.]
@@ -285,7 +286,7 @@ by \code{test-swim-times.sh}:
   \item Reference development host: macOS 14 with Homebrew
         \code{curl} and TeX~Live~2025.
   \item Network: outbound HTTPS to
-        \texttt{usaswimming.sisense.com}.
+        \texttt{times-api.usaswimming.org}.
   \item Optional Postgres container managed by the project's
         \texttt{pg.sh} wrapper script (Docker required); only
         the database persistence tests depend on it.  In its
@@ -299,7 +300,7 @@ The five production swimmer records and the thirty-one
 production event codes serve as test data for the online
 suites.  The database persistence suite uses whatever rows the
 \code{store} sub-test inserts in the same run; no fixture file
-is checked in.  No synthetic Sisense data is required because
+is checked in.  No synthetic API data is required because
 the system under test is read-only against a live read-only API.
 
 \subsection{Item pass/fail criteria}
@@ -323,7 +324,7 @@ Testing is suspended if:
   \item The build sub-process fails (cannot proceed without a
         binary).
   \item More than three consecutive online tests fail with
-        identical HTTP error codes (suggests a Sisense-side
+        identical HTTP error codes (suggests a service-side
         outage rather than an SUT defect).
 \end{itemize}
 
@@ -351,7 +352,7 @@ full STP shall be re-run from scratch, not partially.
   \textbf{Trigger}                              & \textbf{Action}                  \\
   \midrule
   Any change to \code{swim-times.w}             & Run STP before commit            \\
-  Sisense bearer token rotated                  & Run STP after recompile          \\
+  Anonymous auth scheme changed                 & Run STP after recompile          \\
   USA Swimming schema change announced          & Run STP, update tests if needed  \\
   Quarterly maintenance window                  & Run STP unconditionally          \\
   Pre-release of a tagged version               & Run STP; archive run log         \\
@@ -405,6 +406,7 @@ T = Test, A = Analysis).
   \req{REQ-F-14}    & T & All \code{ledecky10} dates fall in [2006-03-17, 2008-03-16]  \\
   \req{REQ-F-15}    & T & All \code{ledecky12} dates fall in [2008-03-17, 2010-03-16]  \\
   \req{REQ-F-16}    & T & All \code{ledecky14} dates fall in [2010-03-17, 2012-03-16]  \\
+  \req{REQ-F-18}    & T & \code{-o list} prints every roster id to stdout, exits 0, no network \\
   \req{REQ-F-20}    & D & Single-event \code{-e} yields exactly one event section    \\
   \req{REQ-F-21}    & D & No \code{-e} yields 31 event sections                      \\
   \req{REQ-F-22}    & D & Event-list count honoured (subset of \req{REQ-F-20})        \\
@@ -428,9 +430,9 @@ T = Test, A = Analysis).
   \req{REQ-F-75}    & T & Re-\code{store} run exits 0 with no stderr (ON CONFLICT DO NOTHING) (DB-gated) \\
   \req{REQ-I-01}    & I & No \code{stdin} read in source                              \\
   \req{REQ-I-10}    & A & \code{otool}/\code{ldd} confirms libcurl link               \\
-  \req{REQ-I-11}    & I & Header strings \code{Content-Type} and \code{Authorization} present in source \\
+  \req{REQ-I-11}    & I & Anonymous auth header strings (\code{Usas-Sub-Id}, \code{AppName}, \code{Device-Id}) present in source \\
   \req{REQ-I-12}    & I & \code{db\_conn\_string} reads \texttt{SWIM\_TIMES\_PGCONNINFO}; binary linkage includes \texttt{libpq} \\
-  \req{REQ-I-20}    & A & \code{https://usaswimming.sisense.com} substring present, no \code{http://} \\
+  \req{REQ-I-20}    & A & \code{https://times-api.usaswimming.org} substring present, no \code{http://} \\
   \req{REQ-P-01}    & D & Sample timing extrapolated to 160 requests $<$ 300 s        \\
   \req{REQ-P-02}    & D & Single query measured $<$ 10 s                              \\
   \req{REQ-P-03}    & D & Offline single query measured $<$ 2 s (DB-gated, manual)    \\

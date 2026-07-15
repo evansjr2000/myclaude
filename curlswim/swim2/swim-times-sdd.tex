@@ -164,7 +164,7 @@ formatter to standard output.  Each stage is a CWEB chunk
         \code{scan\_long}) is used in place of a third-party
         JSON library.  This satisfies \req{REQ-D-04}.  The same
         generic ``find key, take the following value'' scanner
-        served the old Sisense JAQL responses and now serves the
+        served the old JAQL responses and now serves the
         named-field REST responses unchanged (see D-6).
 
   \item[D-4: Dynamic anonymous credentials (no bearer token).]
@@ -182,8 +182,8 @@ formatter to standard output.  Each stage is a CWEB chunk
         $O(n^2)$ insertion sort is used in preference to a more
         complex algorithm.  Simpler code, fewer failure modes.
 
-  \item[D-6: REST times API, not Sisense JAQL.]
-        The data hub retired the Sisense analytics endpoint this
+  \item[D-6: REST times API, not the legacy JAQL API.]
+        The data hub retired the third-party JAQL analytics endpoint this
         program originally targeted.  The fetch path was migrated
         to the public \code{times-api.usaswimming.org} REST
         service: \code{GetMembersForFilters} resolves a name to a
@@ -196,7 +196,21 @@ formatter to standard output.  Each stage is a CWEB chunk
         on each \code{SWIMMERS} entry rather than by a per-swimmer
         option bit, so the roster can grow past the width of the
         flag word.  See \S\ref{sec:why-ids}.
-\end{description}
+
+  \item[D-8: Motivational standard computed locally from Postgres.]
+        The anonymous best-times feed omits the motivational standard
+        (see the data-gap report, CAST-TR-002), so the program computes
+        it.  The official standards are loaded into a
+        \code{motivational\_standard} table (\code{schema.sql},
+        \code{motivational-standards.sql}); \code{classify\_standard}
+        issues one parameterised \code{libpq} query per emitted row,
+        selecting the fastest standard the time meets for the swimmer's
+        gender and age group.  Gender is carried on each \code{SWIMMERS}
+        entry; age group is derived from the age the member search
+        returns, so it tracks the swimmer over time.  The database is
+        opened best-effort even for online runs; if it is unreachable,
+        or the gender/age group is unknown, the column is left blank
+        rather than wrong.
 
 % =================================================================
 \section{Design Views}
@@ -536,25 +550,25 @@ stable and the scanner has fewer than fifty lines of code; the
 cost of a custom scanner is therefore lower than the cost of a
 third-party dependency.  The scanner is deliberately format-agnostic:
 it locates a quoted key and returns the value immediately following.
-That contract held for the old Sisense JAQL arrays of
+That contract held for the old JAQL arrays of
 \code{\{"text":\dots\}}/\code{\{"data":\dots\}} cells and holds equally
 for the current REST responses of named fields
 (\code{"memberId"}, \code{"fullName"}, \code{"swimTime"}, \dots),
 so the migration of \S\ref{sec:why-rest} reused it verbatim.
 
-\subsection{Why the REST times API, not Sisense JAQL?}
+\subsection{Why the REST times API, not the legacy JAQL API?}
 \label{sec:why-rest}
 
-The program was originally built against the Sisense JAQL analytics
-API at \code{usaswimming.sisense.com} (a person-search cube and a
-times Elasticube, each queried with a bearer token).  The USA~Swimming
+The program was originally built against a third-party JAQL analytics
+API (a person-search cube and a times Elasticube, each queried with a
+bearer token).  The USA~Swimming
 data hub has since been rebuilt as a single-page app that talks to a
 family of first-party REST services
 (\code{times-api}, \code{person-api}, \code{meet-api},
 \code{security-api}) behind an Azure API-management gateway; the
-Sisense path is decommissioned for public use --- its embedded token
+legacy path is decommissioned for public use --- its embedded token
 now returns \code{401 db\_unauthorized} and the current front-end
-exposes no Sisense credential at all.  The fetch path was therefore
+exposes no such credential at all.  The fetch path was therefore
 migrated to the public times service:
 
 \begin{itemize}

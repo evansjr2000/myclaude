@@ -84,10 +84,12 @@ that:
 
 \begin{itemize}
   \item Accepts swimmer- and event-selection options on the command line.
-  \item Resolves each selected swimmer's USA~Swimming \code{PersonKey}
-        via the public Sisense JAQL person-search endpoint.
-  \item Retrieves all recorded swim times for each selected
-        swimmer--event pair from the USA~Swimming Times Elasticube.
+  \item Resolves each selected swimmer's USA~Swimming \code{memberId}
+        via the public REST member-search endpoint
+        (\code{GetMembersForFilters}).
+  \item Retrieves each selected swimmer's best recorded time per event
+        from the public REST best-times endpoint
+        (\code{GetBestTimesForMember}).
   \item Sorts results fastest-first and prints them as either a
         formatted table or comma-separated values.
 \end{itemize}
@@ -104,10 +106,11 @@ post to any social channel, or modify any USA~Swimming record.
   \item[CSV] Comma-Separated Values.
   \item[CWEB] Knuth's literate-programming toolchain for C
               (\code{ctangle} + \code{cweave}).
-  \item[ElastiCube] Sisense's columnar in-memory analytics database.
-  \item[JAQL] JSON Analytics Query Language.
+  \item[Device-Id] Client-generated identifier the times service
+                   requires for anonymous requests.
   \item[LCM] Long-Course Meters.
-  \item[PersonKey] USA~Swimming's internal numeric swimmer identifier.
+  \item[memberId] USA~Swimming's per-swimmer identifier (a hexadecimal
+                  token) returned by the member-search endpoint.
   \item[SCY] Short-Course Yards.
   \item[SDI~AGC] San Diego-Imperial Age-Group Championship.
   \item[SRS] Software Requirements Specification (this document).
@@ -148,8 +151,8 @@ swim-times is a self-contained, end-user command-line tool.
 It depends on:
 
 \begin{itemize}
-  \item The USA~Swimming Sisense analytics endpoint at
-        \texttt{usaswimming.sisense.com} for all data.
+  \item The USA~Swimming times REST service at
+        \texttt{times-api.usaswimming.org} for all data.
   \item \code{libcurl} for HTTPS transport.
   \item A POSIX C runtime for standard library functions.
 \end{itemize}
@@ -164,10 +167,12 @@ At a high level, swim-times performs:
 
 \begin{enumerate}
   \item Command-line option parsing (\code{-o}, \code{-e}).
-  \item Person-search HTTPS POST to resolve a swimmer's
-        \code{PersonKey} from a name substring.
-  \item Times-query HTTPS POST per (swimmer, event) pair.
-  \item In-memory insertion sort by Sisense \code{SortKey}.
+  \item Member-search HTTPS POST to resolve a swimmer's
+        \code{memberId} from a name substring.
+  \item Best-times HTTPS GET per swimmer, returning the best time
+        in every event at once.
+  \item In-memory insertion sort by computed swim time
+        (\code{sort\_key}, smallest first).
   \item Formatted table or CSV output to standard output.
   \item Diagnostic reporting to standard error.
 \end{enumerate}
@@ -183,8 +188,8 @@ The program has two user classes:
         flags and do not modify the source.
   \item[Maintainers.]
         Familiar with C, CWEB, and \code{libcurl}.  They retangle
-        and recompile when the Sisense bearer token rotates or
-        when new swimmers, events, or output modes are added.
+        and recompile when new swimmers, events, or output modes
+        are added.
 \end{description}
 
 \subsection{Constraints}
@@ -192,10 +197,13 @@ The program has two user classes:
 \begin{description}[style=nextline]
   \item[Network.]
         The host running swim-times must have outbound HTTPS access
-        to \texttt{usaswimming.sisense.com}.
+        to \texttt{times-api.usaswimming.org}.
   \item[Authentication.]
-        A valid Sisense bearer token must be embedded in the
-        compiled binary.  Token rotation requires a recompile.
+        The public times service authenticates anonymous callers
+        with three request headers (\code{Usas-Sub-Id: Anonymous},
+        \code{AppName: DataHub}, and a client-generated
+        \code{Device-Id}); no bearer token is embedded, and the
+        \code{Device-Id} is minted at run time.
   \item[Data source exclusivity.]
         Only the USA~Swimming data hub is consulted.
         Swimcloud is explicitly excluded by stakeholder direction.
@@ -210,11 +218,12 @@ The program has two user classes:
 \subsection{Assumptions and dependencies}
 
 \begin{itemize}
-  \item USA~Swimming continues to expose the JAQL endpoints
-        \code{aPublicIAAaPersonIAAaSearch} and
-        \code{aUSAIAAaSwimmingIAAaTimesIAAaElasticube}.
-  \item The five output cells per times-query row remain in the
-        documented order: time, sort key, meet, date, standard.
+  \item USA~Swimming continues to expose the public REST endpoints
+        \code{GetMembersForFilters} and
+        \code{GetBestTimesForMember}.
+  \item The best-times records retain their named fields
+        (\code{strokeAbbreviation}, \code{distance},
+        \code{courseCode}, \code{swimTime}).
   \item No swimmer of interest has more than 200 recorded times in
         any single event (matches the \code{MAX\_TIMES} compile-time
         constant).
@@ -267,7 +276,7 @@ The program has two user classes:
   \item[\req{REQ-F-13}] When any of the \code{ledecky10},
         \code{ledecky12}, or \code{ledecky14} keywords is
         supplied, the program shall resolve Katie Ledecky's
-        \code{PersonKey} via the same person-search path used for
+        \code{memberId} via the same person-search path used for
         the other swimmers.
   \item[\req{REQ-F-14}] When the \code{ledecky10} keyword is
         supplied, the program shall restrict output to swims whose
@@ -295,9 +304,15 @@ The program has two user classes:
         Each row gives the swimmer's full name, the unique id (alias)
         by which she is selected on the command line, and the
         person-search query and lower-cased match substring used to
-        resolve her USA~Swimming \code{PersonKey}.  ``Evans, Stella~J''
+        resolve her USA~Swimming \code{memberId}.  ``Evans, Stella~J''
         in the source roster request is the same swimmer as
         \code{stella} and is not duplicated.
+  \item[\req{REQ-F-18}] When the \code{list} keyword is supplied, the
+        program shall print every roster swimmer's selection id and
+        search name to standard output, one per line, and exit with
+        status~0 without issuing any network request or opening the
+        database.  (This realises requirement~\#5 of
+        \texttt{requirements5.txt}.)
 \end{description}
 
 \begin{longtable}{@{}l l l l@{}}
@@ -362,32 +377,46 @@ The program has two user classes:
 
 \begin{description}[style=nextline]
   \item[\req{REQ-F-30}] For each selected swimmer the program
-        shall resolve a \code{PersonKey} by issuing one HTTPS POST
-        to the Sisense person-search JAQL endpoint and matching the
-        configured lower-cased substring against the returned
-        \code{FullName} field.
-  \item[\req{REQ-F-31}] For each (swimmer, event) pair the program
-        shall issue one HTTPS POST to the Sisense times-query JAQL
-        endpoint, scoped by \code{PersonKey} equals and
-        \code{EventCode} equals.
-  \item[\req{REQ-F-32}] The program shall request five output
-        columns per times-query row in the order: time, sort key,
-        meet name, date (\code{YYYYMMDD}), motivational standard.
-  \item[\req{REQ-F-33}] The program shall request a maximum of 100
-        rows per times query.
+        shall resolve a \code{memberId} by issuing one HTTPS POST
+        to the \code{GetMembersForFilters} member-search endpoint and
+        matching the configured lower-cased substring against the
+        returned \code{fullName} field.
+  \item[\req{REQ-F-31}] For each selected swimmer the program
+        shall issue one HTTPS GET to the
+        \code{GetBestTimesForMember} endpoint, scoped by the
+        resolved \code{memberId}, returning the member's best time
+        in every event.
+  \item[\req{REQ-F-32}] From each best-times record the program
+        shall read the stroke, distance, course, and formatted swim
+        time and reassemble the event code (e.g.\ \code{100 FR SCY}).
+        The anonymous feed carries no meet or date; those two fields
+        shall be left empty.
+  \item[\req{REQ-F-33}] The program shall accommodate up to
+        \code{MAX\_TIMES} (200) records per fetch.
+  \item[\req{REQ-F-34}] The program shall compute the motivational
+        standard for each best time locally, since the anonymous feed
+        omits it.  Using the swimmer's gender (from the roster) and age
+        group (derived from the age returned by the member search), it
+        shall query the \code{motivational\_standard} table
+        (\S\ref{sec:req-db}) for the fastest standard the time meets and
+        render it in the standard column.  When the database is
+        unavailable, the gender is unknown, or the age group is not
+        tabulated, the column shall be left empty rather than erroneous.
 \end{description}
 
 \subsubsection{Result processing}
 
 \begin{description}[style=nextline]
   \item[\req{REQ-F-40}] The program shall sort the rows for each
-        event by Sisense \code{SortKey} ascending (smallest = fastest)
-        before printing.
+        event by computed swim time in seconds
+        (\code{sort\_key}, ascending, smallest = fastest) before
+        printing.
   \item[\req{REQ-F-41}] When the \code{fastest} keyword is supplied,
         the program shall print only the single fastest row per
         event, suppressing all slower entries.
-  \item[\req{REQ-F-42}] The program shall reformat dates from the
-        Sisense \code{YYYYMMDD} integer string to \code{YYYY-MM-DD}.
+  \item[\req{REQ-F-42}] When a swim date is present the program
+        shall reformat it from a \code{YYYYMMDD} integer string to
+        \code{YYYY-MM-DD}.
 \end{description}
 
 \subsubsection{Output}
@@ -410,7 +439,7 @@ The program has two user classes:
 \subsubsection{Error handling}
 
 \begin{description}[style=nextline]
-  \item[\req{REQ-F-60}] If a swimmer's \code{PersonKey} cannot be
+  \item[\req{REQ-F-60}] If a swimmer's \code{memberId} cannot be
         resolved the program shall print a diagnostic to standard
         error, free all libcurl global state, and exit with
         status~1.
@@ -472,10 +501,10 @@ The program has two user classes:
 \begin{description}[style=nextline]
   \item[\req{REQ-I-10}] The program shall use the
         \code{libcurl} ``easy'' interface for all HTTP transport.
-  \item[\req{REQ-I-11}] The program shall send the headers
-        \code{Content-Type: application/json} and
-        \code{Authorization: Bearer \{token\}} on every JAQL
-        request.
+  \item[\req{REQ-I-11}] The program shall send the anonymous
+        authentication headers \code{Usas-Sub-Id: Anonymous},
+        \code{AppName: DataHub}, and a run-time-generated
+        \code{Device-Id} on every times-service request.
   \item[\req{REQ-I-12}] The program shall reach Postgres
         \emph{programmatically} through the \texttt{libpq} client
         library --- never by spawning \texttt{psql} or any other
@@ -491,7 +520,7 @@ The program has two user classes:
 
 \begin{description}[style=nextline]
   \item[\req{REQ-I-20}] All network communication shall use HTTPS
-        (TLS) to the host \texttt{usaswimming.sisense.com}.
+        (TLS) to the host \texttt{times-api.usaswimming.org}.
 \end{description}
 
 \subsection{Performance requirements}
@@ -506,7 +535,7 @@ The program has two user classes:
         residential broadband connection.
   \item[\req{REQ-P-02}] A single-swimmer single-event query
         (\code{-o stella -e "100 FR SCY"}) shall complete within
-        ten seconds under normal Sisense response time.
+        ten seconds under normal service response time.
   \item[\req{REQ-P-03}] An offline single-swimmer single-event
         query (\code{-o stella,offline -e "100 FR SCY"}) shall
         complete within two seconds against a local Postgres
@@ -536,16 +565,25 @@ The program has two user classes:
         the seven application columns listed in REQ-F-32 plus an
         identity primary key and a \texttt{fetched\_at} timestamp,
         and shall declare a UNIQUE constraint per REQ-F-73.
+  \item[\req{REQ-D-11}]\label{sec:req-db} The \texttt{schema.sql} file
+        shall also define a \texttt{motivational\_standard} table with
+        columns \code{gender}, \code{age\_group}, \code{event},
+        \code{standard}, and \code{cut\_seconds}, keyed on
+        (\code{gender}, \code{age\_group}, \code{event}, \code{standard}).
+        It shall be seeded by \texttt{motivational-standards.sql},
+        generated from the official USA~Swimming motivational-standards
+        PDF by \texttt{tools/parse-motivational.py}.  This table backs
+        the local standard computation of \req{REQ-F-34}.
 \end{description}
 
 \subsection{Software system attributes}
 
 \begin{description}[style=nextline]
   \item[\req{REQ-A-01} (Reliability)] The program shall produce
-        identical output for identical Sisense responses on
+        identical output for identical service responses on
         repeated invocations.
-  \item[\req{REQ-A-02} (Maintainability)] All Sisense endpoint
-        URLs and bearer tokens shall be declared as named
+  \item[\req{REQ-A-02} (Maintainability)] All service endpoint
+        URLs and request-header values shall be declared as named
         constants in clearly identifiable CWEB chunks.
   \item[\req{REQ-A-03} (Portability)] The program shall build
         and run unmodified on any POSIX.1-2008 system with

@@ -94,7 +94,7 @@ swimmers (Stella Julianna Evans, Kalea Rose Benavente, Kenneth Ray
 Evans, and Keith Santiago Evans) and one or more USA~Swimming event
 codes (e.g., \code{100 FR SCY}, \code{200 IM LCM}).  For each
 selected swimmer--event pair it queries the live USA~Swimming
-Sisense analytics back-end, retrieves all recorded times, sorts
+times REST service, retrieves the swimmer's best recorded times, sorts
 them fastest-first, and prints either a human-readable table or a
 CSV stream suitable for downstream processing.
 
@@ -123,8 +123,8 @@ CSV stream suitable for downstream processing.
         \texttt{https://data.usaswimming.org/datahub/usas/individualsearch}.
         Accessed 2026.
 
-  \item Sisense Ltd., \textit{JAQL API Reference},
-        \texttt{https://docs.sisense.com/main/SisenseLinux/jaql.htm}.
+  \item USA~Swimming, \textit{Times API (OpenAPI description)},
+        \texttt{https://times-api.usaswimming.org/swagger/v1/swagger.json}.
         Accessed 2026.
 
   \item \code{swim2/swim-times.w} --- CWEB literate program source
@@ -191,7 +191,7 @@ The swim-times program eliminates all four problems identified above:
 
 \begin{enumerate}
   \item Live data is fetched directly from the authoritative
-        USA~Swimming Sisense back-end, removing the human
+        USA~Swimming times REST service, removing the human
         copy-paste step entirely.
   \item Times are always current because each invocation queries
         the live API; no stale cache is involved.
@@ -219,7 +219,7 @@ PDF generation pipeline.
 swim-times is a single-binary command-line utility compiled from
 the CWEB literate program \code{swim-times.w}.  It requires no
 daemon and no network service beyond HTTPS access to
-\texttt{usaswimming.sisense.com}.  An optional local Postgres
+\texttt{times-api.usaswimming.org}.  An optional local Postgres
 database (\texttt{swim-times}) may be used to persist results and
 to serve subsequent queries offline.
 
@@ -268,8 +268,8 @@ to serve subsequent queries offline.
         by \code{store}) and printed in the same table or CSV form.
 
   \item[Live authoritative data.]
-        Online runs fetch from the USA~Swimming Sisense ElastiCube
-        via authenticated JAQL API calls; no local cache is
+        Online runs fetch from the USA~Swimming times REST service
+        via anonymous API calls; no local cache is
         consulted unless \code{offline} is selected.
 
   \item[Motivational standard annotation.]
@@ -284,7 +284,7 @@ swim-times runs on any POSIX-compatible system with:
 
 \begin{itemize}
   \item A C99 compiler (\code{gcc} or \code{clang}).
-  \item \code{libcurl} with TLS support (for HTTPS to Sisense).
+  \item \code{libcurl} with TLS support (for HTTPS to the times service).
   \item CWEB (\code{ctangle}/\code{cweave}) if the literate source
         must be retangled or reweaved.
   \item \code{pdftex} if the typeset documentation PDF is desired.
@@ -307,10 +307,10 @@ swim-times runs on any POSIX-compatible system with:
         Command-line arguments (\code{-o}, \code{-e}).
 
   \item[Network.]
-        HTTPS POST to
-        \texttt{https://usaswimming.sisense.com/api/datasources/}
-        with a static bearer token embedded in the binary.
-        Skipped under \code{offline}.
+        HTTPS calls to
+        \texttt{https://times-api.usaswimming.org/swims/TimesSearch}
+        authenticated by anonymous request headers (no embedded
+        bearer token).  Skipped under \code{offline}.
 
   \item[Database.]
         Optional local Postgres reached \emph{programmatically}
@@ -489,17 +489,18 @@ instance (run as a Docker container managed by the
 \texttt{pg.sh} wrapper script) provides persistence and offline
 replay; absence of that container simply disables the
 \code{store} and \code{offline} keywords without affecting any
-other capability.  The binary must be recompiled if the Sisense
-bearer token rotates or if USA~Swimming changes its JAQL endpoint
-URLs.  These are maintenance events, not operational events.
+other capability.  The binary must be recompiled if USA~Swimming
+changes its times-service endpoint URLs or authentication scheme.
+These are maintenance events, not operational events.
 
 \subsection{Security}
 
-The Sisense bearer token is embedded at compile time.  Because
-USA~Swimming's data hub serves only public competitive records,
-the token grants read-only access to non-sensitive data.
-Token rotation requires a source edit and recompile; no runtime
-credential injection is provided.
+The program embeds no credential.  The public times service
+authenticates anonymous callers with three request headers
+(\code{Usas-Sub-Id: Anonymous}, \code{AppName: DataHub}, and a
+run-time-generated \code{Device-Id}), and USA~Swimming's data hub
+serves only public competitive records, so all access is
+read-only to non-sensitive data.
 
 \subsection{Compatibility}
 
@@ -531,7 +532,7 @@ source.  Future work may automate that final step as well.
   \item[Full JSON parsing library (e.g., \code{cJSON}, \code{jansson}).]
         A third-party JSON parser would have provided a more robust
         response-processing layer.  It was rejected because the
-        Sisense JAQL response format is stable and well-understood,
+        REST response format is stable and well-understood,
         and adding a library dependency would complicate the build
         for no operational gain.
 
